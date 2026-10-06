@@ -12,31 +12,31 @@ import java.util.Map;
 @Repository
 public interface HabitacionRepository extends JpaRepository<Habitacion, Integer> {
 
-    // 2. Mostrar las habitaciones disponibles
+    // 14. Mostrar las habitaciones disponibles
     @Query("SELECT h FROM Habitacion h WHERE h.estado = 'Disponible'")
     List<Habitacion> findDisponibles();
 
-    // 3. Mostrar las habitaciones de cada hotel
+    // 15. Mostrar las habitaciones de cada hotel
     @Query("SELECT new map(hot.nombre as hotel, hab.numero as habitacion, hab.piso as piso, hab.estado as estado) FROM Habitacion hab JOIN hab.hotel hot")
     List<Map<String, Object>> findHabitacionesPorHotel();
 
-    // 4. Mostrar habitaciones con su tipo y precio
+    // 16. Mostrar habitaciones con su tipo y precio
     @Query("SELECT new map(hot.nombre as hotel, hab.numero as habitacion, t.nombre as tipo, t.capacidad as capacidad, t.precioBase as precioBase) FROM Habitacion hab JOIN hab.hotel hot JOIN hab.tipoHabitacion t")
     List<Map<String, Object>> findHabitacionesConTipoYPrecio();
 
-    // 5. Contar las habitaciones disponibles por hotel
+    // 17. Contar las habitaciones disponibles por hotel
     @Query("SELECT new map(hot.nombre as hotel, COUNT(hab) as habitaciones_disponibles) FROM Habitacion hab JOIN hab.hotel hot WHERE hab.estado = 'Disponible' GROUP BY hot.idHotel, hot.nombre")
     List<Map<String, Object>> countDisponiblesPorHotel();
 
-    // 6. Reto: ¿Qué habitaciones están disponibles en un hotel específico (por nombre)?
+    // 18. ¿Qué habitaciones están disponibles en un hotel específico (por nombre)?
     @Query("SELECT h FROM Habitacion h WHERE h.estado = 'Disponible' AND h.hotel.nombre = :hotelNombre")
     List<Habitacion> findDisponiblesEnHotel(String hotelNombre);
 
-    // 10. Reto: ¿Cuántas habitaciones están en mantenimiento?
+    // 19. ¿Cuántas habitaciones están en mantenimiento?
     @Query("SELECT COUNT(h) FROM Habitacion h WHERE h.estado = 'Mantenimiento'")
     Long countMantenimiento();
 
-    // 12. Reto: ¿Qué habitaciones tienen capacidad para 4 huéspedes?
+    // 20. ¿Qué habitaciones tienen capacidad para 4 huéspedes?
     @Query("SELECT h FROM Habitacion h JOIN h.tipoHabitacion t WHERE t.capacidad = 4")
     List<Habitacion> findHabitacionesPara4Huespedes();
 

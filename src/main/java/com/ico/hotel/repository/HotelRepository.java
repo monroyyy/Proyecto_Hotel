@@ -11,13 +11,15 @@ import java.util.Map;
 @Repository
 public interface HotelRepository extends JpaRepository<Hotel, Integer> {
     
-    // 8. Reto: ¿Cuántas habitaciones tiene cada hotel?
-    @Query("SELECT new map(hot.nombre as hotel, COUNT(hab) as total_habitaciones) FROM Hotel hot LEFT JOIN Habitacion hab ON hot.idHotel = hab.hotel.idHotel GROUP BY hot.idHotel, hot.nombre")
-    List<Map<String, Object>> countTotalHabitacionesPorHotel();
+    // 1. Mostrar todos los hoteles (Viene incluido en JpaRepository como findAll())
 
-    // 19. ¿Cuáles son los hoteles que están actualmente activos?
+    // 2. ¿Cuáles son los hoteles que están actualmente activos?
     List<Hotel> findByActivoTrue();
 
-    // 20. ¿Qué hoteles hay en una ciudad específica?
+    // 3. ¿Qué hoteles hay en una ciudad específica?
     List<Hotel> findByCiudad(String ciudad);
+
+    // 4. ¿Cuántas habitaciones tiene cada hotel?
+    @Query("SELECT new map(hot.nombre as hotel, COUNT(hab) as total_habitaciones) FROM Hotel hot LEFT JOIN Habitacion hab ON hot.idHotel = hab.hotel.idHotel GROUP BY hot.idHotel, hot.nombre")
+    List<Map<String, Object>> countTotalHabitacionesPorHotel();
 }
