@@ -1,0 +1,128 @@
+=========================================================
+LISTADO DE LAS 30 CONSULTAS SQL - SISTEMA DE RESERVACIONES
+=========================================================
+
+1. Mostrar todos los hoteles
+SELECT * FROM hotel;
+
+2. ¿Cuáles son los hoteles que están actualmente activos?
+SELECT * FROM hotel WHERE activo = true;
+
+3. ¿Qué hoteles hay en una ciudad específica?
+SELECT * FROM hotel WHERE ciudad = 'Ciudad de México';
+
+4. ¿Cuántas habitaciones tiene cada hotel?
+SELECT h.nombre AS hotel, COUNT(ha.id_habitacion) AS total_habitaciones
+FROM hotel h 
+LEFT JOIN habitacion ha ON h.id_hotel = ha.id_hotel 
+GROUP BY h.id_hotel, h.nombre;
+
+5. ¿Qué tipos de habitaciones existen?
+SELECT * FROM tipo_habitacion;
+
+6. ¿Cuál es el precio de las habitaciones para 2 personas?
+SELECT * FROM tipo_habitacion WHERE capacidad = 2;
+
+7. ¿Cuál es el precio promedio de las habitaciones?
+SELECT AVG(precio_base) AS precio_promedio FROM tipo_habitacion;
+
+8. ¿Qué tipos de habitación cuestan menos de cierta cantidad?
+SELECT * FROM tipo_habitacion WHERE precio_base < 1500;
+
+9. ¿Qué tipos de habitación cuestan más de cierta cantidad?
+SELECT * FROM tipo_habitacion WHERE precio_base > 1500;
+
+10. ¿Cuál es el tipo de habitación más barato?
+SELECT * FROM tipo_habitacion ORDER BY precio_base ASC LIMIT 1;
+
+11. ¿Cuál es el tipo de habitación más caro?
+SELECT * FROM tipo_habitacion ORDER BY precio_base DESC LIMIT 1;
+
+12. ¿Cuántos tipos de habitación existen en total?
+SELECT COUNT(*) AS total_tipos FROM tipo_habitacion;
+
+13. ¿Cuál es la capacidad máxima que podemos alojar en una sola habitación?
+SELECT MAX(capacidad) AS capacidad_maxima FROM tipo_habitacion;
+
+14. Mostrar las habitaciones disponibles
+SELECT * FROM habitacion WHERE estado = 'Disponible';
+
+15. Mostrar las habitaciones de cada hotel
+SELECT hot.nombre AS hotel, hab.numero AS habitacion, hab.piso, hab.estado 
+FROM habitacion hab 
+INNER JOIN hotel hot ON hab.id_hotel = hot.id_hotel;
+
+16. Mostrar habitaciones con su tipo y precio
+SELECT hot.nombre AS hotel, hab.numero AS habitacion, t.nombre AS tipo, t.capacidad, t.precio_base 
+FROM habitacion hab 
+INNER JOIN hotel hot ON hab.id_hotel = hot.id_hotel 
+INNER JOIN tipo_habitacion t ON hab.id_tipo = t.id_tipo;
+
+17. Contar las habitaciones disponibles por hotel
+SELECT hot.nombre AS hotel, COUNT(hab.id_habitacion) AS habitaciones_disponibles 
+FROM habitacion hab 
+INNER JOIN hotel hot ON hab.id_hotel = hot.id_hotel 
+WHERE hab.estado = 'Disponible' 
+GROUP BY hot.id_hotel, hot.nombre;
+
+18. ¿Qué habitaciones están disponibles en un hotel específico?
+SELECT hab.* 
+FROM habitacion hab 
+INNER JOIN hotel hot ON hab.id_hotel = hot.id_hotel 
+WHERE hab.estado = 'Disponible' AND hot.nombre = 'Hotel Paraíso';
+
+19. ¿Cuántas habitaciones están en mantenimiento?
+SELECT COUNT(*) AS en_mantenimiento FROM habitacion WHERE estado = 'Mantenimiento';
+
+20. ¿Qué habitaciones tienen capacidad para 4 huéspedes?
+SELECT hab.* 
+FROM habitacion hab 
+INNER JOIN tipo_habitacion t ON hab.id_tipo = t.id_tipo 
+WHERE t.capacidad = 4;
+
+21. ¿Qué habitaciones están ocupadas actualmente?
+SELECT * FROM habitacion WHERE estado = 'Ocupada';
+
+22. ¿Qué habitaciones hay en un piso específico?
+SELECT * FROM habitacion WHERE piso = 1;
+
+23. ¿Qué habitaciones hay en un piso de un hotel específico?
+SELECT hab.* 
+FROM habitacion hab 
+INNER JOIN hotel hot ON hab.id_hotel = hot.id_hotel 
+WHERE hot.nombre = 'Hotel Paraíso' AND hab.piso = 1;
+
+24. ¿Cuántas habitaciones tenemos en total en toda la cadena?
+SELECT COUNT(*) AS total_habitaciones FROM habitacion;
+
+25. ¿Cuál es el ingreso potencial máximo por noche si se rentan todas las habitaciones?
+SELECT SUM(t.precio_base) AS ingreso_potencial 
+FROM habitacion hab 
+INNER JOIN tipo_habitacion t ON hab.id_tipo = t.id_tipo;
+
+26. Buscar una habitación por su número
+SELECT * FROM habitacion WHERE numero = '101';
+
+27. Mostrar todas las habitaciones de un tipo específico
+SELECT hab.* 
+FROM habitacion hab 
+INNER JOIN tipo_habitacion t ON hab.id_tipo = t.id_tipo 
+WHERE t.nombre = 'Suite Ejecutiva';
+
+28. Resumen: ¿Cuántas habitaciones hay por cada estado?
+SELECT estado, COUNT(*) AS cantidad 
+FROM habitacion 
+GROUP BY estado;
+
+29. ¿Qué habitaciones están en una ciudad en específico?
+SELECT hab.* 
+FROM habitacion hab 
+INNER JOIN hotel hot ON hab.id_hotel = hot.id_hotel 
+WHERE hot.ciudad = 'Ciudad de México';
+
+30. Listar las habitaciones disponibles ordenadas de la más barata a la más cara
+SELECT hab.* 
+FROM habitacion hab 
+INNER JOIN tipo_habitacion t ON hab.id_tipo = t.id_tipo 
+WHERE hab.estado = 'Disponible' 
+ORDER BY t.precio_base ASC;
