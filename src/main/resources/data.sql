@@ -57,3 +57,4 @@ VALUES (9, 2, 4, '202', 2, 'Disponible');
 
 INSERT IGNORE INTO habitacion (id_habitacion, id_hotel, id_tipo, numero, piso, estado) 
 VALUES (10, 2, 5, '301', 3, 'Mantenimiento');
+ 

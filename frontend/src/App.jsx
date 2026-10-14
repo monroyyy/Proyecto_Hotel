@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import Navbar from './components/Navbar';
 import HabitacionesPage from './pages/HabitacionesPage';
-import PlaceholderPage from './pages/PlaceholderPage';
+import HotelesPage from './pages/HotelesPage';
+import TiposHabitacionPage from './pages/TiposHabitacionPage';
 
 /**
  * App.jsx
@@ -16,8 +17,8 @@ export default function App() {
 
             <main className="main-content">
                 {activeTab === 'habitaciones' && <HabitacionesPage />}
-                {activeTab === 'hoteles' && <PlaceholderPage tipo="hoteles" />}
-                {activeTab === 'tipos' && <PlaceholderPage tipo="tipos" />}
+                {activeTab === 'hoteles' && <HotelesPage />}
+                {activeTab === 'tipos' && <TiposHabitacionPage />}
             </main>
 
             <footer className="app-footer">

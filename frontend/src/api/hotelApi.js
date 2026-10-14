@@ -1,10 +1,10 @@
 /**
  * hotelApi.js
  * Capa de servicio centralizada para consumir los endpoints REST de Spring Boot.
- * Backend URL: http://localhost:8081/api
+ * Backend URL: http://localhost:8080/api
  */
 
-const API_BASE_URL = 'http://localhost:8081/api';
+const API_BASE_URL = 'http://localhost:8080/api';
 
 /**
  * Helper genérico para peticiones fetch con manejo de errores y JSON
@@ -33,7 +33,6 @@ async function apiRequest(endpoint, options = {}) {
             throw new Error(errorMsg);
         }
 
-        // Si la respuesta es 204 No Content o no tiene cuerpo
         if (response.status === 204) return null;
 
         return await response.json();
@@ -46,12 +45,9 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 // ==========================================
-// SERVICIOS PARA HABITACIONES (TU INTERFAZ)
+// SERVICIOS PARA HABITACIONES
 // ==========================================
 
-/**
- * Obtener lista de habitaciones con filtros opcionales
- */
 export async function getHabitaciones(filters = {}) {
     const params = new URLSearchParams();
     if (filters.idHotel) params.append('idHotel', filters.idHotel);
@@ -63,16 +59,10 @@ export async function getHabitaciones(filters = {}) {
     return await apiRequest(`/habitaciones${query}`);
 }
 
-/**
- * Obtener una habitación por ID
- */
 export async function getHabitacionById(id) {
     return await apiRequest(`/habitaciones/${id}`);
 }
 
-/**
- * Registrar una nueva habitación
- */
 export async function crearHabitacion(datos) {
     return await apiRequest('/habitaciones', {
         method: 'POST',
@@ -80,9 +70,6 @@ export async function crearHabitacion(datos) {
     });
 }
 
-/**
- * Actualizar una habitación existente
- */
 export async function actualizarHabitacion(id, datos) {
     return await apiRequest(`/habitaciones/${id}`, {
         method: 'PUT',
@@ -90,9 +77,6 @@ export async function actualizarHabitacion(id, datos) {
     });
 }
 
-/**
- * Cambio rápido de estado (Disponible, Ocupada, Mantenimiento)
- */
 export async function cambiarEstadoHabitacion(id, nuevoEstado) {
     return await apiRequest(`/habitaciones/${id}/estado`, {
         method: 'PATCH',
@@ -100,36 +84,54 @@ export async function cambiarEstadoHabitacion(id, nuevoEstado) {
     });
 }
 
-/**
- * Eliminar una habitación
- */
 export async function eliminarHabitacion(id) {
     return await apiRequest(`/habitaciones/${id}`, {
         method: 'DELETE',
     });
 }
 
-/**
- * Obtener métricas y KPIs de habitaciones
- */
 export async function getResumenHabitaciones() {
     return await apiRequest('/habitaciones/resumen');
 }
 
 // ==========================================
-// SERVICIOS AUXILIARES PARA SELECTORES
+// SERVICIOS PARA HOTELES
 // ==========================================
 
-/**
- * Obtener todos los hoteles (para el <select> de hotel)
- */
 export async function getHoteles() {
     return await apiRequest('/hoteles');
 }
 
-/**
- * Obtener todos los tipos de habitación (para el <select> de tipo y precio)
- */
+export async function crearHotel(datos) {
+    return await apiRequest('/hoteles', {
+        method: 'POST',
+        body: JSON.stringify(datos),
+    });
+}
+
+export async function eliminarHotel(id) {
+    return await apiRequest(`/hoteles/${id}`, {
+        method: 'DELETE',
+    });
+}
+
+// ==========================================
+// SERVICIOS PARA TIPOS DE HABITACIÓN
+// ==========================================
+
 export async function getTiposHabitacion() {
     return await apiRequest('/tipos-habitacion');
+}
+
+export async function crearTipoHabitacion(datos) {
+    return await apiRequest('/tipos-habitacion', {
+        method: 'POST',
+        body: JSON.stringify(datos),
+    });
+}
+
+export async function eliminarTipoHabitacion(id) {
+    return await apiRequest(`/tipos-habitacion/${id}`, {
+        method: 'DELETE',
+    });
 }

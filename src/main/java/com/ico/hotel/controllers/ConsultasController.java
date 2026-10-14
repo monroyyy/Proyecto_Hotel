@@ -200,7 +200,7 @@ public class ConsultasController {
         return habitacionRepository.countHabitacionesPorEstado();
     }
 
-    // 29. ¿Qué habitaciones están en una ciudad en específico?
+    // 29. ¿Qué habitaciones están en una ciudad en específico?6
     @GetMapping("/habitaciones/ciudad/{ciudad}")
     public List<Habitacion> getHabitacionesPorCiudad(@PathVariable String ciudad) {
         return habitacionRepository.findByCiudad(ciudad);
