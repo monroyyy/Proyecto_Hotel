@@ -3,7 +3,6 @@ import Navbar from './components/Navbar';
 import HabitacionesPage from './pages/HabitacionesPage';
 import HotelesPage from './pages/HotelesPage';
 import TiposHabitacionPage from './pages/TiposHabitacionPage';
-import ConsultasPage from './pages/ConsultasPage';
 
 /**
  * App.jsx
@@ -20,7 +19,6 @@ export default function App() {
                 {activeTab === 'habitaciones' && <HabitacionesPage />}
                 {activeTab === 'hoteles' && <HotelesPage />}
                 {activeTab === 'tipos' && <TiposHabitacionPage />}
-                {activeTab === 'consultas' && <ConsultasPage />}
             </main>
 
             <footer className="app-footer">

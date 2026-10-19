@@ -1,5 +1,5 @@
 import React from 'react';
-import { BedDouble, Building2, Tag, Hotel, Database } from 'lucide-react';
+import { BedDouble, Building2, Tag, Hotel } from 'lucide-react';
 
 /**
  * Navbar.jsx
@@ -21,11 +21,6 @@ export default function Navbar({ activeTab, setActiveTab }) {
             id: 'tipos',
             label: 'Tipos de Habitación',
             icon: Tag
-        },
-        {
-            id: 'consultas',
-            label: 'Consultas REST (Postman)',
-            icon: Database
         }
     ];
 
