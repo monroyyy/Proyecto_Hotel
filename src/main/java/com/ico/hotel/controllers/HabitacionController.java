@@ -41,11 +41,13 @@ public class HabitacionController {
             @RequestParam(required = false) Integer idHotel,
             @RequestParam(required = false) Integer idTipo,
             @RequestParam(required = false) String estado,
-            @RequestParam(required = false) Integer piso
+            @RequestParam(required = false) Integer piso,
+            @RequestParam(required = false, defaultValue = "false") Boolean incluirInactivos
     ) {
         List<Habitacion> todas = habitacionRepository.findAll();
 
         return todas.stream()
+                .filter(h -> incluirInactivos || (h.getHotel() == null || !Boolean.FALSE.equals(h.getHotel().getActivo())))
                 .filter(h -> idHotel == null || (h.getHotel() != null && h.getHotel().getIdHotel().equals(idHotel)))
                 .filter(h -> idTipo == null || (h.getTipoHabitacion() != null && h.getTipoHabitacion().getIdTipo().equals(idTipo)))
                 .filter(h -> estado == null || estado.isBlank() || h.getEstado().equalsIgnoreCase(estado))
@@ -81,10 +83,16 @@ public class HabitacionController {
         if (dto.getIdTipo() == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Debe seleccionar un tipo de habitación válido."));
         }
+        if (dto.getPiso() == null || dto.getPiso() <= 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Piso inválido. Debe seleccionar un piso existente."));
+        }
 
         Optional<Hotel> hotelOpt = hotelRepository.findById(dto.getIdHotel());
         if (hotelOpt.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "El hotel seleccionado no existe."));
+        }
+        if (hotelOpt.get().getActivo() != null && !hotelOpt.get().getActivo()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No se pueden registrar o asignar habitaciones a un hotel inactivo."));
         }
 
         Optional<TipoHabitacion> tipoOpt = tipoHabitacionRepository.findById(dto.getIdTipo());
@@ -92,9 +100,19 @@ public class HabitacionController {
             return ResponseEntity.badRequest().body(Map.of("error", "El tipo de habitación seleccionado no existe."));
         }
 
+        // Regla de negocio (Pág. 5): El número de habitación no puede repetirse dentro del mismo hotel
+        boolean duplicada = habitacionRepository.findAll().stream()
+                .anyMatch(h -> h.getHotel() != null &&
+                               h.getHotel().getIdHotel().equals(dto.getIdHotel()) &&
+                               h.getNumero().trim().equalsIgnoreCase(dto.getNumero().trim()));
+        if (duplicada) {
+            return ResponseEntity.badRequest().body(Map.of("error", 
+                "No se permite registrar dos habitaciones con el mismo número (" + dto.getNumero().trim() + ") dentro del mismo hotel."));
+        }
+
         Habitacion nueva = new Habitacion();
         nueva.setNumero(dto.getNumero().trim());
-        nueva.setPiso(dto.getPiso() != null ? dto.getPiso() : 1);
+        nueva.setPiso(dto.getPiso());
         nueva.setEstado(dto.getEstado() != null && !dto.getEstado().isBlank() ? dto.getEstado() : "Disponible");
         nueva.setHotel(hotelOpt.get());
         nueva.setTipoHabitacion(tipoOpt.get());
@@ -116,10 +134,29 @@ public class HabitacionController {
 
         Habitacion habitacion = habitacionOpt.get();
 
+        Integer hotelIdDestino = dto.getIdHotel() != null ? dto.getIdHotel() : (habitacion.getHotel() != null ? habitacion.getHotel().getIdHotel() : null);
+        String numeroDestino = dto.getNumero() != null && !dto.getNumero().trim().isEmpty() ? dto.getNumero().trim() : habitacion.getNumero();
+
+        // Validar unicidad si cambia el número o el hotel
+        if (hotelIdDestino != null && numeroDestino != null) {
+            boolean existeOtra = habitacionRepository.findAll().stream()
+                    .anyMatch(h -> !h.getIdHabitacion().equals(id) &&
+                                   h.getHotel() != null &&
+                                   h.getHotel().getIdHotel().equals(hotelIdDestino) &&
+                                   h.getNumero().trim().equalsIgnoreCase(numeroDestino));
+            if (existeOtra) {
+                return ResponseEntity.badRequest().body(Map.of("error", 
+                    "No se permite tener dos habitaciones con el mismo número (" + numeroDestino + ") dentro del mismo hotel."));
+            }
+        }
+
         if (dto.getNumero() != null && !dto.getNumero().trim().isEmpty()) {
             habitacion.setNumero(dto.getNumero().trim());
         }
         if (dto.getPiso() != null) {
+            if (dto.getPiso() <= 0) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Piso inválido. Debe seleccionar un piso existente."));
+            }
             habitacion.setPiso(dto.getPiso());
         }
         if (dto.getEstado() != null && !dto.getEstado().isBlank()) {
@@ -129,6 +166,9 @@ public class HabitacionController {
         if (dto.getIdHotel() != null) {
             Optional<Hotel> hotelOpt = hotelRepository.findById(dto.getIdHotel());
             if (hotelOpt.isPresent()) {
+                if (hotelOpt.get().getActivo() != null && !hotelOpt.get().getActivo()) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "No se puede asignar una habitación a un hotel inactivo."));
+                }
                 habitacion.setHotel(hotelOpt.get());
             }
         }
@@ -170,12 +210,20 @@ public class HabitacionController {
 
     /**
      * 6. Eliminar una habitación por ID.
+     * Regla: No se puede eliminar habitaciones ocupadas.
      */
     @DeleteMapping("/{id}")
     public ResponseEntity<?> eliminarHabitacion(@PathVariable Integer id) {
-        if (!habitacionRepository.existsById(id)) {
+        Optional<Habitacion> habitacionOpt = habitacionRepository.findById(id);
+        if (habitacionOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "Habitación no encontrada con ID: " + id));
+        }
+
+        Habitacion habitacion = habitacionOpt.get();
+        if ("Ocupada".equalsIgnoreCase(habitacion.getEstado())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "No se puede eliminar la habitación #" + habitacion.getNumero() + " porque actualmente está ocupada."));
         }
 
         habitacionRepository.deleteById(id);
@@ -184,10 +232,13 @@ public class HabitacionController {
 
     /**
      * 7. Resumen estadístico para tarjetas informativas (KPIs) en la interfaz.
+     * Solo toma en cuenta habitaciones pertenecientes a hoteles activos.
      */
     @GetMapping("/resumen")
     public ResponseEntity<Map<String, Object>> obtenerResumen() {
-        List<Habitacion> todas = habitacionRepository.findAll();
+        List<Habitacion> todas = habitacionRepository.findAll().stream()
+                .filter(h -> h.getHotel() == null || !Boolean.FALSE.equals(h.getHotel().getActivo()))
+                .toList();
         long total = todas.size();
         long disponibles = todas.stream().filter(h -> "Disponible".equalsIgnoreCase(h.getEstado())).count();
         long ocupadas = todas.stream().filter(h -> "Ocupada".equalsIgnoreCase(h.getEstado())).count();

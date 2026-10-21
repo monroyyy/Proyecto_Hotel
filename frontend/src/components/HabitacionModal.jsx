@@ -12,11 +12,14 @@ export default function HabitacionModal({
     onSave,
     habitacionParaEditar,
     hoteles = [],
-    tiposHabitacion = []
+    tiposHabitacion = [],
+    pisosDisponibles = [1, 2, 3]
 }) {
+    const defaultPiso = pisosDisponibles.length > 0 ? pisosDisponibles[0] : 1;
+
     const [formData, setFormData] = useState({
         numero: '',
-        piso: 1,
+        piso: defaultPiso,
         idHotel: '',
         idTipo: '',
         estado: 'Disponible'
@@ -29,7 +32,7 @@ export default function HabitacionModal({
         if (habitacionParaEditar) {
             setFormData({
                 numero: habitacionParaEditar.numero || '',
-                piso: habitacionParaEditar.piso || 1,
+                piso: habitacionParaEditar.piso || defaultPiso,
                 idHotel: habitacionParaEditar.hotel ? habitacionParaEditar.hotel.idHotel : '',
                 idTipo: habitacionParaEditar.tipoHabitacion ? habitacionParaEditar.tipoHabitacion.idTipo : '',
                 estado: habitacionParaEditar.estado || 'Disponible'
@@ -37,14 +40,14 @@ export default function HabitacionModal({
         } else {
             setFormData({
                 numero: '',
-                piso: 1,
+                piso: defaultPiso,
                 idHotel: hoteles.length > 0 ? hoteles[0].idHotel : '',
                 idTipo: tiposHabitacion.length > 0 ? tiposHabitacion[0].idTipo : '',
                 estado: 'Disponible'
             });
         }
         setError('');
-    }, [habitacionParaEditar, isOpen, hoteles, tiposHabitacion]);
+    }, [habitacionParaEditar, isOpen, hoteles, tiposHabitacion, defaultPiso]);
 
     if (!isOpen) return null;
 
@@ -64,8 +67,10 @@ export default function HabitacionModal({
             setError('Debes seleccionar el tipo de habitación.');
             return;
         }
-        if (formData.piso < 1) {
-            setError('El número de piso debe ser igual o mayor a 1.');
+
+        const pisoNum = parseInt(formData.piso, 10);
+        if (!formData.piso || isNaN(pisoNum) || !pisosDisponibles.includes(pisoNum)) {
+            setError('Piso inválido. Debe seleccionar uno de los pisos existentes del hotel.');
             return;
         }
 
@@ -73,7 +78,7 @@ export default function HabitacionModal({
             setGuardando(true);
             await onSave({
                 numero: formData.numero.trim(),
-                piso: parseInt(formData.piso, 10),
+                piso: pisoNum,
                 idHotel: parseInt(formData.idHotel, 10),
                 idTipo: parseInt(formData.idTipo, 10),
                 estado: formData.estado
@@ -138,20 +143,24 @@ export default function HabitacionModal({
                             />
                         </div>
 
-                        {/* 2. Piso */}
+                        {/* 2. Piso Seleccionable Solo Existentes */}
                         <div className="form-group">
                             <label className="form-label">
-                                <Layers size={16} /> Piso / Nivel *
+                                <Layers size={16} /> Piso / Nivel (Solo Existentes) *
                             </label>
-                            <input
-                                type="number"
-                                min="1"
-                                max="50"
-                                className="form-input"
+                            <select
+                                className="form-select"
                                 value={formData.piso}
                                 onChange={(e) => setFormData({ ...formData, piso: e.target.value })}
                                 required
-                            />
+                            >
+                                <option value="">-- Seleccionar Piso --</option>
+                                {pisosDisponibles.map((p) => (
+                                    <option key={p} value={p}>
+                                        Piso {p}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                     </div>
 
@@ -189,7 +198,7 @@ export default function HabitacionModal({
                             <option value="">-- Selecciona el Tipo de Habitación --</option>
                             {tiposHabitacion.map((t) => (
                                 <option key={t.idTipo} value={t.idTipo}>
-                                    {t.nombre} — Capacidad: {t.capacidad} pers. — ${Number(t.precioBase).toLocaleString('es-MX', { minimumFractionDigits: 2 })}/noche
+                                    {t.nombre} — Capacidad: {t.capacidad} pers. — ${Number(t.precioBase).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN/noche
                                 </option>
                             ))}
                         </select>

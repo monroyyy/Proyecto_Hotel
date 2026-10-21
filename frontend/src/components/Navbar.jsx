@@ -24,7 +24,7 @@ export default function Navbar({ activeTab, setActiveTab }) {
         },
         {
             id: 'consultas',
-            label: 'Consultas REST',
+            label: 'Consultas',
             icon: Database
         }
     ];

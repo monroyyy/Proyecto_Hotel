@@ -42,6 +42,43 @@ public class TipoHabitacionController {
         return ResponseEntity.status(HttpStatus.CREATED).body(guardado);
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<?> obtenerPorId(@PathVariable Integer id) {
+        return tipoHabitacionRepository.findById(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Tipo de habitación no encontrado con ID: " + id)));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> actualizarTipoHabitacion(@PathVariable Integer id, @RequestBody TipoHabitacion datos) {
+        return tipoHabitacionRepository.findById(id)
+                .<ResponseEntity<?>>map(tipo -> {
+                    if (datos.getNombre() != null && !datos.getNombre().trim().isEmpty()) {
+                        tipo.setNombre(datos.getNombre().trim());
+                    }
+                    if (datos.getCapacidad() != null) {
+                        if (datos.getCapacidad() <= 0) {
+                            throw new IllegalArgumentException("La capacidad debe ser mayor a cero.");
+                        }
+                        tipo.setCapacidad(datos.getCapacidad());
+                    }
+                    if (datos.getDescripcion() != null) {
+                        tipo.setDescripcion(datos.getDescripcion().trim());
+                    }
+                    if (datos.getPrecioBase() != null) {
+                        if (datos.getPrecioBase().compareTo(BigDecimal.ZERO) < 0) {
+                            throw new IllegalArgumentException("El precio base no puede ser negativo.");
+                        }
+                        tipo.setPrecioBase(datos.getPrecioBase());
+                    }
+                    TipoHabitacion actualizado = tipoHabitacionRepository.save(tipo);
+                    return ResponseEntity.ok(actualizado);
+                })
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Tipo de habitación no encontrado con ID: " + id)));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> eliminarTipoHabitacion(@PathVariable Integer id) {
         if (!tipoHabitacionRepository.existsById(id)) {

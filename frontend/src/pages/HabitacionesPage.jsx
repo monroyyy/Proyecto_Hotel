@@ -131,6 +131,12 @@ export default function HabitacionesPage() {
 
     // Eliminar con confirmación
     const handleEliminar = async (habitacion) => {
+        // Regla de negocio: No se puede eliminar habitaciones ocupadas
+        if (habitacion.estado === 'Ocupada') {
+            mostrarMensaje('error', `No se puede eliminar la habitación #${habitacion.numero} porque actualmente está Ocupada.`);
+            return;
+        }
+
         const confirmar = window.confirm(
             `¿Estás seguro de eliminar la habitación #${habitacion.numero} (${habitacion.hotel?.nombre || 'Hotel'})? Esta acción no se puede deshacer.`
         );
@@ -157,6 +163,11 @@ export default function HabitacionesPage() {
     // Filtrado reactivo en el cliente para máxima velocidad de respuesta
     const habitacionesFiltradas = useMemo(() => {
         return habitaciones.filter((h) => {
+            // Regla de negocio: Si el hotel está inactivo, ocultar sus habitaciones
+            if (h.hotel && h.hotel.activo === false) {
+                return false;
+            }
+
             // Filtro por búsqueda (número o nombre de hotel)
             if (busqueda.trim()) {
                 const term = busqueda.toLowerCase().trim();
@@ -190,9 +201,11 @@ export default function HabitacionesPage() {
         });
     }, [habitaciones, busqueda, filtroHotel, filtroTipo, filtroEstado, filtroPiso]);
 
-    // Obtener lista única de pisos presentes para el filtro
+    // Obtener lista única de pisos existentes para el filtro y el formulario
     const pisosDisponibles = useMemo(() => {
-        const setPisos = new Set(habitaciones.map(h => h.piso).filter(Boolean));
+        const habsValidas = habitaciones.filter(h => !h.hotel || h.hotel.activo !== false);
+        const setPisos = new Set(habsValidas.map(h => h.piso).filter(Boolean));
+        if (setPisos.size === 0) return [1, 2, 3];
         return Array.from(setPisos).sort((a, b) => a - b);
     }, [habitaciones]);
 
@@ -212,9 +225,6 @@ export default function HabitacionesPage() {
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Gestión de Habitaciones</h1>
-                    <p className="page-description">
-                        Inventario, asignaciones por sede y control de disponibilidad en tiempo real.
-                    </p>
                 </div>
                 <div className="page-header-actions">
                     <button
@@ -326,7 +336,7 @@ export default function HabitacionesPage() {
                             onChange={(e) => setFiltroHotel(e.target.value)}
                         >
                             <option value="">Todos los Hoteles</option>
-                            {hoteles.map((h) => (
+                            {hoteles.filter(h => h.activo).map((h) => (
                                 <option key={h.idHotel} value={h.idHotel}>
                                     {h.nombre} ({h.ciudad})
                                 </option>
@@ -463,7 +473,7 @@ export default function HabitacionesPage() {
                                             {/* Precio Base */}
                                             <td>
                                                 <div className="price-tag">
-                                                    ${Number(tipo?.precioBase || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                                    ${Number(tipo?.precioBase || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
                                                     <span className="price-period">/noche</span>
                                                 </div>
                                             </td>
@@ -499,8 +509,9 @@ export default function HabitacionesPage() {
                                                     </button>
                                                     <button
                                                         className="btn-action btn-action-delete"
-                                                        title="Eliminar habitación"
+                                                        title={hab.estado === 'Ocupada' ? 'No se puede eliminar una habitación ocupada' : 'Eliminar habitación'}
                                                         onClick={() => handleEliminar(hab)}
+                                                        style={hab.estado === 'Ocupada' ? { opacity: 0.45, cursor: 'not-allowed' } : {}}
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
@@ -521,8 +532,9 @@ export default function HabitacionesPage() {
                 onClose={() => setModalAbierto(false)}
                 onSave={handleGuardarHabitacion}
                 habitacionParaEditar={habitacionAEditar}
-                hoteles={hoteles}
+                hoteles={hoteles.filter(h => h.activo)}
                 tiposHabitacion={tiposHabitacion}
+                pisosDisponibles={pisosDisponibles}
             />
         </div>
     );

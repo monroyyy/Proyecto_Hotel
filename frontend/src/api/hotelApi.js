@@ -102,9 +102,20 @@ export async function getHoteles() {
     return await apiRequest('/hoteles');
 }
 
+export async function getHotelById(id) {
+    return await apiRequest(`/hoteles/${id}`);
+}
+
 export async function crearHotel(datos) {
     return await apiRequest('/hoteles', {
         method: 'POST',
+        body: JSON.stringify(datos),
+    });
+}
+
+export async function actualizarHotel(id, datos) {
+    return await apiRequest(`/hoteles/${id}`, {
+        method: 'PUT',
         body: JSON.stringify(datos),
     });
 }
@@ -123,9 +134,20 @@ export async function getTiposHabitacion() {
     return await apiRequest('/tipos-habitacion');
 }
 
+export async function getTipoHabitacionById(id) {
+    return await apiRequest(`/tipos-habitacion/${id}`);
+}
+
 export async function crearTipoHabitacion(datos) {
     return await apiRequest('/tipos-habitacion', {
         method: 'POST',
+        body: JSON.stringify(datos),
+    });
+}
+
+export async function actualizarTipoHabitacion(id, datos) {
+    return await apiRequest(`/tipos-habitacion/${id}`, {
+        method: 'PUT',
         body: JSON.stringify(datos),
     });
 }
