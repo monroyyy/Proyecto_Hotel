@@ -35,31 +35,47 @@ public class HabitacionSearchTool {
         return habitacionRepository.findByHotelNombre(nombreHotel);
     }
 
-    @Tool(description = "Listar las habitaciones que están en mantenimiento en todos los hoteles de la cadena. Útil para preguntas como: ¿Qué habitaciones están en mantenimiento? revisa en ambos hoteles.")
-    public List<Habitacion> findHabitacionesEnMantenimiento() {
+    @Tool(description = "Listar directamente las habitaciones que están en mantenimiento en toda la cadena. IMPORTANTE: Esta herramienta ya devuelve toda la información (hotel, número, piso, tipo, precio, estado). NO necesitas llamar a ninguna otra herramienta después de esta.")
+    public List<Map<String, Object>> findHabitacionesEnMantenimiento() {
         log.info("Tool invocada — findHabitacionesEnMantenimiento");
-        return habitacionRepository.findByEstado("Mantenimiento");
+        return habitacionRepository.findByEstado("Mantenimiento").stream()
+                .map(this::mapearHabitacionSimple)
+                .toList();
     }
 
-    @Tool(description = "Listar las habitaciones que están en mantenimiento en un hotel especifico. Útil para preguntas como: Dame las habitaciones en mantenimiento de un hotel en específico.")
-    public List<Habitacion> findMantenimientoEnHotel(
+    @Tool(description = "Listar las habitaciones que están en mantenimiento en un hotel específico (Hotel Paraíso o Hotel Paraíso Ejecutivo). Ya devuelve todos los datos completos.")
+    public List<Map<String, Object>> findMantenimientoEnHotel(
             @ToolParam(description = "Nombre del hotel, por ejemplo: Hotel Paraíso, Hotel Paraíso Ejecutivo")
             String nombreHotel) {
         log.info("Tool invocada — findMantenimientoEnHotel: hotel={}", nombreHotel);
-        return habitacionRepository.findByEstadoAndHotelNombre("Mantenimiento", nombreHotel);
+        return habitacionRepository.findByEstadoAndHotelNombre("Mantenimiento", nombreHotel).stream()
+                .map(this::mapearHabitacionSimple)
+                .toList();
     }
 
-    @Tool(description = "Consultar el estado o estatus actual (Disponible, Ocupada o Mantenimiento) y detalles de una habitación por su número. Si no se especifica el hotel, busca en ambos hoteles de la cadena (Hotel Paraíso y Hotel Paraíso Ejecutivo). Útil para: ¿Qué estatus tiene la habitación 101?, Muéstrame la habitación 101, etc. Si se encuentran coincidencias en ambos hoteles, genera los botones de selección [BOTON: ...].")
-    public List<Habitacion> findEstadoHabitacionEnHotel(
-            @ToolParam(description = "Número de la habitación, por ejemplo: 101, 202, 301")
+    @Tool(description = "Consultar el estado actual y detalles de una habitación por su número. Úsala ÚNICAMENTE cuando pregunten por el número de una habitación específica (por ejemplo 'habitación 101' o 'habitación 202'). NUNCA la llames en bucle para listar múltiples habitaciones.")
+    public List<Map<String, Object>> findEstadoHabitacionEnHotel(
+            @ToolParam(description = "Número exacto de la habitación, por ejemplo: 101, 202, 301")
             String numero,
             @ToolParam(description = "Nombre del hotel. Si no se especifica o el usuario no indicó el hotel, déjelo vacío para buscar en toda la cadena.")
             String nombreHotel) {
         log.info("Tool invocada — findEstadoHabitacionEnHotel: numero={}, hotel={}", numero, nombreHotel);
-        if (nombreHotel == null || nombreHotel.isBlank()) {
-            return habitacionRepository.findByNumero(numero);
-        }
-        return habitacionRepository.findByNumeroAndHotelNombre(numero, nombreHotel);
+        List<Habitacion> lista = (nombreHotel == null || nombreHotel.isBlank())
+                ? habitacionRepository.findByNumero(numero)
+                : habitacionRepository.findByNumeroAndHotelNombre(numero, nombreHotel);
+        return lista.stream().map(this::mapearHabitacionSimple).toList();
+    }
+
+    private Map<String, Object> mapearHabitacionSimple(Habitacion h) {
+        return Map.of(
+                "hotel", h.getHotel() != null ? h.getHotel().getNombre() : "N/A",
+                "ciudad", h.getHotel() != null && h.getHotel().getCiudad() != null ? h.getHotel().getCiudad() : "Ciudad de México",
+                "numero", h.getNumero() != null ? h.getNumero() : "N/A",
+                "piso", h.getPiso() != null ? h.getPiso() : 1,
+                "estado", h.getEstado() != null ? h.getEstado() : "N/A",
+                "tipo", h.getTipoHabitacion() != null ? h.getTipoHabitacion().getNombre() : "N/A",
+                "precioBase", h.getTipoHabitacion() != null && h.getTipoHabitacion().getPrecioBase() != null ? h.getTipoHabitacion().getPrecioBase() : BigDecimal.ZERO
+        );
     }
 
     @Tool(description = "Obtener la habitación más cara o exclusiva de toda la cadena hotelera, incluyendo hotel, número, tipo y precio por noche.")
