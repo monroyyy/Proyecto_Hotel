@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { MessageSquare, X, Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
+import { MessageSquare, X, Send, Bot, User, Sparkles, Loader2, Square } from 'lucide-react';
 import { marked } from 'marked';
 
 // Configurar marked para saltos de línea automáticos y tablas
@@ -14,13 +14,15 @@ export default function ChatWidget() {
     const [messages, setMessages] = useState([
         {
             sender: 'bot',
-            text: '\u00A1Hola! Soy el Recepcionista Virtual. Con gusto le asisto con informaci\u00F3n sobre nuestros hoteles, disponibilidad de habitaciones, servicios y tarifas.'
+            text: '¡Hola! Soy el Recepcionista Virtual. Con gusto le asisto con información sobre nuestros hoteles, disponibilidad de habitaciones, servicios y tarifas.'
         }
     ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [model, setModel] = useState('gemini');
     const messagesEndRef = useRef(null);
+    const abortControllerRef = useRef(null);
+    const typingIntervalRef = useRef(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -32,15 +34,20 @@ export default function ChatWidget() {
 
     const typeMessage = (fullText, index) => {
         let i = 0;
-        const interval = setInterval(() => {
-            i++;
+        if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+        
+        typingIntervalRef.current = setInterval(() => {
+            i += 2; // velocidad ágil
             setMessages((prev) => {
                 const updated = [...prev];
-                updated[index] = { sender: 'bot', text: fullText.slice(0, i) };
+                updated[index] = { sender: 'bot', text: fullText.slice(0, Math.min(i, fullText.length)) };
                 return updated;
             });
-            if (i >= fullText.length) clearInterval(interval);
-        }, 10);
+            if (i >= fullText.length) {
+                clearInterval(typingIntervalRef.current);
+                typingIntervalRef.current = null;
+            }
+        }, 12);
     };
 
     // Parser para extraer botones de acción interactivos generados por la IA: [BOTON: Etiqueta | Acción/Consulta]
@@ -67,6 +74,29 @@ export default function ChatWidget() {
         handleSend(null, actionPrompt);
     };
 
+    const handleCancelQuery = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        if (typingIntervalRef.current) {
+            clearInterval(typingIntervalRef.current);
+            typingIntervalRef.current = null;
+        }
+        setIsLoading(false);
+        setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx >= 0 && updated[lastIdx].sender === 'bot' && !updated[lastIdx].text) {
+                updated[lastIdx] = {
+                    sender: 'bot',
+                    text: '⏹️ *Consulta detenida por el recepcionista.*'
+                };
+            }
+            return updated;
+        });
+    };
+
     const handleSend = async (e, overridePrompt = null) => {
         e?.preventDefault();
         const userText = (overridePrompt || input).trim();
@@ -74,6 +104,9 @@ export default function ChatWidget() {
 
         if (!overridePrompt) setInput('');
         setIsLoading(true);
+
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
 
         setMessages((prev) => [...prev, { sender: 'user', text: userText }]);
         setMessages((prev) => [...prev, { sender: 'bot', text: '' }]);
@@ -83,7 +116,8 @@ export default function ChatWidget() {
             const response = await fetch('http://localhost:8080/api/v1/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: userText, model })
+                body: JSON.stringify({ prompt: userText, model }),
+                signal: controller.signal
             });
 
             if (!response.ok) {
@@ -102,6 +136,11 @@ export default function ChatWidget() {
             typeMessage(data, botIndex);
 
         } catch (error) {
+            if (error.name === 'AbortError') {
+                console.log('Consulta cancelada por el usuario');
+                return;
+            }
+
             console.error('Error al llamar al Recepcionista Virtual:', error);
             let friendlyError = '⚠️ El asistente virtual no pudo responder tu consulta. Intenta de nuevo en 1 minuto.';
 
@@ -120,11 +159,13 @@ export default function ChatWidget() {
                 return updated;
             });
         } finally {
+            abortControllerRef.current = null;
             setIsLoading(false);
         }
     };
 
     const handleCloseChat = () => {
+        if (isLoading) handleCancelQuery();
         setIsClosing(true);
         setTimeout(() => {
             setIsOpen(false);
@@ -262,15 +303,33 @@ export default function ChatWidget() {
                     <form onSubmit={handleSend} className="chat-input-form">
                         <input
                             type="text"
-                            placeholder="Pregunte sobre hoteles, tarifas, habitaciones..."
+                            placeholder={isLoading ? "El recepcionista está respondiendo..." : "Pregunte sobre hoteles, tarifas, habitaciones..."}
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             disabled={isLoading}
                             className="chat-input"
                         />
-                        <button type="submit" disabled={!input.trim() || isLoading} className="chat-send-btn">
-                            {isLoading ? <Loader2 size={18} className="spin-icon" /> : <Send size={18} />}
-                        </button>
+                        {isLoading ? (
+                            <button
+                                type="button"
+                                onClick={handleCancelQuery}
+                                className="chat-stop-btn"
+                                title="Detener / Cancelar respuesta"
+                                aria-label="Detener respuesta"
+                            >
+                                <Square size={16} fill="white" />
+                            </button>
+                        ) : (
+                            <button
+                                type="submit"
+                                disabled={!input.trim()}
+                                className="chat-send-btn"
+                                title="Enviar consulta"
+                                aria-label="Enviar consulta"
+                            >
+                                <Send size={18} />
+                            </button>
+                        )}
                     </form>
                 </div>
             )}
