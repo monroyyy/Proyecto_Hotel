@@ -6,9 +6,8 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * Configuración global de CORS (Cross-Origin Resource Sharing).
- * Permite que aplicaciones frontend (como React en Vite o Next.js)
- * puedan consumir los servicios REST del backend de forma segura sin bloqueos de navegador.
+ * Configuracion global de CORS.
+ * allowCredentials=false para compatibilidad con allowedOrigins("*").
  */
 @Configuration
 public class CorsConfig {
@@ -19,10 +18,10 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/api/**")
-                        .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
+                        .allowedOriginPatterns("*")
                         .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
-                        .allowCredentials(true);
+                        .allowCredentials(false);
             }
         };
     }
