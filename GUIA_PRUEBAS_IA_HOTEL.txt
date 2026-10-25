@@ -1,0 +1,147 @@
+================================================================================
+       GUIA DE PRUEBAS RAPIDAS - HOTELASSISTANT (SPRING AI + MYSQL)
+================================================================================
+Este archivo contiene la configuracion de IA integrada al sistema de Hotel,
+con Tools sobre tu base de datos MySQL (hoteles, habitaciones y tipos).
+
+--------------------------------------------------------------------------------
+1. CONFIGURACION Y ARRANQUE
+--------------------------------------------------------------------------------
+a) Base de datos:
+   - MySQL corriendo en localhost:3306 (hotel_db).
+   - Usuario: root | Password: (la configurada en application.properties).
+   - Las tablas y datos iniciales se crean con data.sql y ddl-auto=update.
+
+b) Proveedor de IA:
+   - Google Gemini ya configurado en application.properties con tu API Key.
+   - Opcional: Ollama local (modelo qwen2.5:3b).
+
+c) Iniciar el backend:
+   cd c:\Users\jormo\Documents\2026b\springB\hotel
+   ./mvnw spring-boot:run
+
+   Servidor disponible en: http://localhost:8080
+
+--------------------------------------------------------------------------------
+2. ENDPOINTS DE CHAT CON AGENTE DE IA (TOOL CALLING)
+--------------------------------------------------------------------------------
+Metodo: POST
+URL: http://localhost:8080/api/v1/chat
+Headers: Content-Type: application/json
+
+[CASO 1] Consultar hoteles por ciudad (Dispara HotelSearchTool)
+BODY:
+{
+  "prompt": "¿Que hoteles tenemos en Cancun o Ciudad de Mexico?",
+  "model": "gemini"
+}
+* El asistente consulta HotelSearchTool.findHotelesPorCiudad() y devuelve la lista real.
+
+[CASO 2] Consultar habitaciones disponibles en un hotel (Dispara HabitacionSearchTool)
+BODY:
+{
+  "prompt": "¿Que habitaciones estan disponibles en el Hotel Paraíso?",
+  "model": "gemini"
+}
+* Consulta HabitacionSearchTool.findDisponiblesEnHotel() en la BD.
+
+[CASO 3] Consultar precios y tipos de habitacion (Dispara TipoHabitacionTool)
+BODY:
+{
+  "prompt": "¿Cual es la habitacion mas barata que ofrecen y cuanto cuesta por noche?",
+  "model": "gemini"
+}
+* Consulta TipoHabitacionTool.getTipoMasBarato().
+
+[CASO 4] Habitaciones familiares (Dispara HabitacionSearchTool)
+BODY:
+{
+  "prompt": "Somos una familia de 4 personas, ¿que habitaciones tienen capacidad para nosotros?",
+  "model": "gemini"
+}
+* Consulta HabitacionSearchTool.findHabitacionesPara4Huespedes().
+
+[CASO 5] TOOL CHAINING MULTI-HERRAMIENTA
+BODY:
+{
+  "prompt": "¿Cual es el tipo de habitacion mas barato y en que hoteles tienen habitaciones disponibles con sus precios?",
+  "model": "gemini"
+}
+* El agente encadena automaticamente TipoHabitacionTool y HabitacionSearchTool, sintetizando la respuesta completa.
+
+[CASO 6] Modo Streaming (React / Chat en vivo)
+URL: http://localhost:8080/api/v1/chat/stream
+BODY:
+{
+  "prompt": "Dame un resumen de las opciones de hospedaje que ofrecen.",
+  "model": "gemini"
+}
+* Devuelve un flujo Server-Sent Events (SSE) en tiempo real.
+
+[CASO 7] Listar todas las habitaciones de un hotel
+BODY:
+{
+  "prompt": "¿Que habitaciones tiene el Hotel Paraíso?",
+  "model": "gemini"
+}
+* Consulta HabitacionSearchTool.findHabitacionesPorHotel().
+
+[CASO 8] Habitaciones en mantenimiento en ambos hoteles
+BODY:
+{
+  "prompt": "¿Que habitaciones estan en mantenimiento? Revisa en ambos hoteles.",
+  "model": "gemini"
+}
+* Consulta HabitacionSearchTool.findHabitacionesEnMantenimiento().
+
+[CASO 9] Habitaciones en mantenimiento de un hotel especifico
+BODY:
+{
+  "prompt": "Dame las habitaciones en mantenimiento del Hotel Paraíso Ejecutivo.",
+  "model": "gemini"
+}
+* Consulta HabitacionSearchTool.findMantenimientoEnHotel().
+
+[CASO 10] Estatus de una habitacion en un hotel
+BODY:
+{
+  "prompt": "¿Que estatus tiene la habitacion 202 del Hotel Paraíso?",
+  "model": "gemini"
+}
+* Consulta HabitacionSearchTool.findEstadoHabitacionEnHotel().
+
+[CASO 11] Habitacion mas cara
+BODY:
+{
+  "prompt": "¿Cual es la habitacion mas cara del hotel?",
+  "model": "gemini"
+}
+* Consulta HabitacionSearchTool.findHabitacionMasCaraEnHotel() o findHabitacionMasCara().
+
+[CASO 12] Total de habitaciones por hotel y en la cadena
+BODY:
+{
+  "prompt": "¿Cuantas habitaciones hay por ambos hoteles?",
+  "model": "gemini"
+}
+* Consulta HotelSearchTool.countTotalHabitacionesPorHotel() y HabitacionSearchTool.countTotalHabitaciones().
+
+[CASO 13] Habitaciones ocupadas, por piso o por tipo
+BODY:
+{
+  "prompt": "¿Que habitaciones estan ocupadas y cuales hay en el piso 2 del Hotel Paraíso?",
+  "model": "gemini"
+}
+* El agente encadena HabitacionSearchTool.findHabitacionesOcupadas() y findHabitacionesPorPiso().
+
+[CASO 14] Resumen de estados y conteo de mantenimiento
+BODY:
+{
+  "prompt": "Dame el resumen de cuantas habitaciones hay por estado y cuantas estan en mantenimiento.",
+  "model": "gemini"
+}
+* Consulta HabitacionSearchTool.countHabitacionesPorEstado() y countMantenimiento().
+
+================================================================================
+Fin de la guia de pruebas HotelAssistant.
+================================================================================
