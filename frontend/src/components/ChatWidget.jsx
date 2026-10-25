@@ -10,6 +10,7 @@ marked.setOptions({
 
 export default function ChatWidget() {
     const [isOpen, setIsOpen] = useState(false);
+    const [isClosing, setIsClosing] = useState(false);
     const [messages, setMessages] = useState([
         {
             sender: 'bot',
@@ -123,10 +124,26 @@ export default function ChatWidget() {
         }
     };
 
+    const handleCloseChat = () => {
+        setIsClosing(true);
+        setTimeout(() => {
+            setIsOpen(false);
+            setIsClosing(false);
+        }, 220);
+    };
+
+    const handleToggleChat = () => {
+        if (isOpen) {
+            handleCloseChat();
+        } else {
+            setIsOpen(true);
+        }
+    };
+
     return (
         <div className="chat-widget-container">
             {isOpen && (
-                <div className="chat-window">
+                <div className={`chat-window ${isClosing ? 'chat-window-exit' : 'chat-window-enter'}`}>
                     <div className="chat-header">
                         <div className="chat-header-title">
                             <div className="chat-avatar"><Bot size={18} /></div>
@@ -149,7 +166,7 @@ export default function ChatWidget() {
                                     <option value="ollama">Ollama</option>
                                 </select>
                             </div>
-                            <button className="chat-close-btn" title="Cerrar ventana" onClick={() => setIsOpen(false)}>
+                            <button className="chat-close-btn" title="Cerrar ventana" onClick={handleCloseChat}>
                                 <X size={16} />
                             </button>
                         </div>
@@ -260,11 +277,17 @@ export default function ChatWidget() {
 
             <button
                 className={`chat-floating-btn ${isOpen ? 'active' : ''}`}
-                onClick={() => setIsOpen(!isOpen)}
-                aria-label="Abrir recepcionista virtual"
+                onClick={handleToggleChat}
+                aria-label="Asistente de Recepción"
+                title={isOpen ? "Minimizar asistente" : "Abrir Asistente de Recepción"}
             >
-                {isOpen ? <X size={26} /> : <MessageSquare size={26} />}
-                {!isOpen && <span className="notification-badge">IA</span>}
+                {isOpen ? <X size={24} /> : <MessageSquare size={24} />}
+                {!isOpen && (
+                    <span className="chat-status-beacon" title="Servicio disponible">
+                        <span className="chat-status-beacon-ring"></span>
+                        <span className="chat-status-beacon-dot"></span>
+                    </span>
+                )}
             </button>
         </div>
     );

@@ -984,79 +984,127 @@ body {
     font-family: inherit;
 }
 
-/* Botón Circular Flotante */
+/* Botón Circular Flotante Profesional */
 .chat-floating-btn {
-    width: 62px;
-    height: 62px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    background: linear-gradient(135deg, #1e3a8a, #0f172a);
     color: #ffffff;
-    border: none;
-    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.45);
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 10px 25px -3px rgba(15, 23, 42, 0.4), 0 4px 6px -2px rgba(15, 23, 42, 0.2);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     position: relative;
 }
 
 .chat-floating-btn:hover {
-    transform: scale(1.08);
-    box-shadow: 0 12px 30px rgba(37, 99, 235, 0.6);
+    transform: scale(1.08) translateY(-2px);
+    box-shadow: 0 16px 32px -4px rgba(30, 58, 138, 0.5);
+    background: linear-gradient(135deg, #2563eb, #1e3a8a);
+}
+
+.chat-floating-btn:active {
+    transform: scale(0.95);
 }
 
 .chat-floating-btn.active {
-    background: #1e293b;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+    background: #0f172a;
+    transform: rotate(90deg);
+    border-color: #334155;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
 }
 
-.notification-badge {
+/* Indicador Elegante de Asistente Activo (En lugar del badge genérico 'IA') */
+.chat-status-beacon {
     position: absolute;
-    top: -4px;
-    right: -4px;
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: white;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 7px;
-    border-radius: 12px;
-    border: 2px solid #ffffff;
-    animation: pulseBadge 2s infinite;
+    top: 2px;
+    right: 2px;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-@keyframes pulseBadge {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-    100% { transform: scale(1); }
+.chat-status-beacon-dot {
+    width: 10px;
+    height: 10px;
+    background: #10b981;
+    border-radius: 50%;
+    border: 2px solid #0f172a;
+    box-shadow: 0 0 8px #10b981;
+    z-index: 2;
 }
 
-/* Ventana de Chat */
+.chat-status-beacon-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: rgba(16, 185, 129, 0.4);
+    animation: beaconPulse 2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}
+
+@keyframes beaconPulse {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.9;
+    }
+    100% {
+        transform: scale(2.4);
+        opacity: 0;
+    }
+}
+
+/* Ventana de Chat con Animaciones Suaves de Entrada y Salida */
 .chat-window {
     position: absolute;
-    bottom: 80px;
+    bottom: 76px;
     right: 0;
     width: 460px;
     max-width: calc(100vw - 32px);
-    height: 580px;
-    max-height: calc(100vh - 120px);
+    height: 590px;
+    max-height: calc(100vh - 110px);
     background: #ffffff;
     border-radius: 20px;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(15, 23, 42, 0.08);
     overflow: hidden;
-    animation: slideUpFade 0.28s ease-out forwards;
+    transform-origin: bottom right;
 }
 
-@keyframes slideUpFade {
-    from {
+.chat-window-enter {
+    animation: chatOpenAnim 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.chat-window-exit {
+    animation: chatCloseAnim 0.24s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes chatOpenAnim {
+    0% {
         opacity: 0;
-        transform: translateY(16px) scale(0.96);
+        transform: scale(0.82) translateY(24px);
     }
-    to {
+    100% {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes chatCloseAnim {
+    0% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.84) translateY(20px);
     }
 }
 
