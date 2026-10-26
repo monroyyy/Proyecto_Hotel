@@ -4,6 +4,7 @@ import HabitacionesPage from './pages/HabitacionesPage';
 import HotelesPage from './pages/HotelesPage';
 import TiposHabitacionPage from './pages/TiposHabitacionPage';
 import ConsultasPage from './pages/ConsultasPage';
+import ReservasPage from './pages/ReservasPage';
 import ChatWidget from './components/ChatWidget';
 
 /**
@@ -11,7 +12,7 @@ import ChatWidget from './components/ChatWidget';
  * Componente principal de la aplicacion con ChatWidget de IA flotante.
  */
 export default function App() {
-    const [activeTab, setActiveTab] = useState('habitaciones');
+    const [activeTab, setActiveTab] = useState('reservas');
 
     return (
         <div className="app-layout">
@@ -21,6 +22,7 @@ export default function App() {
                 {activeTab === 'habitaciones' && <HabitacionesPage />}
                 {activeTab === 'hoteles' && <HotelesPage />}
                 {activeTab === 'tipos' && <TiposHabitacionPage />}
+                {activeTab === 'reservas' && <ReservasPage />}
                 {activeTab === 'consultas' && <ConsultasPage />}
             </main>
 
@@ -30,7 +32,7 @@ export default function App() {
             <footer className="app-footer">
                 <div className="footer-content">
                     <span>Hotel Paraiso &bull; Cadena Hotelera</span>
-                    <span className="footer-muted">&copy; {new Date().getFullYear()} Sistema de Gestion Hotelera con IA</span>
+                    <span className="footer-muted">&copy; {new Date().getFullYear()} Sistema de Gestión Hotelera</span>
                 </div>
             </footer>
         </div>

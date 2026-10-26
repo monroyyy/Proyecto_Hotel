@@ -18,9 +18,15 @@ public class HotelSearchTool {
 
     private final HotelRepository hotelRepository;
 
-    @Tool(description = "Buscar hoteles en una ciudad especifica o listar los hoteles disponibles.")
+    @Tool(description = "Listar los hoteles que están actualmente activos o consultar todos los hoteles de la cadena (Hotel Paraíso y Hotel Paraíso Ejecutivo). Útil para: ¿Cuáles son los hoteles activos?, ¿Qué hoteles tenemos?, ¿Cuáles hoteles existen?")
+    public List<Hotel> getHotelesActivos() {
+        log.info("Tool invocada — getHotelesActivos");
+        return hotelRepository.findByActivoTrue();
+    }
+
+    @Tool(description = "Buscar hoteles en una ciudad específica. Útil para preguntas como: ¿Qué hoteles hay en Cancún?, ¿Qué hoteles tenemos en Ciudad de México?")
     public List<Hotel> findHotelesPorCiudad(
-            @ToolParam(description = "Nombre de la ciudad, por ejemplo: Cancun, Guadalajara, Monterrey, Ciudad de Mexico")
+            @ToolParam(description = "Nombre de la ciudad, por ejemplo: Cancún o Ciudad de México")
             String ciudad) {
         log.info("Tool invocada — findHotelesPorCiudad: ciudad={}", ciudad);
         if (ciudad == null || ciudad.isBlank()) {
@@ -29,7 +35,7 @@ public class HotelSearchTool {
         return hotelRepository.findByCiudad(ciudad);
     }
 
-    @Tool(description = "Obtener el total de habitaciones que tiene cada hotel en la cadena. Útil para preguntas como: ¿Cuántas habitaciones hay por ambos hoteles?")
+    @Tool(description = "Obtener el total de habitaciones que tiene cada hotel en la cadena. Útil para preguntas como: ¿Cuántas habitaciones hay por cada hotel?")
     public List<Map<String, Object>> countTotalHabitacionesPorHotel() {
         log.info("Tool invocada — countTotalHabitacionesPorHotel");
         return hotelRepository.countTotalHabitacionesPorHotel();

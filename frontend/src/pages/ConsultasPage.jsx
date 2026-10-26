@@ -606,20 +606,22 @@ export default function ConsultasPage() {
                                         key={c.id}
                                         onClick={() => seleccionarConsulta(c)}
                                         style={{
-                                            padding: '10px 12px',
-                                            borderRadius: '6px',
-                                            border: isActivo ? '2px solid #0284c7' : '1px solid #e2e8f0',
-                                            background: isActivo ? '#f0f9ff' : '#ffffff',
+                                            padding: '12px 14px',
+                                            borderRadius: '10px',
+                                            border: isActivo ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
+                                            background: isActivo ? '#eff6ff' : '#ffffff',
+                                            boxShadow: isActivo ? '0 4px 12px rgba(37, 99, 235, 0.12)' : '0 1px 2px rgba(0,0,0,0.02)',
                                             cursor: 'pointer',
-                                            transition: 'all 0.15s ease'
+                                            transition: 'var(--transition)'
                                         }}
+                                        className="consulta-list-item"
                                     >
-                                        <div style={{ marginBottom: '3px' }}>
-                                            <span style={{ fontSize: '0.72rem', color: isActivo ? '#0284c7' : '#64748b', fontWeight: 700 }}>
+                                        <div style={{ marginBottom: '4px' }}>
+                                            <span style={{ fontSize: '0.72rem', color: isActivo ? '#1e40af' : '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                                 {c.categoria}
                                             </span>
                                         </div>
-                                        <div style={{ fontSize: '0.86rem', fontWeight: isActivo ? 700 : 500, color: '#0f172a' }}>
+                                        <div style={{ fontSize: '0.88rem', fontWeight: isActivo ? 700 : 600, color: '#0f172a' }}>
                                             {c.nombre}
                                         </div>
                                     </div>

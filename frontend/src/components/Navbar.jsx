@@ -1,5 +1,5 @@
 import React from 'react';
-import { BedDouble, Building2, Tag, Hotel, Database } from 'lucide-react';
+import { BedDouble, Building2, Tag, Hotel, Database, CalendarPlus } from 'lucide-react';
 
 /**
  * Navbar.jsx
@@ -7,6 +7,11 @@ import { BedDouble, Building2, Tag, Hotel, Database } from 'lucide-react';
  */
 export default function Navbar({ activeTab, setActiveTab }) {
     const navItems = [
+        {
+            id: 'reservas',
+            label: 'Reservaciones',
+            icon: CalendarPlus
+        },
         {
             id: 'habitaciones',
             label: 'Habitaciones',

@@ -157,3 +157,54 @@ export async function eliminarTipoHabitacion(id) {
         method: 'DELETE',
     });
 }
+
+// ==========================================
+// SERVICIOS PARA RESERVACIONES (Recepcionista)
+// ==========================================
+
+export async function buscarDisponibilidad(p) {
+    const params = new URLSearchParams();
+    Object.entries(p).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') params.append(k, v);
+    });
+    return await apiRequest(`/reservas/disponibilidad?${params.toString()}`);
+}
+
+export async function getReservas(estado) {
+    return await apiRequest(`/reservas${estado ? `?estado=${encodeURIComponent(estado)}` : ''}`);
+}
+
+export async function crearReserva(datos) {
+    return await apiRequest('/reservas', { method: 'POST', body: JSON.stringify(datos) });
+}
+
+export async function confirmarReserva(id, anticipo, metodoPago) {
+    return await apiRequest(`/reservas/${id}/confirmar`, {
+        method: 'PATCH',
+        body: JSON.stringify({ anticipo, metodoPago }),
+    });
+}
+
+export async function getReembolsoReserva(id) {
+    return await apiRequest(`/reservas/${id}/reembolso`);
+}
+
+export async function cancelarReserva(id, datosBancarios = {}) {
+    return await apiRequest(`/reservas/${id}/cancelar`, {
+        method: 'PATCH',
+        body: JSON.stringify(datosBancarios),
+    });
+}
+
+// ==========================================
+// SERVICIOS PARA RECEPCIONISTAS Y HUÉSPEDES
+// ==========================================
+
+export async function getRecepcionistas() {
+    return await apiRequest('/recepcionistas');
+}
+
+export async function buscarHuespedes(q = '') {
+    return await apiRequest(`/huespedes?q=${encodeURIComponent(q)}`);
+}
+

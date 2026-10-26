@@ -15,11 +15,13 @@ import {
     MapPin,
     Layers,
     DollarSign,
-    RefreshCw
+    RefreshCw,
+    Hourglass
 } from 'lucide-react';
 
 import KpiCard from '../components/KpiCard';
 import HabitacionModal from '../components/HabitacionModal';
+import ConfirmDialog from '../components/ConfirmDialog';
 import {
     getHabitaciones,
     getHoteles,
@@ -41,7 +43,7 @@ export default function HabitacionesPage() {
     const [habitaciones, setHabitaciones] = useState([]);
     const [hoteles, setHoteles] = useState([]);
     const [tiposHabitacion, setTiposHabitacion] = useState([]);
-    const [resumen, setResumen] = useState({ total: 0, disponibles: 0, ocupadas: 0, mantenimiento: 0 });
+    const [resumen, setResumen] = useState({ total: 0, disponibles: 0, pendientes: 0, ocupadas: 0, mantenimiento: 0 });
 
     // Estados de carga y alertas
     const [cargando, setCargando] = useState(true);
@@ -58,6 +60,7 @@ export default function HabitacionesPage() {
     // Estado del modal
     const [modalAbierto, setModalAbierto] = useState(false);
     const [habitacionAEditar, setHabitacionAEditar] = useState(null);
+    const [habitacionAEliminar, setHabitacionAEliminar] = useState(null);
 
     // Cargar datos iniciales desde el backend de Spring Boot
     const cargarDatos = async () => {
@@ -83,6 +86,7 @@ export default function HabitacionesPage() {
                 setResumen({
                     total: habsData.length,
                     disponibles: habsData.filter(h => h.estado === 'Disponible').length,
+                    pendientes: habsData.filter(h => h.estado === 'Pendiente').length,
                     ocupadas: habsData.filter(h => h.estado === 'Ocupada').length,
                     mantenimiento: habsData.filter(h => h.estado === 'Mantenimiento').length
                 });
@@ -130,24 +134,27 @@ export default function HabitacionesPage() {
     };
 
     // Eliminar con confirmación
-    const handleEliminar = async (habitacion) => {
+    const handleEliminar = (habitacion) => {
         // Regla de negocio: No se puede eliminar habitaciones ocupadas
         if (habitacion.estado === 'Ocupada') {
             mostrarMensaje('error', `No se puede eliminar la habitación #${habitacion.numero} porque actualmente está Ocupada.`);
             return;
         }
 
-        const confirmar = window.confirm(
-            `¿Estás seguro de eliminar la habitación #${habitacion.numero} (${habitacion.hotel?.nombre || 'Hotel'})? Esta acción no se puede deshacer.`
-        );
-        if (!confirmar) return;
+        setHabitacionAEliminar(habitacion);
+    };
 
+    const handleConfirmarEliminar = async () => {
+        if (!habitacionAEliminar) return;
+        const hab = habitacionAEliminar;
         try {
-            await eliminarHabitacion(habitacion.idHabitacion);
-            mostrarMensaje('exito', `Habitación #${habitacion.numero} eliminada.`);
+            await eliminarHabitacion(hab.idHabitacion);
+            mostrarMensaje('exito', `Habitación #${hab.numero} eliminada exitosamente.`);
             await cargarDatos();
         } catch (err) {
             mostrarMensaje('error', 'No se pudo eliminar: ' + err.message);
+        } finally {
+            setHabitacionAEliminar(null);
         }
     };
 
@@ -280,6 +287,15 @@ export default function HabitacionesPage() {
                     onClick={() => setFiltroEstado('Disponible')}
                 />
                 <KpiCard
+                    title="Pendientes"
+                    value={resumen.pendientes || 0}
+                    icon={Hourglass}
+                    colorClass="kpi-amber"
+                    subtitle="Pre-reservas temporales"
+                    isActive={filtroEstado === 'Pendiente'}
+                    onClick={() => setFiltroEstado('Pendiente')}
+                />
+                <KpiCard
                     title="Ocupadas"
                     value={resumen.ocupadas}
                     icon={Clock}
@@ -380,7 +396,7 @@ export default function HabitacionesPage() {
                 {/* Chips de estado rápido */}
                 <div className="status-chips-bar">
                     <span className="chips-label">Estado:</span>
-                    {['TODOS', 'Disponible', 'Ocupada', 'Mantenimiento'].map((est) => (
+                    {['TODOS', 'Disponible', 'Pendiente', 'Ocupada', 'Mantenimiento'].map((est) => (
                         <button
                             key={est}
                             className={`status-chip-btn ${filtroEstado === est ? 'active' : ''}`}
@@ -488,6 +504,7 @@ export default function HabitacionesPage() {
                                                         title="Clic para cambiar estado inmediatamente"
                                                     >
                                                         <option value="Disponible">Disponible</option>
+                                                        <option value="Pendiente">Pendiente</option>
                                                         <option value="Ocupada">Ocupada</option>
                                                         <option value="Mantenimiento">Mantenimiento</option>
                                                     </select>
@@ -535,6 +552,26 @@ export default function HabitacionesPage() {
                 hoteles={hoteles.filter(h => h.activo)}
                 tiposHabitacion={tiposHabitacion}
                 pisosDisponibles={pisosDisponibles}
+            />
+
+            {/* Diálogo de confirmación del sistema para eliminar habitación */}
+            <ConfirmDialog
+                isOpen={Boolean(habitacionAEliminar)}
+                onClose={() => setHabitacionAEliminar(null)}
+                onConfirm={handleConfirmarEliminar}
+                title="¿Eliminar habitación?"
+                subtitle="Inventario de Habitaciones"
+                message={
+                    habitacionAEliminar ? (
+                        <>
+                            ¿Está seguro de que desea eliminar la habitación <strong>#{habitacionAEliminar.numero}</strong> ({habitacionAEliminar.hotel?.nombre || 'Hotel'})?
+                            Esta acción no se puede deshacer y retirará el cuarto permanentemente del inventario.
+                        </>
+                    ) : ''
+                }
+                confirmText="Sí, eliminar habitación"
+                cancelText="Cancelar"
+                type="danger"
             />
         </div>
     );

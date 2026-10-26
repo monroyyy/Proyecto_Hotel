@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Tag, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, Users, DollarSign, RefreshCw } from 'lucide-react';
 import { getTiposHabitacion, crearTipoHabitacion, actualizarTipoHabitacion, eliminarTipoHabitacion } from '../api/hotelApi';
+import Modal from '../components/Modal';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function TiposHabitacionPage() {
     const [tipos, setTipos] = useState([]);
@@ -9,6 +11,7 @@ export default function TiposHabitacionPage() {
     const [notificacion, setNotificacion] = useState(null);
     const [modalAbierto, setModalAbierto] = useState(false);
     const [tipoAEditar, setTipoAEditar] = useState(null);
+    const [tipoAEliminar, setTipoAEliminar] = useState(null);
 
     const [formTipo, setFormTipo] = useState({
         nombre: '',
@@ -73,14 +76,6 @@ export default function TiposHabitacionPage() {
             return;
         }
 
-        // Cuadro de confirmación al crear un nuevo tipo de habitación
-        if (!tipoAEditar) {
-            const confirmar = window.confirm(
-                `¿Confirmas la creación del nuevo tipo de habitación "${formTipo.nombre}" con tarifa base de $${Number(formTipo.precioBase).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN y capacidad para ${formTipo.capacidad} persona(s)?`
-            );
-            if (!confirmar) return;
-        }
-
         try {
             if (tipoAEditar) {
                 await actualizarTipoHabitacion(tipoAEditar.idTipo, formTipo);
@@ -97,14 +92,21 @@ export default function TiposHabitacionPage() {
         }
     };
 
-    const handleEliminar = async (id, nombre) => {
-        if (!window.confirm(`¿Estás seguro de eliminar el tipo "${nombre}"?`)) return;
+    const handleEliminar = (id, nombre) => {
+        setTipoAEliminar({ id, nombre });
+    };
+
+    const handleConfirmarEliminar = async () => {
+        if (!tipoAEliminar) return;
+        const { id, nombre } = tipoAEliminar;
         try {
             await eliminarTipoHabitacion(id);
-            mostrarMensaje('exito', 'Tipo de habitación eliminado.');
+            mostrarMensaje('exito', `Tipo "${nombre}" eliminado exitosamente.`);
             await cargarTipos();
         } catch (err) {
             mostrarMensaje('error', 'No se puede eliminar porque está asociado a una habitación.');
+        } finally {
+            setTipoAEliminar(null);
         }
     };
 
@@ -204,69 +206,91 @@ export default function TiposHabitacionPage() {
                 )}
             </div>
 
-            {modalAbierto && (
-                <div className="modal-overlay">
-                    <div className="modal-card" style={{ maxWidth: '480px', background: '#fff', padding: '24px', borderRadius: '12px' }}>
-                        <h2 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '16px' }}>
-                            {tipoAEditar ? `Editar Tipo: ${tipoAEditar.nombre}` : 'Nuevo Tipo de Habitación'}
-                        </h2>
-                        <form onSubmit={handleGuardar} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px' }}>NOMBRE DE LA CATEGORÍA *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={formTipo.nombre}
-                                    onChange={e => setFormTipo({ ...formTipo, nombre: e.target.value })}
-                                    className="form-select"
-                                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                                />
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px' }}>CAPACIDAD (HUÉSPEDES) *</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    required
-                                    value={formTipo.capacidad}
-                                    onChange={e => setFormTipo({ ...formTipo, capacidad: parseInt(e.target.value, 10) || 1 })}
-                                    className="form-select"
-                                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                                />
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px' }}>DESCRIPCIÓN</label>
-                                <textarea
-                                    rows="3"
-                                    value={formTipo.descripcion}
-                                    onChange={e => setFormTipo({ ...formTipo, descripcion: e.target.value })}
-                                    className="form-select"
-                                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', resize: 'vertical' }}
-                                />
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px' }}>PRECIO BASE ($ MXN) *</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    required
-                                    value={formTipo.precioBase}
-                                    onChange={e => setFormTipo({ ...formTipo, precioBase: parseFloat(e.target.value) || 0 })}
-                                    className="form-select"
-                                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                                />
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-                                <button type="button" onClick={() => setModalAbierto(false)} className="btn btn-secondary">Cancelar</button>
-                                <button type="submit" className="btn btn-primary">
-                                    {tipoAEditar ? 'Guardar Cambios' : 'Crear Categoría'}
-                                </button>
-                            </div>
-                        </form>
+            {/* Modal para Crear / Editar Categoría */}
+            <Modal
+                isOpen={modalAbierto}
+                onClose={() => setModalAbierto(false)}
+                title={tipoAEditar ? `Editar Tipo: ${tipoAEditar.nombre}` : 'Nuevo Tipo de Habitación'}
+                subtitle={tipoAEditar ? 'Modifica la capacidad, descripción y tarifa base' : 'Define una nueva categoría o tipo de habitación para el catálogo'}
+                icon={Tag}
+                maxWidth="510px"
+            >
+                <form onSubmit={handleGuardar} className="modal-form">
+                    <div className="form-group">
+                        <label className="form-label">NOMBRE DE LA CATEGORÍA *</label>
+                        <input
+                            type="text"
+                            required
+                            value={formTipo.nombre}
+                            onChange={e => setFormTipo({ ...formTipo, nombre: e.target.value })}
+                            className="form-input"
+                            placeholder="Ej. Suite Presidencial, Doble Estándar"
+                        />
                     </div>
-                </div>
-            )}
+                    <div className="form-grid">
+                        <div className="form-group">
+                            <label className="form-label">CAPACIDAD (HUÉSPEDES) *</label>
+                            <input
+                                type="number"
+                                min="1"
+                                required
+                                value={formTipo.capacidad}
+                                onChange={e => setFormTipo({ ...formTipo, capacidad: parseInt(e.target.value, 10) || 1 })}
+                                className="form-input"
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">PRECIO BASE ($ MXN) *</label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                required
+                                value={formTipo.precioBase}
+                                onChange={e => setFormTipo({ ...formTipo, precioBase: parseFloat(e.target.value) || 0 })}
+                                className="form-input"
+                            />
+                        </div>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">DESCRIPCIÓN</label>
+                        <textarea
+                            rows="3"
+                            value={formTipo.descripcion}
+                            onChange={e => setFormTipo({ ...formTipo, descripcion: e.target.value })}
+                            className="form-input"
+                            placeholder="Breve descripción de amenidades y características..."
+                            style={{ resize: 'vertical' }}
+                        />
+                    </div>
+                    <div className="modal-actions">
+                        <button type="button" onClick={() => setModalAbierto(false)} className="btn btn-secondary">Cancelar</button>
+                        <button type="submit" className="btn btn-primary">
+                            {tipoAEditar ? 'Guardar Cambios' : 'Crear Categoría'}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Diálogo de confirmación del sistema para eliminar categoría */}
+            <ConfirmDialog
+                isOpen={Boolean(tipoAEliminar)}
+                onClose={() => setTipoAEliminar(null)}
+                onConfirm={handleConfirmarEliminar}
+                title="¿Eliminar categoría?"
+                subtitle="Catálogo de Tipos de Habitación"
+                message={
+                    tipoAEliminar ? (
+                        <>
+                            ¿Está seguro de que desea eliminar la categoría <strong>"{tipoAEliminar.nombre}"</strong>?
+                            Esta acción no se puede realizar si existen habitaciones asignadas a este tipo.
+                        </>
+                    ) : ''
+                }
+                confirmText="Sí, eliminar categoría"
+                cancelText="Cancelar"
+                type="danger"
+            />
         </div>
     );
 }

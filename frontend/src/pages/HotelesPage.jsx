@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Building, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, MapPin, Phone, Mail, RefreshCw } from 'lucide-react';
 import { getHoteles, crearHotel, actualizarHotel, eliminarHotel } from '../api/hotelApi';
 import KpiCard from '../components/KpiCard';
+import Modal from '../components/Modal';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function HotelesPage() {
     const [hoteles, setHoteles] = useState([]);
@@ -10,6 +12,7 @@ export default function HotelesPage() {
     const [notificacion, setNotificacion] = useState(null);
     const [modalAbierto, setModalAbierto] = useState(false);
     const [hotelAEditar, setHotelAEditar] = useState(null);
+    const [hotelAEliminar, setHotelAEliminar] = useState(null);
     
     const [formHotel, setFormHotel] = useState({
         nombre: '',
@@ -125,14 +128,21 @@ export default function HotelesPage() {
         }
     };
 
-    const handleEliminar = async (id, nombre) => {
-        if (!window.confirm(`¿Estás seguro de eliminar el hotel "${nombre}"?`)) return;
+    const handleEliminar = (id, nombre) => {
+        setHotelAEliminar({ id, nombre });
+    };
+
+    const handleConfirmarEliminar = async () => {
+        if (!hotelAEliminar) return;
+        const { id, nombre } = hotelAEliminar;
         try {
             await eliminarHotel(id);
-            mostrarMensaje('exito', 'Hotel eliminado exitosamente.');
+            mostrarMensaje('exito', `Hotel "${nombre}" eliminado exitosamente.`);
             await cargarHoteles();
         } catch (err) {
             mostrarMensaje('error', err.message || 'No se puede eliminar el hotel porque tiene habitaciones asociadas.');
+        } finally {
+            setHotelAEliminar(null);
         }
     };
 
@@ -264,95 +274,112 @@ export default function HotelesPage() {
             </div>
 
             {/* Modal para Crear / Editar Hotel */}
-            {modalAbierto && (
-                <div className="modal-overlay">
-                    <div className="modal-card" style={{ maxWidth: '480px', background: '#fff', padding: '24px', borderRadius: '12px' }}>
-                        <h2 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '16px' }}>
-                            {hotelAEditar ? `Editar Hotel: ${hotelAEditar.nombre}` : 'Registrar Nuevo Hotel'}
-                        </h2>
-                        <form onSubmit={handleGuardar} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px' }}>NOMBRE DEL HOTEL *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={formHotel.nombre}
-                                    onChange={e => setFormHotel({ ...formHotel, nombre: e.target.value })}
-                                    className="form-select"
-                                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                                />
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px' }}>DIRECCIÓN *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={formHotel.direccion}
-                                    onChange={e => setFormHotel({ ...formHotel, direccion: e.target.value })}
-                                    className="form-select"
-                                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                                />
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px' }}>CIUDAD *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={formHotel.ciudad}
-                                    onChange={e => setFormHotel({ ...formHotel, ciudad: e.target.value })}
-                                    className="form-select"
-                                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                                />
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px' }}>TELÉFONO (10 DÍGITOS) *</label>
-                                    <input
-                                        type="tel"
-                                        required
-                                        maxLength={10}
-                                        placeholder="Ej. 5512345678"
-                                        value={formHotel.telefono}
-                                        onChange={e => setFormHotel({ ...formHotel, telefono: e.target.value.replace(/\D/g, '') })}
-                                        className="form-select"
-                                        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                                    />
-                                </div>
-                                <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px' }}>CORREO ELECTRÓNICO *</label>
-                                    <input
-                                        type="email"
-                                        required
-                                        placeholder="contacto@hotel.com"
-                                        value={formHotel.email}
-                                        onChange={e => setFormHotel({ ...formHotel, email: e.target.value })}
-                                        className="form-select"
-                                        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '4px' }}>ESTADO OPERATIVO</label>
-                                <select
-                                    value={formHotel.activo ? 'true' : 'false'}
-                                    onChange={e => setFormHotel({ ...formHotel, activo: e.target.value === 'true' })}
-                                    className="form-select"
-                                    style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-                                >
-                                    <option value="true">Activo</option>
-                                    <option value="false">Inactivo</option>
-                                </select>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-                                <button type="button" onClick={() => setModalAbierto(false)} className="btn btn-secondary">Cancelar</button>
-                                <button type="submit" className="btn btn-primary">
-                                    {hotelAEditar ? 'Guardar Cambios' : 'Registrar Hotel'}
-                                </button>
-                            </div>
-                        </form>
+            <Modal
+                isOpen={modalAbierto}
+                onClose={() => setModalAbierto(false)}
+                title={hotelAEditar ? `Editar Hotel: ${hotelAEditar.nombre}` : 'Registrar Nuevo Hotel'}
+                subtitle={hotelAEditar ? 'Modifica los datos y contacto del hotel seleccionado' : 'Ingresa la información básica para dar de alta una nueva sede'}
+                icon={Building}
+                maxWidth="510px"
+            >
+                <form onSubmit={handleGuardar} className="modal-form">
+                    <div className="form-group">
+                        <label className="form-label">NOMBRE DEL HOTEL *</label>
+                        <input
+                            type="text"
+                            required
+                            value={formHotel.nombre}
+                            onChange={e => setFormHotel({ ...formHotel, nombre: e.target.value })}
+                            className="form-input"
+                            placeholder="Ej. Hotel Paraíso Cancún"
+                        />
                     </div>
-                </div>
-            )}
+                    <div className="form-group">
+                        <label className="form-label">DIRECCIÓN *</label>
+                        <input
+                            type="text"
+                            required
+                            value={formHotel.direccion}
+                            onChange={e => setFormHotel({ ...formHotel, direccion: e.target.value })}
+                            className="form-input"
+                            placeholder="Ej. Av. Reforma #125, Col. Centro"
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">CIUDAD *</label>
+                        <input
+                            type="text"
+                            required
+                            value={formHotel.ciudad}
+                            onChange={e => setFormHotel({ ...formHotel, ciudad: e.target.value })}
+                            className="form-input"
+                            placeholder="Ej. Cancún"
+                        />
+                    </div>
+                    <div className="form-grid">
+                        <div className="form-group">
+                            <label className="form-label">TELÉFONO (10 DÍGITOS) *</label>
+                            <input
+                                type="tel"
+                                required
+                                maxLength={10}
+                                placeholder="Ej. 5512345678"
+                                value={formHotel.telefono}
+                                onChange={e => setFormHotel({ ...formHotel, telefono: e.target.value.replace(/\D/g, '') })}
+                                className="form-input"
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">CORREO ELECTRÓNICO *</label>
+                            <input
+                                type="email"
+                                required
+                                placeholder="contacto@hotel.com"
+                                value={formHotel.email}
+                                onChange={e => setFormHotel({ ...formHotel, email: e.target.value })}
+                                className="form-input"
+                            />
+                        </div>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">ESTADO OPERATIVO</label>
+                        <select
+                            value={formHotel.activo ? 'true' : 'false'}
+                            onChange={e => setFormHotel({ ...formHotel, activo: e.target.value === 'true' })}
+                            className="form-select"
+                        >
+                            <option value="true">Activo</option>
+                            <option value="false">Inactivo</option>
+                        </select>
+                    </div>
+                    <div className="modal-actions">
+                        <button type="button" onClick={() => setModalAbierto(false)} className="btn btn-secondary">Cancelar</button>
+                        <button type="submit" className="btn btn-primary">
+                            {hotelAEditar ? 'Guardar Cambios' : 'Registrar Hotel'}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Diálogo de confirmación del sistema para eliminar hotel */}
+            <ConfirmDialog
+                isOpen={Boolean(hotelAEliminar)}
+                onClose={() => setHotelAEliminar(null)}
+                onConfirm={handleConfirmarEliminar}
+                title="¿Eliminar hotel?"
+                subtitle="Gestión de Hoteles de la Cadena"
+                message={
+                    hotelAEliminar ? (
+                        <>
+                            ¿Está seguro de que desea eliminar el hotel <strong>"{hotelAEliminar.nombre}"</strong>?
+                            Esta acción es permanente y no se podrá realizar si cuenta con habitaciones vinculadas.
+                        </>
+                    ) : ''
+                }
+                confirmText="Sí, eliminar hotel"
+                cancelText="Cancelar"
+                type="danger"
+            />
         </div>
     );
 }

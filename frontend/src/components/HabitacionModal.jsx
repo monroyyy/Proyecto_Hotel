@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, BedDouble, Building, Layers, Hash, Info, CheckCircle2 } from 'lucide-react';
 
 /**
@@ -49,6 +50,20 @@ export default function HabitacionModal({
         setError('');
     }, [habitacionParaEditar, isOpen, hoteles, tiposHabitacion, defaultPiso]);
 
+    // Difuminar fondo y manejar Escape
+    useEffect(() => {
+        if (!isOpen) return;
+        document.body.classList.add('modal-open');
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape' && onClose) onClose();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.body.classList.remove('modal-open');
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     const handleSubmit = async (e) => {
@@ -93,9 +108,9 @@ export default function HabitacionModal({
 
     const isEdit = Boolean(habitacionParaEditar);
 
-    return (
-        <div className="modal-backdrop" onClick={onClose}>
-            <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+    return createPortal(
+        <div className="modal-overlay modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+            <div className="modal-container modal-card" onClick={(e) => e.stopPropagation()}>
                 {/* Header del Modal */}
                 <div className="modal-header">
                     <div className="modal-title-wrapper">
@@ -215,6 +230,7 @@ export default function HabitacionModal({
                             onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
                         >
                             <option value="Disponible">🟢 Disponible (Lista para rentar)</option>
+                            <option value="Pendiente">🟡 Pendiente (Pre-reserva temporal)</option>
                             <option value="Ocupada">🔵 Ocupada (Huésped hospedado)</option>
                             <option value="Mantenimiento">🟠 Mantenimiento (Limpieza o reparación)</option>
                         </select>
@@ -231,6 +247,7 @@ export default function HabitacionModal({
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

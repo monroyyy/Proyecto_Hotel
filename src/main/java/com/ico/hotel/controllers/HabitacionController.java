@@ -243,12 +243,14 @@ public class HabitacionController {
         long disponibles = todas.stream().filter(h -> "Disponible".equalsIgnoreCase(h.getEstado())).count();
         long ocupadas = todas.stream().filter(h -> "Ocupada".equalsIgnoreCase(h.getEstado())).count();
         long mantenimiento = todas.stream().filter(h -> "Mantenimiento".equalsIgnoreCase(h.getEstado())).count();
+        long pendientes = todas.stream().filter(h -> "Pendiente".equalsIgnoreCase(h.getEstado())).count();
 
         Map<String, Object> resumen = new HashMap<>();
         resumen.put("total", total);
         resumen.put("disponibles", disponibles);
         resumen.put("ocupadas", ocupadas);
         resumen.put("mantenimiento", mantenimiento);
+        resumen.put("pendientes", pendientes);
 
         return ResponseEntity.ok(resumen);
     }

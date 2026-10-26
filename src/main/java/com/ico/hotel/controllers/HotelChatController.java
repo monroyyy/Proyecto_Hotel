@@ -17,12 +17,12 @@ public class HotelChatController {
 
     @PostMapping
     public ResponseEntity<String> chat(@Valid @RequestBody ChatRequest request) {
-        return ResponseEntity.ok(hotelChatService.chat(request.prompt(), request.model()));
+        return ResponseEntity.ok(hotelChatService.chat(request.prompt(), request.model(), request.conversationId()));
     }
 
     @PostMapping(value = "/stream", produces = "text/event-stream; charset=UTF-8")
     public Flux<String> chatStream(@Valid @RequestBody ChatRequest request) {
-        return hotelChatService.chatStream(request.prompt(), request.model());
+        return hotelChatService.chatStream(request.prompt(), request.model(), request.conversationId());
     }
 }
 

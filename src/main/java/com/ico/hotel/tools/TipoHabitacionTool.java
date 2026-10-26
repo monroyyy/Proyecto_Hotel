@@ -18,10 +18,17 @@ public class TipoHabitacionTool {
 
     private final TipoHabitacionRepository tipoHabitacionRepository;
 
-    @Tool(description = "Listar todos los tipos o categorías de habitaciones existentes en la cadena hotelera con su capacidad, descripción y precio base por noche.")
-    public List<TipoHabitacion> getTodosLosTipos() {
-        log.info("Tool invocada — getTodosLosTipos");
-        return tipoHabitacionRepository.findAll();
+    @Tool(description = "Consultar el catálogo oficial de categorías o tipos de habitación (Individual, Doble, Matrimonial, Familiar, Suite) con su capacidad, precio base y descripción. Usar EXCLUSIVAMENTE cuando el huésped o recepcionista pregunte de forma explícita qué categorías, tipos de cuartos o clases de habitación existen en el hotel. ESTRICTAMENTE PROHIBIDO usar ante saludos, cortesía, preguntas generales, presupuestos o disponibilidad.")
+    public List<java.util.Map<String, Object>> consultarCatalogoCategoriasHabitacion() {
+        log.info("Tool invocada — consultarCatalogoCategoriasHabitacion");
+        return tipoHabitacionRepository.findAll().stream()
+                .map(t -> java.util.Map.<String, Object>of(
+                        "categoria", t.getNombre(),
+                        "capacidad", t.getCapacidad() != null ? t.getCapacidad() + " huéspedes" : "N/A",
+                        "precioBasePorNoche", t.getPrecioBase() != null ? "$" + t.getPrecioBase() + " MXN" : "N/A",
+                        "descripcion", t.getDescripcion() != null ? t.getDescripcion() : ""
+                ))
+                .toList();
     }
 
     @Tool(description = "Consultar el tipo de habitacion mas barato disponible en la cadena.")
@@ -75,5 +82,11 @@ public class TipoHabitacionTool {
     public Integer getMaximaCapacidad() {
         log.info("Tool invocada — getMaximaCapacidad");
         return tipoHabitacionRepository.findMaximaCapacidad();
+    }
+
+    @Tool(description = "Obtener el conteo total de tipos o categorías de habitación existentes en la cadena hotelera.")
+    public Long countTotalTipos() {
+        log.info("Tool invocada — countTotalTipos");
+        return tipoHabitacionRepository.count();
     }
 }

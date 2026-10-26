@@ -30,7 +30,7 @@ public interface HabitacionRepository extends JpaRepository<Habitacion, Integer>
     List<Map<String, Object>> countDisponiblesPorHotel();
 
     // 18. ¿Qué habitaciones están disponibles en un hotel específico (por nombre)?
-    @Query("SELECT h FROM Habitacion h WHERE h.estado = 'Disponible' AND LOWER(h.hotel.nombre) LIKE LOWER(CONCAT('%', :hotelNombre, '%'))")
+    @Query("SELECT h FROM Habitacion h WHERE h.estado = 'Disponible' AND LOWER(h.hotel.nombre) = LOWER(:hotelNombre)")
     List<Habitacion> findDisponiblesEnHotel(@Param("hotelNombre") String hotelNombre);
 
     // 19. ¿Cuántas habitaciones están en mantenimiento?
@@ -49,7 +49,7 @@ public interface HabitacionRepository extends JpaRepository<Habitacion, Integer>
     List<Habitacion> findByPiso(Integer piso);
 
     // 23. ¿Qué habitaciones hay en un piso de un hotel específico?
-    @Query("SELECT h FROM Habitacion h WHERE LOWER(h.hotel.nombre) LIKE LOWER(CONCAT('%', :hotelNombre, '%')) AND h.piso = :piso ORDER BY h.numero ASC")
+    @Query("SELECT h FROM Habitacion h WHERE LOWER(h.hotel.nombre) = LOWER(:hotelNombre) AND h.piso = :piso ORDER BY h.numero ASC")
     List<Habitacion> findByHotelNombreAndPiso(@Param("hotelNombre") String hotelNombre, @Param("piso") Integer piso);
 
     // 24. ¿Cuántas habitaciones tenemos en total en toda la cadena?
@@ -80,19 +80,23 @@ public interface HabitacionRepository extends JpaRepository<Habitacion, Integer>
     List<Habitacion> findDisponiblesOrdenadasPorPrecio();
 
     // 31. Todas las habitaciones de un hotel específico (por nombre)
-    @Query("SELECT h FROM Habitacion h WHERE LOWER(h.hotel.nombre) LIKE LOWER(CONCAT('%', :hotelNombre, '%')) ORDER BY h.piso ASC, h.numero ASC")
+    @Query("SELECT h FROM Habitacion h WHERE LOWER(h.hotel.nombre) = LOWER(:hotelNombre) ORDER BY h.piso ASC, h.numero ASC")
     List<Habitacion> findByHotelNombre(@Param("hotelNombre") String hotelNombre);
+
+    // 31b. Habitaciones por nombre exacto de hotel (para distinguir 'Hotel Paraíso' de 'Hotel Paraíso Ejecutivo')
+    @Query("SELECT h FROM Habitacion h WHERE LOWER(h.hotel.nombre) = LOWER(:hotelNombre) ORDER BY h.piso ASC, h.numero ASC")
+    List<Habitacion> findByHotelNombreExacto(@Param("hotelNombre") String hotelNombre);
 
     // 32. Habitaciones por estado en toda la cadena (Disponible, Ocupada, Mantenimiento)
     @Query("SELECT h FROM Habitacion h WHERE LOWER(h.estado) = LOWER(:estado) ORDER BY h.hotel.nombre ASC, h.piso ASC, h.numero ASC")
     List<Habitacion> findByEstado(@Param("estado") String estado);
 
     // 33. Habitaciones por estado dentro de un hotel específico
-    @Query("SELECT h FROM Habitacion h WHERE LOWER(h.estado) = LOWER(:estado) AND LOWER(h.hotel.nombre) LIKE LOWER(CONCAT('%', :hotelNombre, '%')) ORDER BY h.piso ASC, h.numero ASC")
+    @Query("SELECT h FROM Habitacion h WHERE LOWER(h.estado) = LOWER(:estado) AND LOWER(h.hotel.nombre) = LOWER(:hotelNombre) ORDER BY h.piso ASC, h.numero ASC")
     List<Habitacion> findByEstadoAndHotelNombre(@Param("estado") String estado, @Param("hotelNombre") String hotelNombre);
 
     // 34. Buscar una habitación por su número dentro de un hotel específico
-    @Query("SELECT h FROM Habitacion h WHERE h.numero = :numero AND LOWER(h.hotel.nombre) LIKE LOWER(CONCAT('%', :hotelNombre, '%'))")
+    @Query("SELECT h FROM Habitacion h WHERE h.numero = :numero AND LOWER(h.hotel.nombre) = LOWER(:hotelNombre)")
     List<Habitacion> findByNumeroAndHotelNombre(@Param("numero") String numero, @Param("hotelNombre") String hotelNombre);
 
     // 35. Habitaciones ordenadas de la más cara a la más barata (toda la cadena)
@@ -100,6 +104,11 @@ public interface HabitacionRepository extends JpaRepository<Habitacion, Integer>
     List<Habitacion> findOrdenadasPorPrecioDesc();
 
     // 36. Habitaciones ordenadas de la más cara a la más barata dentro de un hotel
-    @Query("SELECT h FROM Habitacion h JOIN h.tipoHabitacion t WHERE LOWER(h.hotel.nombre) LIKE LOWER(CONCAT('%', :hotelNombre, '%')) ORDER BY t.precioBase DESC")
+    @Query("SELECT h FROM Habitacion h JOIN h.tipoHabitacion t WHERE LOWER(h.hotel.nombre) = LOWER(:hotelNombre) ORDER BY t.precioBase DESC")
     List<Habitacion> findOrdenadasPorPrecioDescEnHotel(@Param("hotelNombre") String hotelNombre);
+
+    // Reservaciones: bloqueo pesimista de la fila de la habitación para serializar reservas concurrentes
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT h FROM Habitacion h WHERE h.idHabitacion = :id")
+    java.util.Optional<Habitacion> findByIdForUpdate(@Param("id") Integer id);
 }
