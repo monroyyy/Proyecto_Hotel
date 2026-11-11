@@ -1,11 +1,15 @@
 package com.ico.hotel;
 
 import com.ico.hotel.services.HotelChatService;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,6 +19,15 @@ class OllamaReceptionistPolicyTest {
 
     @Autowired
     private HotelChatService hotelChatService;
+
+    @BeforeAll
+    static void checkOllamaReachable() {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("127.0.0.1", 11434), 800);
+        } catch (Exception e) {
+            Assumptions.abort("Servicio local de Ollama (puerto 11434) no disponible; omitiendo pruebas en vivo con LLM.");
+        }
+    }
 
     @Test
     @DisplayName("1. Cancelación a 50 horas (debe reembolsar exactamente 50% del anticipo)")

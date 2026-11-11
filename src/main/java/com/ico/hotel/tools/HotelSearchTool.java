@@ -18,7 +18,7 @@ public class HotelSearchTool {
 
     private final HotelRepository hotelRepository;
 
-    @Tool(description = "Listar los hoteles que están actualmente activos o consultar todos los hoteles de la cadena (Hotel Paraíso y Hotel Paraíso Ejecutivo). Útil para: ¿Cuáles son los hoteles activos?, ¿Qué hoteles tenemos?, ¿Cuáles hoteles existen?")
+    @Tool(description = "Listar todos los hoteles que están actualmente activos y registrados en la base de datos de la cadena hotelera (ej. Hotel Paraíso, Hotel Paraíso Ejecutivo, Hotel UAEM u otros hoteles nuevos). Útil para: ¿Cuáles son los hoteles activos?, ¿Qué hoteles tenemos?, ¿Cuáles hoteles existen?, mostrar hoteles.")
     public List<Hotel> getHotelesActivos() {
         log.info("Tool invocada — getHotelesActivos");
         return hotelRepository.findByActivoTrue();

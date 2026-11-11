@@ -140,10 +140,22 @@ public class ConsultasController {
         return habitacionRepository.findDisponiblesEnHotel(nombreHotel);
     }
 
+    // 18b. Mostrar todas las habitaciones de un hotel específico
+    @GetMapping("/habitaciones/hotel/{nombreHotel}")
+    public List<Habitacion> getHabitacionesPorHotelNombre(@PathVariable String nombreHotel) {
+        return habitacionRepository.findByHotelNombre(nombreHotel);
+    }
+
     // 19. ¿Cuántas habitaciones están en mantenimiento?
     @GetMapping("/habitaciones/mantenimiento-count")
     public Long countMantenimiento() {
         return habitacionRepository.countMantenimiento();
+    }
+
+    // 19b. Listar habitaciones en mantenimiento
+    @GetMapping("/habitaciones/mantenimiento")
+    public List<Habitacion> getHabitacionesMantenimiento() {
+        return habitacionRepository.findByEstado("Mantenimiento");
     }
 
     // 20. ¿Qué habitaciones tienen capacidad para 4 huéspedes?

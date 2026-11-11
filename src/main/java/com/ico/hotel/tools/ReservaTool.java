@@ -2,9 +2,13 @@ package com.ico.hotel.tools;
 
 import com.ico.hotel.dto.ReservaRequest;
 import com.ico.hotel.models.Habitacion;
+import com.ico.hotel.models.Hotel;
 import com.ico.hotel.models.Reserva;
+import com.ico.hotel.models.Rol;
 import com.ico.hotel.repository.HabitacionRepository;
+import com.ico.hotel.repository.HotelRepository;
 import com.ico.hotel.repository.ReservaRepository;
+import com.ico.hotel.security.CustomUserDetails;
 import com.ico.hotel.services.ReservaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,11 +31,23 @@ public class ReservaTool {
     private final ReservaService reservaService;
     private final HabitacionRepository habitacionRepository;
     private final ReservaRepository reservaRepository;
+    private final HotelRepository hotelRepository;
+    private final com.ico.hotel.repository.HuespedRepository huespedRepository;
+
+    private boolean perteneceAHuespedActual(Reserva r, CustomUserDetails user) {
+        if (user == null) return false;
+        if (user.isStaff()) return true;
+        boolean porId = r.getUsuario() != null && r.getUsuario().getIdUsuario() != null
+                && r.getUsuario().getIdUsuario().equals(user.getIdUsuario());
+        boolean porEmail = r.getHuesped() != null && r.getHuesped().getEmail() != null
+                && r.getHuesped().getEmail().trim().equalsIgnoreCase(user.getEmail().trim());
+        return porId || porEmail;
+    }
 
     @Tool(description = "Registrar formalmente una reservación en la base de datos del hotel. " +
-            "REGLA OBLIGATORIA: NO llames a esta herramienta si el usuario no ha proporcionado explícitamente todos los datos (nombre del huésped, fechas de entrada y salida, número de habitación y hotel) y no ha confirmado el resumen final de la reservación.")
+            "REGLA OBLIGATORIA: NO llames a esta herramienta si el usuario no ha proporcionado explícitamente todos los datos y no ha confirmado el resumen final de la reservación.")
     public Map<String, Object> crearReservacion(
-            @ToolParam(description = "Nombre del hotel: 'Hotel Paraíso' o 'Hotel Paraíso Ejecutivo'", required = false)
+            @ToolParam(description = "Nombre del hotel (ej. 'Hotel Paraíso', 'Hotel Paraíso Ejecutivo' o cualquier hotel de la cadena)", required = false)
             String hotel,
             @ToolParam(description = "Número de la habitación a reservar (ej. '101', '201', '202', '301')", required = true)
             String numeroHabitacion,
@@ -39,7 +55,7 @@ public class ReservaTool {
             String fechaEntrada,
             @ToolParam(description = "Fecha de salida en formato YYYY-MM-DD (ej. '2026-11-03')", required = true)
             String fechaSalida,
-            @ToolParam(description = "Nombre completo del huésped titular (ej. 'Carlos Mendoza')", required = true)
+            @ToolParam(description = "Nombre completo del huésped titular (ej. 'Carlos Mendoza')", required = false)
             String nombreHuesped,
             @ToolParam(description = "Teléfono del huésped a 10 dígitos (ej. '5512345678')", required = false)
             String telefono,
@@ -64,6 +80,22 @@ public class ReservaTool {
             @ToolParam(description = "Observaciones o peticiones especiales para la estancia", required = false)
             String observaciones) {
 
+        CustomUserDetails authUser = HabitacionSearchTool.getAuthenticatedUser();
+        if (authUser != null && authUser.getRol() == Rol.HUESPED) {
+            // Si quien usa el chat es un HUESPED, siempre usa su propio correo verificado y su nombre por defecto
+            email = authUser.getEmail();
+            if (nombreHuesped == null || nombreHuesped.isBlank()) {
+                nombreHuesped = authUser.getNombre();
+            }
+            if ((telefono == null || telefono.replaceAll("\\D", "").length() != 10)) {
+                // Intentar recuperar el teléfono previamente registrado del huésped si existe
+                var prevHuesped = huespedRepository.findFirstByEmailIgnoreCase(authUser.getEmail());
+                if (prevHuesped.isPresent() && prevHuesped.get().getTelefono() != null && prevHuesped.get().getTelefono().replaceAll("\\D", "").length() == 10) {
+                    telefono = prevHuesped.get().getTelefono();
+                }
+            }
+        }
+
         log.info("Tool invocada — crearReservacion: hotel={}, hab={}, entrada={}, salida={}, huesped={}",
                 hotel, numeroHabitacion, fechaEntrada, fechaSalida, nombreHuesped);
 
@@ -71,10 +103,10 @@ public class ReservaTool {
 
         try {
             if (numeroHabitacion == null || numeroHabitacion.isBlank()) {
-                return Map.of("error", "Falta el número de habitación. Por favor pregunte al recepcionista/huésped qué número de habitación desea reservar.");
+                return Map.of("error", "Falta el número de habitación. Por favor pregunte qué número de habitación desea reservar.");
             }
             if (nombreHuesped == null || nombreHuesped.trim().length() < 3) {
-                return Map.of("error", "Falta el nombre completo del huésped titular. Por favor solicite al huésped su nombre y apellidos.");
+                return Map.of("error", "Falta el nombre completo del huésped titular.");
             }
             if (fechaEntrada == null || fechaEntrada.isBlank() || fechaSalida == null || fechaSalida.isBlank()) {
                 return Map.of("error", "Faltan las fechas de estancia. Por favor solicite la fecha de llegada (Check-in) y fecha de salida (Check-out) en formato AAAA-MM-DD.");
@@ -104,32 +136,28 @@ public class ReservaTool {
             }
 
             Habitacion hab = habitaciones.get(0);
-            exactHotel = hab.getHotel().getNombre();
 
-            // Validar teléfono de 10 dígitos obligatorio
             String cleanTel = telefono != null ? telefono.replaceAll("\\D", "") : "";
             if (cleanTel.length() != 10) {
-                return Map.of("error", "Falta el número de teléfono del huésped titular a 10 dígitos. Por favor solicítelo antes de confirmar la reserva.");
+                return Map.of("error", "Falta el número de teléfono de contacto a 10 dígitos. Por favor solicítelo antes de confirmar la reserva.");
             }
 
-            // Validar email obligatorio
             if (email == null || !email.contains("@") || !email.contains(".")) {
-                return Map.of("error", "Falta el correo electrónico del huésped titular. Por favor solicite un correo electrónico válido para enviarle la confirmación.");
+                return Map.of("error", "Falta el correo electrónico del titular.");
             }
             String cleanEmail = email.trim().toLowerCase();
 
-            // Verificar si el usuario ha confirmado explícitamente en su mensaje
             String currentPrompt = HabitacionSearchTool.CURRENT_USER_PROMPT.get();
             if (currentPrompt != null) {
                 String normPrompt = java.text.Normalizer.normalize(currentPrompt.toLowerCase().trim(), java.text.Normalizer.Form.NFD)
                         .replaceAll("\\p{M}", "");
-                boolean esConfirmacion = normPrompt.contains("si") || normPrompt.contains("confirm") || 
+                boolean esConfirmacion = normPrompt.contains("si") || normPrompt.contains("confirm") ||
                                          normPrompt.contains("adelante") || normPrompt.contains("realiz") ||
                                          normPrompt.contains("proced") || normPrompt.contains("de acuerdo");
                 boolean contieneTodosLosDatosEnUnSoloMensaje = normPrompt.contains("titular") || normPrompt.contains("correo") || normPrompt.contains("telefono");
 
                 if (!esConfirmacion && !contieneTodosLosDatosEnUnSoloMensaje) {
-                    return Map.of("error", "Antes de registrar formalmente la reservación, debe mostrar el RESUMEN al recepcionista/huésped y solicitar su CONFIRMACIÓN explícita.");
+                    return Map.of("error", "Antes de registrar formalmente la reservación, debe mostrar el RESUMEN y solicitar CONFIRMACIÓN explícita.");
                 }
             }
 
@@ -138,12 +166,11 @@ public class ReservaTool {
             int numAdultos = adultos != null && adultos > 0 ? adultos : 1;
             int numNinos = ninos != null && ninos >= 0 ? ninos : 0;
 
-            // Calcular tarifa para conocer anticipo requerido
             Map<String, Object> tarifa = reservaService.calcularTarifa(hab, entrada, salida, esCuna, esCamaExtra);
-            BigDecimal totalEstancia = (BigDecimal) tarifa.get("total");
             BigDecimal anticipoMinimo = (BigDecimal) tarifa.get("anticipoRequerido");
 
-            boolean esConfirmada = "CONFIRMADA".equalsIgnoreCase(modalidad) || (anticipo != null && anticipo > 0);
+            boolean esHuesped = authUser != null && authUser.getRol() == Rol.HUESPED;
+            boolean esConfirmada = !esHuesped && ("CONFIRMADA".equalsIgnoreCase(modalidad) || (anticipo != null && anticipo > 0));
 
             ReservaRequest req = new ReservaRequest();
             req.setIdHabitacion(hab.getIdHabitacion());
@@ -173,6 +200,9 @@ public class ReservaTool {
             } else {
                 req.setModalidad("PRE_RESERVA");
                 req.setHorasVigencia(24);
+                if (esHuesped && (anticipo != null || "CONFIRMADA".equalsIgnoreCase(modalidad))) {
+                    log.warn("Usuario huésped intentó crear reserva directamente como CONFIRMADA. Forzando a PRE_RESERVA.");
+                }
             }
 
             Reserva creada = reservaService.crear(req);
@@ -253,25 +283,40 @@ public class ReservaTool {
         if (folio == null || folio.isBlank()) {
             return Map.of("error", "Debe proporcionar el folio de la reservación.");
         }
-        return reservaRepository.findByFolioIgnoreCase(folio.trim())
-                .map(this::mapReservaToMap)
-                .orElse(Map.of("error", "No se encontró ninguna reservación con el folio " + folio + "."));
+        CustomUserDetails authUser = HabitacionSearchTool.getAuthenticatedUser();
+        var opt = reservaRepository.findByFolioIgnoreCase(folio.trim());
+        if (opt.isEmpty()) {
+            return Map.of("error", "No se encontró ninguna reservación con el folio " + folio + ".");
+        }
+        Reserva r = opt.get();
+        if (authUser != null && authUser.getRol() == Rol.HUESPED && !perteneceAHuespedActual(r, authUser)) {
+            return Map.of(
+                    "accesoRestringido", true,
+                    "error", "Por políticas de privacidad y seguridad del hotel, como huésped únicamente puede consultar el detalle de sus propias reservaciones."
+            );
+        }
+        return mapReservaToMap(r);
     }
 
-    @Tool(description = "Buscar y consultar reservaciones de clientes cuando NO se tiene el folio. " +
-            "Permite buscar de forma flexible por: nombre o apellido del titular/huésped, teléfono (10 dígitos o parcial), " +
-            "correo electrónico, o número de habitación. Devuelve la lista de reservaciones encontradas con su información completa.")
+    @Tool(description = "Buscar y consultar reservaciones. Si el usuario es ADMINISTRADOR busca en toda la cadena; si es HUESPED consulta únicamente sus propias reservaciones.")
     public List<Map<String, Object>> buscarReservaciones(
-            @ToolParam(description = "Criterio de búsqueda libre: nombre o apellido del huésped, teléfono, correo o número de habitación (ej. 'Carlos', 'Arturo', '5512345678', 'carlos@email.com', '201')", required = true)
+            @ToolParam(description = "Criterio de búsqueda: nombre, teléfono, correo, número de habitación, o 'mis reservas'", required = false)
             String criterio,
-            @ToolParam(description = "Filtrar por hotel (opcional): 'Hotel Paraíso' o 'Hotel Paraíso Ejecutivo'. Dejar vacío para buscar en toda la cadena.", required = false)
+            @ToolParam(description = "Filtrar por hotel (opcional)", required = false)
             String hotel) {
         log.info("Tool invocada — buscarReservaciones: criterio={}, hotel={}", criterio, hotel);
-        if (criterio == null || criterio.isBlank()) {
-            return List.of(Map.of("error", "Debe ingresar un nombre, teléfono, correo o número de habitación para buscar la reservación."));
+        CustomUserDetails authUser = HabitacionSearchTool.getAuthenticatedUser();
+
+        List<Reserva> lista;
+        if (authUser != null && authUser.getRol() == Rol.HUESPED) {
+            // Un huésped NUNCA puede buscar ni ver reservaciones de otros clientes
+            lista = reservaRepository.findByUsuarioOrHuespedEmail(authUser.getIdUsuario(), authUser.getEmail());
+        } else {
+            if (criterio == null || criterio.isBlank()) {
+                return List.of(Map.of("error", "Debe ingresar un nombre, teléfono, correo o número de habitación para buscar la reservación."));
+            }
+            lista = reservaRepository.buscarPorCriterioGeneral(criterio.trim());
         }
-        String term = criterio.trim();
-        List<Reserva> lista = reservaRepository.buscarPorCriterioGeneral(term);
 
         if (hotel != null && !hotel.isBlank()) {
             String hLower = hotel.trim().toLowerCase();
@@ -282,7 +327,9 @@ public class ReservaTool {
         }
 
         if (lista.isEmpty()) {
-            return List.of(Map.of("mensaje", "No se encontraron reservaciones con el criterio '" + criterio + "'."));
+            return List.of(Map.of("mensaje", authUser != null && authUser.getRol() == Rol.HUESPED
+                    ? "Actualmente no tiene reservaciones registradas asociadas a su cuenta (" + authUser.getEmail() + ")."
+                    : "No se encontraron reservaciones con el criterio '" + criterio + "'."));
         }
 
         return lista.stream()
@@ -290,10 +337,9 @@ public class ReservaTool {
                 .toList();
     }
 
-    @Tool(description = "Verificar disponibilidad y cotizar opciones de habitaciones para fechas específicas antes de crear una reservación o consultar qué habitaciones estarán disponibles en una fecha futura. " +
-            "Devuelve habitaciones disponibles con desglose de costo total y anticipo requerido del 50%. Si el usuario solo menciona una sola fecha (ej. '30 de noviembre'), fechaSalida se asume automáticamente como el día siguiente (estancia de 1 noche).")
+    @Tool(description = "Verificar disponibilidad y cotizar opciones de habitaciones para fechas específicas antes de crear una reservación.")
     public List<Map<String, Object>> cotizarDisponibilidadParaReserva(
-            @ToolParam(description = "Nombre del hotel ('Hotel Paraíso' o 'Hotel Paraíso Ejecutivo'). Dejar vacío para ambos.", required = false)
+            @ToolParam(description = "Nombre del hotel (ej. 'Hotel Paraíso', 'Hotel Paraíso Ejecutivo' o cualquier hotel registrado). Dejar vacío para toda la cadena.", required = false)
             String hotel,
             @ToolParam(description = "Fecha de entrada YYYY-MM-DD (ej. '2026-11-30')", required = true)
             String fechaEntrada,
@@ -327,7 +373,11 @@ public class ReservaTool {
             Integer idHotel = null;
             String exactHotel = HabitacionSearchTool.resolverNombreHotelExacto(hotel);
             if (exactHotel != null) {
-                idHotel = exactHotel.contains("Ejecutivo") ? 2 : 1;
+                idHotel = hotelRepository.findAll().stream()
+                        .filter(h -> h.getNombre() != null && h.getNombre().equalsIgnoreCase(exactHotel))
+                        .map(Hotel::getIdHotel)
+                        .findFirst()
+                        .orElse(null);
             }
 
             List<Map<String, Object>> disponibles = reservaService.buscarDisponibles(
@@ -360,24 +410,31 @@ public class ReservaTool {
         }
     }
 
-    @Tool(description = "Listar las habitaciones que se encuentran en estado de Pre-reserva o Pendientes de pago de anticipo en los hoteles. " +
-            "OBLIGATORIA para: 'dame las habitaciones en pre reserva', 'habitaciones pendientes de pago', 'habitaciones pre-reservadas', 'pre reservas activas'. " +
-            "Devuelve el detalle con hotel, habitación, folio, titular, vigencia de 24-48h y anticipo pendiente.")
+    @Tool(description = "Listar las habitaciones que se encuentran en estado de Pre-reserva o Pendientes de pago de anticipo.")
     public List<Map<String, Object>> findHabitacionesEnPreReserva(
-            @ToolParam(description = "Nombre del hotel (opcional): 'Hotel Paraíso' o 'Hotel Paraíso Ejecutivo'. Déjelo vacío para consultar en ambos hoteles.", required = false)
+            @ToolParam(description = "Nombre del hotel (opcional). Déjelo vacío para consultar en todos los hoteles.", required = false)
             String hotel) {
 
         log.info("Tool invocada — findHabitacionesEnPreReserva: hotel={}", hotel);
+        CustomUserDetails authUser = HabitacionSearchTool.getAuthenticatedUser();
         String exactHotel = HabitacionSearchTool.resolverNombreHotelExacto(hotel);
 
         List<Reserva> lista = (exactHotel != null)
                 ? reservaRepository.findPreReservasActivasEnHotel(exactHotel)
                 : reservaRepository.findPreReservasActivas();
 
+        if (authUser != null && authUser.getRol() == Rol.HUESPED) {
+            lista = lista.stream()
+                    .filter(r -> perteneceAHuespedActual(r, authUser))
+                    .toList();
+        }
+
         if (lista.isEmpty()) {
             return List.of(Map.of(
-                    "mensaje", "No hay habitaciones en estado de Pre-reserva actualmente" +
-                            (exactHotel != null ? " en " + exactHotel : " en ninguna propiedad") + ".",
+                    "mensaje", authUser != null && authUser.getRol() == Rol.HUESPED
+                            ? "Usted no tiene pre-reservas pendientes de pago en este momento."
+                            : "No hay habitaciones en estado de Pre-reserva actualmente" +
+                              (exactHotel != null ? " en " + exactHotel : " en ninguna propiedad") + ".",
                     "total", 0
             ));
         }
