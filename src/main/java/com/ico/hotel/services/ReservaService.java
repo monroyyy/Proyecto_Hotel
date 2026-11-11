@@ -18,7 +18,9 @@ import com.ico.hotel.repository.ReservaEventoRepository;
 import com.ico.hotel.repository.ReservaRepository;
 import com.ico.hotel.repository.UsuarioRepository;
 import com.ico.hotel.security.CustomUserDetails;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -39,6 +41,7 @@ import java.util.*;
  * Lógica de negocio de reservaciones (docs/03_reglas_de_negocio.md)
  * con control de acceso y propiedad por rol (HUESPED vs ADMINISTRADOR).
  */
+@Slf4j
 @Service
 public class ReservaService {
 
@@ -65,6 +68,9 @@ public class ReservaService {
     @Autowired(required = false)
     private Clock clock;
 
+    @Value("${app.jobs.expiracion-dry-run:true}")
+    private boolean expiracionDryRun = true;
+
     public static final String ESTADO_PENDIENTE = "Pendiente";
     public static final String ESTADO_OCUPADA = "Ocupada";
     public static final String ESTADO_DISPONIBLE = "Disponible";
@@ -76,6 +82,14 @@ public class ReservaService {
 
     public void setClock(Clock clock) {
         this.clock = clock;
+    }
+
+    public boolean isExpiracionDryRun() {
+        return expiracionDryRun;
+    }
+
+    public void setExpiracionDryRun(boolean expiracionDryRun) {
+        this.expiracionDryRun = expiracionDryRun;
     }
 
     private void registrarEvento(Integer idReserva, String tipo, String estadoAnterior, String estadoNuevo, String detalle) {
@@ -1231,13 +1245,59 @@ public class ReservaService {
         }
     }
 
+    public Map<String, Object> previsualizarExpiracionesYNoShow() {
+        LocalDateTime ahora = LocalDateTime.now(clockActual());
+        LocalDate hoy = ahora.toLocalDate();
+
+        List<Reserva> preVencidas = reservaRepository.findPreReservasVencidas(ahora, hoy);
+        List<Reserva> confirmadasNoShow = reservaRepository.findConfirmadasParaNoShow(hoy).stream()
+                .filter(r -> r.getFechaEntrada() != null && (
+                        hoy.isAfter(r.getFechaEntrada())
+                        || (hoy.isEqual(r.getFechaEntrada()) && !ahora.toLocalTime().isBefore(HORA_LIMITE_NOSHOW))
+                ))
+                .toList();
+
+        Map<String, Object> resumen = new LinkedHashMap<>();
+        resumen.put("dryRun", expiracionDryRun);
+        resumen.put("fechaHoraEvaluacion", ahora);
+        resumen.put("preReservasVencidasCount", preVencidas.size());
+        resumen.put("preReservasVencidasIds", preVencidas.stream().map(Reserva::getIdReserva).toList());
+        resumen.put("confirmadasNoShowCount", confirmadasNoShow.size());
+        resumen.put("confirmadasNoShowIds", confirmadasNoShow.stream().map(Reserva::getIdReserva).toList());
+        return resumen;
+    }
+
     @Scheduled(fixedRate = 5 * 60 * 1000)
     public int expirarPreReservas() {
         LocalDateTime ahora = LocalDateTime.now(clockActual());
         LocalDate hoy = ahora.toLocalDate();
+
+        List<Reserva> preVencidas = reservaRepository.findPreReservasVencidas(ahora, hoy);
+        List<Reserva> confirmadasNoShow = reservaRepository.findConfirmadasParaNoShow(hoy).stream()
+                .filter(r -> r.getFechaEntrada() != null && (
+                        hoy.isAfter(r.getFechaEntrada())
+                        || (hoy.isEqual(r.getFechaEntrada()) && !ahora.toLocalTime().isBefore(HORA_LIMITE_NOSHOW))
+                ))
+                .toList();
+
+        if (expiracionDryRun) {
+            if (!preVencidas.isEmpty() || !confirmadasNoShow.isEmpty()) {
+                log.info("[DRY-RUN] Job expiración/No-Show ({} {}): {} pre-reserva(s) vencida(s) {} y {} confirmada(s) candidatas a No-Show {}. Sin escrituras en BD.",
+                        ahora,
+                        ClockConfig.ZONA_MEXICO,
+                        preVencidas.size(),
+                        preVencidas.stream().map(Reserva::getFolio).toList(),
+                        confirmadasNoShow.size(),
+                        confirmadasNoShow.stream().map(Reserva::getFolio).toList());
+            } else {
+                log.debug("[DRY-RUN] Job expiración/No-Show ({}): sin reservaciones candidatas.", ahora);
+            }
+            return 0;
+        }
+
         int procesadas = 0;
 
-        List<Integer> idsVencidas = reservaRepository.findPreReservasVencidas(ahora, hoy).stream()
+        List<Integer> idsVencidas = preVencidas.stream()
                 .map(Reserva::getIdReserva)
                 .filter(Objects::nonNull)
                 .toList();
@@ -1249,11 +1309,7 @@ public class ReservaService {
             }
         }
 
-        List<Integer> idsConfirmadasNoShow = reservaRepository.findConfirmadasParaNoShow(hoy).stream()
-                .filter(r -> r.getFechaEntrada() != null && (
-                        hoy.isAfter(r.getFechaEntrada())
-                        || (hoy.isEqual(r.getFechaEntrada()) && !ahora.toLocalTime().isBefore(HORA_LIMITE_NOSHOW))
-                ))
+        List<Integer> idsConfirmadasNoShow = confirmadasNoShow.stream()
                 .map(Reserva::getIdReserva)
                 .filter(Objects::nonNull)
                 .toList();

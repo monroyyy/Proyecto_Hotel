@@ -1,5 +1,6 @@
 package com.ico.hotel.services;
 
+import com.ico.hotel.config.ClockConfig;
 import com.ico.hotel.models.*;
 import com.ico.hotel.repository.HabitacionRepository;
 import com.ico.hotel.repository.HotelRepository;
@@ -7,14 +8,15 @@ import com.ico.hotel.repository.ReservaRepository;
 import com.ico.hotel.repository.TipoHabitacionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Servicio de inteligencia de negocios y cálculos financieros para el Gerente (Don Roberto).
@@ -31,17 +33,28 @@ public class DashboardService {
     private final HotelRepository hotelRepository;
     private final TipoHabitacionRepository tipoHabitacionRepository;
 
+    @Autowired(required = false)
+    private Clock clock;
+
+    private Clock clockActual() {
+        return clock != null ? clock : Clock.system(ClockConfig.ZONA_MEXICO);
+    }
+
     /**
-     * Resumen de KPIs ejecutivos para un año y hotel específicos (con comparativa vs año anterior).
+     * Resumen de KPIs ejecutivos para un año y hotel específicos (solo hoteles activos por defecto).
      */
     public Map<String, Object> obtenerResumenKpis(Integer ano, Integer idHotel) {
-        int year = (ano != null && ano >= 2020 && ano <= 2030) ? ano : LocalDate.now().getYear();
+        return obtenerResumenKpis(ano, idHotel, false);
+    }
+
+    public Map<String, Object> obtenerResumenKpis(Integer ano, Integer idHotel, boolean incluirInactivos) {
+        int year = (ano != null && ano >= 2020 && ano <= 2030) ? ano : LocalDate.now(clockActual()).getYear();
 
         LocalDate inicio = LocalDate.of(year, 1, 1);
         LocalDate fin = LocalDate.of(year, 12, 31);
 
-        List<Reserva> reservasAno = filtrarReservasPorHotelYFechas(inicio, fin, idHotel);
-        List<Habitacion> habitaciones = filtrarHabitacionesPorHotel(idHotel);
+        List<Reserva> reservasAno = filtrarReservasPorHotelYFechas(inicio, fin, idHotel, incluirInactivos);
+        List<Habitacion> habitaciones = filtrarHabitacionesPorHotel(idHotel, incluirInactivos);
 
         int totalHabitaciones = Math.max(habitaciones.size(), 1);
         boolean esBisiesto = inicio.isLeapYear();
@@ -134,7 +147,7 @@ public class DashboardService {
         // 3. Comparativa vs Año Anterior (para badges de incremento/decremento)
         LocalDate inicioPrev = LocalDate.of(year - 1, 1, 1);
         LocalDate finPrev = LocalDate.of(year - 1, 12, 31);
-        List<Reserva> reservasPrev = filtrarReservasPorHotelYFechas(inicioPrev, finPrev, idHotel);
+        List<Reserva> reservasPrev = filtrarReservasPorHotelYFechas(inicioPrev, finPrev, idHotel, incluirInactivos);
 
         BigDecimal ingresosPrev = BigDecimal.ZERO;
         int nochesPrev = 0;
@@ -155,12 +168,14 @@ public class DashboardService {
         Map<String, Object> kpis = new LinkedHashMap<>();
         kpis.put("ano", year);
         kpis.put("idHotel", idHotel);
-        kpis.put("totalHabitaciones", totalHabitaciones);
+        kpis.put("incluirInactivos", incluirInactivos);
+        kpis.put("totalHabitaciones", habitaciones.size());
         kpis.put("diasPeriodo", diasAno);
         kpis.put("nochesVendidas", nochesVendidas);
         kpis.put("capacidadTotalNoches", capacidadTotalNoches);
 
         // Financieros
+        kpis.put("ingresosHospedaje", ingresosHospedaje.setScale(2, RoundingMode.HALF_UP));
         kpis.put("ingresosBrutos", ingresosBrutos.setScale(2, RoundingMode.HALF_UP));
         kpis.put("reembolsosDevueltos", reembolsosDevueltos.setScale(2, RoundingMode.HALF_UP));
         kpis.put("penalizacionesRetenidas", penalizacionesRetenidas.setScale(2, RoundingMode.HALF_UP));
@@ -196,6 +211,10 @@ public class DashboardService {
      * alimentando la gráfica interactiva del Dashboard como se ilustró en el pizarrón.
      */
     public Map<String, Object> obtenerSerieMensualComparativa(List<Integer> anos, Integer idHotel, String metrica) {
+        return obtenerSerieMensualComparativa(anos, idHotel, metrica, false);
+    }
+
+    public Map<String, Object> obtenerSerieMensualComparativa(List<Integer> anos, Integer idHotel, String metrica, boolean incluirInactivos) {
         List<Integer> anosAProcesar = (anos != null && !anos.isEmpty())
                 ? anos
                 : List.of(2020, 2021, 2022, 2023, 2024, 2025, 2026);
@@ -204,7 +223,7 @@ public class DashboardService {
                 ? metrica.toLowerCase().trim()
                 : "ingresos"; // opciones: 'ingresos', 'ocupacion', 'reservas'
 
-        List<Habitacion> habitaciones = filtrarHabitacionesPorHotel(idHotel);
+        List<Habitacion> habitaciones = filtrarHabitacionesPorHotel(idHotel, incluirInactivos);
         int totalHabitaciones = Math.max(habitaciones.size(), 1);
 
         Map<String, List<Double>> seriesPorAno = new LinkedHashMap<>();
@@ -212,7 +231,7 @@ public class DashboardService {
         for (Integer a : anosAProcesar) {
             LocalDate inicio = LocalDate.of(a, 1, 1);
             LocalDate fin = LocalDate.of(a, 12, 31);
-            List<Reserva> reservasAno = filtrarReservasPorHotelYFechas(inicio, fin, idHotel);
+            List<Reserva> reservasAno = filtrarReservasPorHotelYFechas(inicio, fin, idHotel, incluirInactivos);
 
             // 12 meses
             List<Double> valoresMes = new ArrayList<>(Collections.nCopies(12, 0.0));
@@ -285,15 +304,19 @@ public class DashboardService {
      * Distribución de ingresos y aforos por categoría de habitación.
      */
     public List<Map<String, Object>> obtenerDistribucionCategorias(Integer ano, Integer idHotel) {
-        int year = (ano != null) ? ano : LocalDate.now().getYear();
+        return obtenerDistribucionCategorias(ano, idHotel, false);
+    }
+
+    public List<Map<String, Object>> obtenerDistribucionCategorias(Integer ano, Integer idHotel, boolean incluirInactivos) {
+        int year = (ano != null) ? ano : LocalDate.now(clockActual()).getYear();
         LocalDate inicio = LocalDate.of(year, 1, 1);
         LocalDate fin = LocalDate.of(year, 12, 31);
 
-        List<Reserva> reservas = filtrarReservasPorHotelYFechas(inicio, fin, idHotel);
+        List<Reserva> reservas = filtrarReservasPorHotelYFechas(inicio, fin, idHotel, incluirInactivos);
         List<TipoHabitacion> tipos = tipoHabitacionRepository.findAll();
 
         BigDecimal granTotalIngresos = reservas.stream()
-                .filter(r -> Reserva.FINALIZADA.equals(r.getEstado()) || Reserva.CONFIRMADA.equals(r.getEstado()))
+                .filter(this::esReservaDeHospedaje)
                 .map(r -> r.getTotal() != null ? r.getTotal() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -308,12 +331,12 @@ public class DashboardService {
                     .toList();
 
             BigDecimal ingresosTipo = resTipo.stream()
-                    .filter(r -> Reserva.FINALIZADA.equals(r.getEstado()) || Reserva.CONFIRMADA.equals(r.getEstado()))
+                    .filter(this::esReservaDeHospedaje)
                     .map(r -> r.getTotal() != null ? r.getTotal() : BigDecimal.ZERO)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             int nochesTipo = resTipo.stream()
-                    .filter(r -> Reserva.FINALIZADA.equals(r.getEstado()) || Reserva.CONFIRMADA.equals(r.getEstado()))
+                    .filter(this::esReservaDeHospedaje)
                     .mapToInt(r -> r.getNoches() != null ? r.getNoches() : 1)
                     .sum();
 
@@ -335,22 +358,25 @@ public class DashboardService {
     }
 
     /**
-     * Comparativa de rendimiento entre los diferentes hoteles de la cadena.
+     * Comparativa de rendimiento entre los diferentes hoteles de la cadena (solo activos por defecto).
      */
     public List<Map<String, Object>> obtenerRendimientoHoteles(Integer ano) {
-        int year = (ano != null) ? ano : LocalDate.now().getYear();
-        LocalDate inicio = LocalDate.of(year, 1, 1);
-        LocalDate fin = LocalDate.of(year, 12, 31);
+        return obtenerRendimientoHoteles(ano, false);
+    }
 
-        List<Hotel> hoteles = hotelRepository.findAll();
+    public List<Map<String, Object>> obtenerRendimientoHoteles(Integer ano, boolean incluirInactivos) {
+        int year = (ano != null) ? ano : LocalDate.now(clockActual()).getYear();
+
+        List<Hotel> hoteles = incluirInactivos ? hotelRepository.findAll() : hotelRepository.findByActivoTrue();
         List<Map<String, Object>> resultado = new ArrayList<>();
 
         for (Hotel h : hoteles) {
-            Map<String, Object> kpisHotel = obtenerResumenKpis(year, h.getIdHotel());
+            Map<String, Object> kpisHotel = obtenerResumenKpis(year, h.getIdHotel(), incluirInactivos);
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("idHotel", h.getIdHotel());
             item.put("nombre", h.getNombre());
             item.put("ciudad", h.getCiudad());
+            item.put("activo", Boolean.TRUE.equals(h.getActivo()));
             item.put("ingresosBrutos", kpisHotel.get("ingresosBrutos"));
             item.put("ingresosNetos", kpisHotel.get("ingresosNetos"));
             item.put("ocupacionPorcentaje", kpisHotel.get("ocupacionPorcentaje"));
@@ -364,22 +390,43 @@ public class DashboardService {
         return resultado;
     }
 
-    private List<Reserva> filtrarReservasPorHotelYFechas(LocalDate inicio, LocalDate fin, Integer idHotel) {
+    private boolean esReservaDeHospedaje(Reserva r) {
+        String estado = r != null ? r.getEstado() : null;
+        return Reserva.FINALIZADA.equals(estado)
+                || Reserva.CONFIRMADA.equals(estado)
+                || Reserva.OCUPADA.equals(estado);
+    }
+
+    private List<Reserva> filtrarReservasPorHotelYFechas(LocalDate inicio, LocalDate fin, Integer idHotel, boolean incluirInactivos) {
         return reservaRepository.findByFechaEntradaBetweenOrderByFechaEntradaAsc(inicio, fin).stream()
                 .filter(r -> {
-                    if (idHotel == null) return true;
-                    return r.getHabitacion() != null
-                            && r.getHabitacion().getHotel() != null
-                            && Objects.equals(r.getHabitacion().getHotel().getIdHotel(), idHotel);
+                    Hotel hotel = r.getHabitacion() != null ? r.getHabitacion().getHotel() : null;
+                    if (hotel == null) {
+                        return false;
+                    }
+                    if (!incluirInactivos && !Boolean.TRUE.equals(hotel.getActivo())) {
+                        return false;
+                    }
+                    if (idHotel == null) {
+                        return true;
+                    }
+                    return Objects.equals(hotel.getIdHotel(), idHotel);
                 })
                 .toList();
     }
 
-    private List<Habitacion> filtrarHabitacionesPorHotel(Integer idHotel) {
-        List<Habitacion> todas = habitacionRepository.findAll();
-        if (idHotel == null) return todas;
-        return todas.stream()
-                .filter(h -> h.getHotel() != null && Objects.equals(h.getHotel().getIdHotel(), idHotel))
+    private List<Habitacion> filtrarHabitacionesPorHotel(Integer idHotel, boolean incluirInactivos) {
+        return habitacionRepository.findAll().stream()
+                .filter(h -> {
+                    Hotel hotel = h.getHotel();
+                    if (hotel == null) {
+                        return false;
+                    }
+                    if (!incluirInactivos && !Boolean.TRUE.equals(hotel.getActivo())) {
+                        return false;
+                    }
+                    return idHotel == null || Objects.equals(hotel.getIdHotel(), idHotel);
+                })
                 .toList();
     }
 }
