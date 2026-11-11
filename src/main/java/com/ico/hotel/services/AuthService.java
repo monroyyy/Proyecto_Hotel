@@ -1,11 +1,14 @@
 package com.ico.hotel.services;
 
+import com.ico.hotel.config.ClockConfig;
 import com.ico.hotel.dto.auth.*;
 import com.ico.hotel.models.Huesped;
 import com.ico.hotel.models.Rol;
+import com.ico.hotel.models.TokenRecuperacionPassword;
 import com.ico.hotel.models.TokenVerificacion;
 import com.ico.hotel.models.Usuario;
 import com.ico.hotel.repository.HuespedRepository;
+import com.ico.hotel.repository.TokenRecuperacionPasswordRepository;
 import com.ico.hotel.repository.TokenVerificacionRepository;
 import com.ico.hotel.repository.UsuarioRepository;
 import com.ico.hotel.security.JwtService;
@@ -13,6 +16,7 @@ import com.ico.hotel.security.TokenBlacklistService;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -36,6 +41,9 @@ import java.util.Map;
 public class AuthService {
 
     private static final String GENERIC_LOGIN_ERROR = "Credenciales inválidas. Verifique su correo electrónico y contraseña.";
+    private static final String GENERIC_RECOVERY_MSG = "Si el correo electrónico está registrado, recibirá un código de 6 dígitos válido por 15 minutos.";
+    private static final String PASSWORD_POLICY_REGEX = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,72}$";
+    private static final int RECOVERY_OTP_EXPIRATION_MINUTES = 15;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UsuarioRepository usuarioRepository;
@@ -46,8 +54,26 @@ public class AuthService {
     private final TokenBlacklistService tokenBlacklistService;
     private final EmailService emailService;
 
+    @Autowired(required = false)
+    private TokenRecuperacionPasswordRepository tokenRecuperacionRepository;
+
+    @Autowired(required = false)
+    private Clock clock;
+
     @Value("${app.verification.expiration-minutes:30}")
     private int verificationExpirationMinutes;
+
+    private Clock clockActual() {
+        return clock != null ? clock : Clock.system(ClockConfig.ZONA_MEXICO);
+    }
+
+    public void setTokenRecuperacionRepository(TokenRecuperacionPasswordRepository tokenRecuperacionRepository) {
+        this.tokenRecuperacionRepository = tokenRecuperacionRepository;
+    }
+
+    public void setClock(Clock clock) {
+        this.clock = clock;
+    }
 
     @Transactional
     public Map<String, Object> registrar(RegistroRequest req) {
@@ -69,7 +95,7 @@ public class AuthService {
         nuevo.setRol(Rol.HUESPED);
         nuevo.setVerificado(false);
         nuevo.setActivo(true);
-        nuevo.setFechaCreacion(LocalDateTime.now());
+        nuevo.setFechaCreacion(LocalDateTime.now(clockActual()));
         nuevo = usuarioRepository.save(nuevo);
 
         // Sincronizar o vincular perfil básico en tabla huesped
@@ -152,7 +178,7 @@ public class AuthService {
             );
         }
 
-        if (tv.getFechaExpiracion().isBefore(LocalDateTime.now())) {
+        if (tv.getFechaExpiracion().isBefore(LocalDateTime.now(clockActual()))) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "El código de verificación ha expirado. Solicite un nuevo código de 4 dígitos."
@@ -236,13 +262,16 @@ public class AuthService {
         }
 
         String jwt = jwtService.generateToken(usuario);
+        String telefono = huespedRepository.findFirstByEmailIgnoreCase(usuario.getEmail())
+                .map(Huesped::getTelefono)
+                .orElse(null);
         log.info("Inicio de sesión exitoso: usuario={}, rol={}", usuario.getEmail(), usuario.getRol());
 
         return AuthResponse.builder()
                 .token(jwt)
                 .tipo("Bearer")
                 .expiraEnMs(jwtService.getExpirationMs())
-                .usuario(UsuarioResponse.fromEntity(usuario))
+                .usuario(UsuarioResponse.fromEntity(usuario, telefono))
                 .mensaje("Inicio de sesión exitoso.")
                 .build();
     }
@@ -286,11 +315,172 @@ public class AuthService {
         }
 
         usuario.setPasswordHash(passwordEncoder.encode(req.getNuevaPassword()));
+        int versionActual = usuario.getTokenVersion() != null ? usuario.getTokenVersion() : 0;
+        usuario.setTokenVersion(versionActual + 1);
+        usuario = usuarioRepository.save(usuario);
+
+        String nuevoToken = jwtService.generateToken(usuario);
+        log.info("Contraseña actualizada y tokens previos revocados para idUsuario={}", usuario.getIdUsuario());
+
+        Map<String, Object> respuesta = new LinkedHashMap<>();
+        respuesta.put("mensaje", "Contraseña actualizada exitosamente. Tu cuenta está protegida y las sesiones previas fueron revocadas.");
+        respuesta.put("status", 200);
+        if (nuevoToken != null) {
+            respuesta.put("token", nuevoToken);
+        }
+        return respuesta;
+    }
+
+    @Transactional(readOnly = true)
+    public UsuarioResponse obtenerPerfilUsuario(Integer idUsuario) {
+        if (idUsuario == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no autenticado.");
+        }
+        Usuario usuario = usuarioRepository.findById(idUsuario)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado."));
+        String telefono = huespedRepository.findFirstByEmailIgnoreCase(usuario.getEmail())
+                .map(Huesped::getTelefono)
+                .orElse(null);
+        return UsuarioResponse.fromEntity(usuario, telefono);
+    }
+
+    @Transactional
+    public UsuarioResponse actualizarPerfil(Integer idUsuario, ActualizarPerfilRequest req) {
+        if (idUsuario == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no autenticado.");
+        }
+        String nombreLimpio = req.getNombre() == null ? "" : req.getNombre().trim();
+        String telefonoLimpio = req.getTelefono() == null ? "" : req.getTelefono().trim();
+
+        if (nombreLimpio.isEmpty() || nombreLimpio.length() > 120) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre completo es obligatorio y no puede exceder 120 caracteres.");
+        }
+        if (!telefonoLimpio.matches("^\\d{10}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El teléfono debe contener exactamente 10 dígitos numéricos.");
+        }
+
+        Usuario usuario = usuarioRepository.findById(idUsuario)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado."));
+
+        usuario.setNombre(nombreLimpio);
+        usuario = usuarioRepository.save(usuario);
+
+        String emailUsuario = usuario.getEmail();
+        Huesped huesped = huespedRepository.findFirstByEmailIgnoreCase(emailUsuario).orElseGet(() -> {
+            Huesped nuevoHuesped = new Huesped();
+            nuevoHuesped.setEmail(emailUsuario);
+            return nuevoHuesped;
+        });
+        huesped.setNombre(nombreLimpio);
+        huesped.setTelefono(telefonoLimpio);
+        huespedRepository.save(huesped);
+
+        return UsuarioResponse.fromEntity(usuario, huesped.getTelefono());
+    }
+
+    @Transactional
+    public Map<String, Object> solicitarRecuperacionPassword(String emailInput) {
+        String email = emailInput == null ? "" : emailInput.trim().toLowerCase();
+        Usuario usuario = email.isBlank() ? null : usuarioRepository.findByEmailIgnoreCase(email).orElse(null);
+
+        if (usuario != null && !Boolean.FALSE.equals(usuario.getActivo()) && tokenRecuperacionRepository != null) {
+            tokenRecuperacionRepository.invalidarActivosPorUsuario(usuario.getIdUsuario());
+
+            String codigo6 = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
+            LocalDateTime ahora = LocalDateTime.now(clockActual());
+
+            TokenRecuperacionPassword token = TokenRecuperacionPassword.builder()
+                    .usuario(usuario)
+                    .codigoHash(passwordEncoder.encode(codigo6))
+                    .intentos(0)
+                    .maxIntentos(TokenRecuperacionPassword.MAX_INTENTOS_POR_DEFECTO)
+                    .usado(false)
+                    .fechaCreacion(ahora)
+                    .fechaExpiracion(ahora.plusMinutes(RECOVERY_OTP_EXPIRATION_MINUTES))
+                    .build();
+            tokenRecuperacionRepository.save(token);
+
+            emailService.enviarCorreoRecuperacion(usuario.getEmail(), usuario.getNombre(), codigo6);
+            log.info("Solicitud de recuperación procesada para idUsuario={}", usuario.getIdUsuario());
+        } else {
+            // Trabajo BCrypt equivalente para mantener tiempos de respuesta uniformes sin filtrar existencia de cuenta
+            passwordEncoder.encode("000000");
+        }
+
+        return Map.of("mensaje", GENERIC_RECOVERY_MSG);
+    }
+
+    @Transactional(noRollbackFor = ResponseStatusException.class)
+    public Map<String, Object> restablecerPassword(RestablecerPasswordRequest req) {
+        String email = req.getEmail() == null ? "" : req.getEmail().trim().toLowerCase();
+        String codigo = req.getCodigo() == null ? "" : req.getCodigo().trim();
+        String nuevaPassword = req.getNuevaPassword() == null ? "" : req.getNuevaPassword();
+
+        if (!nuevaPassword.matches(PASSWORD_POLICY_REGEX)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La contraseña debe tener entre 8 y 72 caracteres e incluir al menos una letra mayúscula, una minúscula y un número."
+            );
+        }
+        if (req.getConfirmarPassword() != null && !req.getConfirmarPassword().isEmpty()
+                && !nuevaPassword.equals(req.getConfirmarPassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La confirmación no coincide con la nueva contraseña.");
+        }
+
+        Usuario usuario = usuarioRepository.findByEmailIgnoreCase(email).orElse(null);
+        TokenRecuperacionPassword token = (usuario != null && tokenRecuperacionRepository != null)
+                ? tokenRecuperacionRepository.findTopByUsuarioIdUsuarioAndUsadoFalseOrderByFechaCreacionDesc(usuario.getIdUsuario()).orElse(null)
+                : null;
+
+        if (token == null) {
+            passwordEncoder.encode("000000");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El código de recuperación es inválido o ha expirado.");
+        }
+
+        LocalDateTime ahora = LocalDateTime.now(clockActual());
+        if (Boolean.TRUE.equals(token.getUsado())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Este código de recuperación ya fue utilizado o invalidado.");
+        }
+        if (token.getFechaExpiracion().isBefore(ahora)) {
+            token.setUsado(true);
+            tokenRecuperacionRepository.save(token);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El código de recuperación ha expirado. Solicita uno nuevo.");
+        }
+
+        int maxIntentos = token.getMaxIntentos() != null ? token.getMaxIntentos() : TokenRecuperacionPassword.MAX_INTENTOS_POR_DEFECTO;
+        int intentosPrevios = token.getIntentos() != null ? token.getIntentos() : 0;
+        if (intentosPrevios >= maxIntentos) {
+            token.setUsado(true);
+            tokenRecuperacionRepository.save(token);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El código fue invalidado tras superar el máximo de intentos. Solicita un nuevo código.");
+        }
+
+        if (!passwordEncoder.matches(codigo, token.getCodigoHash())) {
+            int nuevoConteo = intentosPrevios + 1;
+            token.setIntentos(nuevoConteo);
+            if (nuevoConteo >= maxIntentos) {
+                token.setUsado(true);
+            }
+            tokenRecuperacionRepository.save(token);
+            String msg = (nuevoConteo >= maxIntentos)
+                    ? "Código incorrecto. El código fue invalidado tras agotar los 5 intentos permitidos."
+                    : "Código de recuperación incorrecto. Intento " + nuevoConteo + " de " + maxIntentos + ".";
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, msg);
+        }
+
+        token.setUsado(true);
+        tokenRecuperacionRepository.save(token);
+        tokenRecuperacionRepository.invalidarActivosPorUsuario(usuario.getIdUsuario());
+
+        usuario.setPasswordHash(passwordEncoder.encode(nuevaPassword));
+        int versionActual = usuario.getTokenVersion() != null ? usuario.getTokenVersion() : 0;
+        usuario.setTokenVersion(versionActual + 1);
         usuarioRepository.save(usuario);
-        log.info("Contraseña actualizada exitosamente para usuario id={}, email={}", usuario.getIdUsuario(), usuario.getEmail());
+
+        log.info("Contraseña restablecida y sesiones previas revocadas para idUsuario={}", usuario.getIdUsuario());
 
         return Map.of(
-                "mensaje", "Contraseña actualizada exitosamente. Tu cuenta está protegida.",
+                "mensaje", "Tu contraseña ha sido restablecida exitosamente. Inicia sesión con tu nueva clave.",
                 "status", 200
         );
     }
@@ -301,13 +491,14 @@ public class AuthService {
         SECURE_RANDOM.nextBytes(randomBytes);
         String tokenSeguro = codigo4Digitos + "-" + Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
 
+        LocalDateTime ahora = LocalDateTime.now(clockActual());
         TokenVerificacion tv = new TokenVerificacion();
         tv.setToken(tokenSeguro);
         tv.setCodigo(codigo4Digitos);
         tv.setUsuario(u);
         tv.setUsado(false);
-        tv.setFechaCreacion(LocalDateTime.now());
-        tv.setFechaExpiracion(LocalDateTime.now().plusMinutes(verificationExpirationMinutes));
+        tv.setFechaCreacion(ahora);
+        tv.setFechaExpiracion(ahora.plusMinutes(verificationExpirationMinutes));
         return tokenRepository.save(tv);
     }
 }

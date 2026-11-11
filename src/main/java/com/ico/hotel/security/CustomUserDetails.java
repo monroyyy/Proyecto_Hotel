@@ -23,6 +23,7 @@ public class CustomUserDetails implements UserDetails {
     private final Rol rol;
     private final boolean verificado;
     private final boolean activo;
+    private final Integer tokenVersion;
     private final Collection<? extends GrantedAuthority> authorities;
 
     public CustomUserDetails(Usuario u) {
@@ -33,6 +34,7 @@ public class CustomUserDetails implements UserDetails {
         this.rol = u.getRol();
         this.verificado = Boolean.TRUE.equals(u.getVerificado());
         this.activo = !Boolean.FALSE.equals(u.getActivo());
+        this.tokenVersion = u.getTokenVersion() != null ? u.getTokenVersion() : 0;
         this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + u.getRol().name()));
     }
 

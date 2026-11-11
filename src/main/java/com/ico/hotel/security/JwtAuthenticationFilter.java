@@ -56,7 +56,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Integer userId = Integer.valueOf(claims.getSubject());
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 CustomUserDetails userDetails = userDetailsService.loadUserById(userId);
-                if (userDetails.isEnabled() && userDetails.isAccountNonLocked()) {
+                Object verObj = claims.get("ver");
+                int tokenVer = (verObj instanceof Number n) ? n.intValue() : 0;
+                int actualVer = userDetails.getTokenVersion() != null ? userDetails.getTokenVersion() : 0;
+                if (tokenVer != actualVer) {
+                    request.setAttribute("jwt_error", "La sesión fue revocada. Por favor inicie sesión nuevamente.");
+                } else if (userDetails.isEnabled() && userDetails.isAccountNonLocked()) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails,
                             null,

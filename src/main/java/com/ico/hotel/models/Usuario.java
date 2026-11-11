@@ -53,6 +53,10 @@ public class Usuario {
     private Boolean activo = true;
 
     @Builder.Default
+    @Column(name = "token_version", nullable = false)
+    private Integer tokenVersion = 0;
+
+    @Builder.Default
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime fechaCreacion = LocalDateTime.now();
 }
