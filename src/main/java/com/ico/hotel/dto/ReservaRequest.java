@@ -10,6 +10,7 @@ import java.time.LocalDate;
 @Data
 @NoArgsConstructor
 public class ReservaRequest {
+    private String folio;
     private Integer idHabitacion;
     private LocalDate fechaEntrada;
     private LocalDate fechaSalida;
