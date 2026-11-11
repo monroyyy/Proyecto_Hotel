@@ -4,8 +4,7 @@ import { AlertTriangle, Trash2, CheckCircle2, HelpCircle } from 'lucide-react';
 
 /**
  * ConfirmDialog.jsx
- * Diálogo de confirmación interactivo que respeta al 100% el diseño del sistema:
- * paleta HSL, tipografía, bordes redondeados, difuminado y microinteracciones.
+ * Diálogo de confirmación accesible con variantes semánticas y tokens del sistema.
  */
 export default function ConfirmDialog({
     isOpen = false,
@@ -48,7 +47,7 @@ export default function ConfirmDialog({
         >
             <div className="confirm-dialog-content">
                 <div className={`confirm-dialog-icon-wrapper ${badgeClass}`}>
-                    <Icon size={28} />
+                    <Icon size={26} />
                 </div>
                 
                 <h3 className="confirm-dialog-title">{title}</h3>

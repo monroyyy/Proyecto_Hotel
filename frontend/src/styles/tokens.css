@@ -1,0 +1,485 @@
+/* ==========================================================================
+   TOKENS.CSS - Sistema de Diseño "Hotel Paraíso"
+   Especificación basada en DESIGN.md (Brand & Product)
+   ========================================================================== */
+
+:root {
+    /* Tipografía Base */
+    --font-serif: 'Fraunces', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-heading: var(--font-serif);
+    --font-body: var(--font-sans);
+
+    /* Escala Espacial */
+    --space-2xs: 2px;
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-2xl: 48px;
+
+    /* Escala de Radios */
+    --radius-xs: 2px;
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-full: 9999px;
+    --radius-pill: 9999px;
+
+    /* Paleta Brand Base (Costa Mexicana) */
+    --brand-sand-light: #fcfaf7;
+    --brand-sand-base: #f5f0e8;
+    --brand-sand-muted: #ede4d5;
+    --brand-terracotta: #b85d38;
+    --brand-terracotta-hover: #9e4e2d;
+    --brand-terracotta-deep: #7e3c20;
+    --brand-terracotta-light: #faebe5;
+    --brand-palm: #2d5a43;
+    --brand-palm-leaf: #3e7b5c;
+    --brand-palm-light: #e8f3ed;
+    --brand-ocean: #16324f;
+    --brand-ocean-dark: #0f2338;
+    --brand-ocean-light: #eaf0f6;
+
+    /* Paleta Product Base (Modo Claro Sobrio / Backoffice) */
+    --admin-bg: #f8fafc;
+    --admin-surface: #ffffff;
+    --admin-elevated: #f1f5f9;
+    --admin-border: #e2e8f0;
+    --admin-border-subtle: #cbd5e1;
+    --admin-text-main: #0f172a;
+    --admin-text-muted: #64748b;
+    --admin-accent: #2d5a43; /* Verde hoja de palma */
+
+    /* Motion Base (Sobrio: 120ms a 200ms con ease-out) */
+    --transition-fast: 150ms ease-out;
+    --transition-normal: 180ms ease-out;
+    --transition-slow: 200ms ease-out;
+
+    /* Valores semánticos globales de error / éxito */
+    --color-error: #b91c1c;
+    --color-error-hover: #991b1b;
+    --color-error-bg: #fee2e2;
+    --color-error-border: #fca5a5;
+    --color-error-ring: rgba(185, 28, 28, 0.35);
+    --color-success: #2d5a43;
+    --color-success-bg: #d1fae5;
+    --color-success-border: #86efac;
+    --btn-primary-shadow: 0 2px 6px rgba(184, 93, 56, 0.22);
+    --btn-primary-shadow-hover: 0 4px 12px rgba(184, 93, 56, 0.32);
+    --btn-danger-shadow: 0 2px 6px rgba(185, 28, 28, 0.22);
+    --btn-danger-shadow-hover: 0 4px 12px rgba(185, 28, 28, 0.32);
+}
+
+/* ==========================================================================
+   SUPERFICIE BRAND (Portal del Huésped y Autenticación)
+   Cálida, orgánica, arena, terracota, palma y azul océano
+   ========================================================================== */
+
+[data-surface="brand"] {
+    --bg-canvas: var(--brand-sand-light);
+    --bg-surface: #ffffff;
+    --bg-subtle: var(--brand-sand-base);
+    --bg-elevated: #ffffff;
+    
+    --border-subtle: var(--brand-sand-muted);
+    --border-default: #e2d9cc;
+    --border-strong: #c8bcab;
+    --border-light: var(--brand-sand-muted);
+    --border-focus: var(--brand-terracotta);
+
+    --text-primary: var(--brand-ocean);
+    --text-secondary: #486581;
+    --text-muted: #627d98;
+    --text-light: #829ab1;
+    --text-inverted: #ffffff;
+
+    /* Acento único de marca: Terracota */
+    --accent-surface: var(--brand-terracotta);
+    --accent-surface-hover: var(--brand-terracotta-hover);
+    --accent-focus-ring: rgba(184, 93, 56, 0.35);
+
+    /* Botón Primario: Terracota */
+    --btn-primary-bg: var(--brand-terracotta);
+    --btn-primary-hover: var(--brand-terracotta-hover);
+    --btn-primary-active: var(--brand-terracotta-deep);
+    --btn-primary-text: #ffffff;
+
+    /* Botón Secundario: Arena Suave */
+    --btn-secondary-bg: var(--brand-sand-base);
+    --btn-secondary-hover: var(--brand-sand-muted);
+    --btn-secondary-text: var(--brand-ocean);
+    --btn-secondary-border: var(--brand-sand-muted);
+
+    /* Badges Semánticos en Brand (Fondo Claro) */
+    --badge-prereserva-bg: #fef3c7;
+    --badge-prereserva-text: #b45309;
+    --badge-prereserva-border: #f59e0b;
+
+    --badge-confirmada-bg: #d1fae5;
+    --badge-confirmada-text: #2d5a43;
+    --badge-confirmada-border: #10b981;
+
+    --badge-ocupada-bg: #e0f2fe;
+    --badge-ocupada-text: #16324f;
+    --badge-ocupada-border: #3e7b5c;
+
+    --badge-cancelada-bg: #fee2e2;
+    --badge-cancelada-text: #b91c1c;
+    --badge-cancelada-border: #ef4444;
+
+    /* Sombras Orgánicas Arquitectónicas */
+    --shadow-card: 0 4px 16px -2px rgba(22, 50, 79, 0.06), 0 2px 6px -1px rgba(22, 50, 79, 0.04);
+    --shadow-hover: 0 12px 28px -4px rgba(22, 50, 79, 0.12), 0 4px 10px -2px rgba(22, 50, 79, 0.06);
+    --shadow-modal: 0 25px 50px -12px rgba(22, 50, 79, 0.25);
+
+    /* Inputs */
+    --input-bg: #ffffff;
+    --input-border: var(--border-default);
+    --input-text: var(--text-primary);
+    --input-focus-border: var(--brand-terracotta);
+    --input-focus-ring: rgba(184, 93, 56, 0.2);
+}
+
+/* ==========================================================================
+   SUPERFICIE PRODUCT (Consola de Gestión / Backoffice)
+   Densa, sobria, neutros de pizarra cálidos y acento verde palma
+   ========================================================================== */
+
+[data-surface="product"] {
+    --bg-canvas: var(--admin-bg);
+    --bg-surface: var(--admin-surface);
+    --bg-subtle: #f1f5f9;
+    --bg-elevated: var(--admin-elevated);
+
+    --border-subtle: #f1f5f9;
+    --border-default: var(--admin-border);
+    --border-color: var(--admin-border);
+    --border-strong: #cbd5e1;
+    --border-light: #e2e8f0;
+    --border-focus: var(--admin-accent);
+
+    --text-primary: var(--admin-text-main);
+    --text-secondary: #334155;
+    --text-muted: var(--admin-text-muted);
+    --text-light: #94a3b8;
+    --text-inverted: #ffffff;
+
+    /* Acento único de consola: Verde Hoja de Palma */
+    --accent-surface: var(--admin-accent);
+    --accent-surface-hover: #234835;
+    --accent-focus-ring: rgba(45, 90, 67, 0.25);
+
+    /* Botón Primario: Terracota (Unificado en ambas superficies) */
+    --btn-primary-bg: var(--brand-terracotta);
+    --btn-primary-hover: var(--brand-terracotta-hover);
+    --btn-primary-active: var(--brand-terracotta-deep);
+    --btn-primary-text: #ffffff;
+
+    /* Botón Secundario: Neutro Claro */
+    --btn-secondary-bg: #f1f5f9;
+    --btn-secondary-hover: #e2e8f0;
+    --btn-secondary-text: #0f172a;
+    --btn-secondary-border: #cbd5e1;
+
+    /* Badges Semánticos en Product (Fondo Claro Limpio) */
+    --badge-prereserva-bg: #fef3c7;
+    --badge-prereserva-text: #b45309;
+    --badge-prereserva-border: #f59e0b;
+
+    --badge-confirmada-bg: #d1fae5;
+    --badge-confirmada-text: #2d5a43;
+    --badge-confirmada-border: #10b981;
+
+    --badge-ocupada-bg: #e0f2fe;
+    --badge-ocupada-text: #16324f;
+    --badge-ocupada-border: #3e7b5c;
+
+    --badge-cancelada-bg: #fee2e2;
+    --badge-cancelada-text: #b91c1c;
+    --badge-cancelada-border: #ef4444;
+
+    /* Sombras y Capas Tonales */
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+    --shadow-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+    --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+    /* Inputs */
+    --input-bg: var(--admin-surface);
+    --input-border: var(--admin-border);
+    --input-text: var(--admin-text-main);
+    --input-focus-border: var(--admin-accent);
+    --input-focus-ring: rgba(45, 90, 67, 0.2);
+}
+
+/* ==========================================================================
+   TIPOGRAFÍA Y NÚMEROS TABULARES (.num)
+   ========================================================================== */
+
+/* Fraunces en títulos con pesos 500-600 y eje óptico activo */
+h1, h2, h3, h4,
+.brand-title,
+.page-title,
+.modal-title,
+.confirm-dialog-title,
+.guest-brand-wordmark .brand-name {
+    font-family: var(--font-serif);
+    font-optical-sizing: auto;
+    font-variation-settings: "opsz" auto;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.25;
+}
+
+h1, .page-title {
+    font-weight: 600;
+}
+
+/* Plus Jakarta Sans en cuerpo de texto */
+body, button, input, select, textarea, .btn, .nav-tab-btn {
+    font-family: var(--font-sans);
+}
+
+/* Clase utilitaria obligatoria para números tabulares */
+.num,
+.tabular-nums,
+[data-numeric] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+
+/* ==========================================================================
+   SISTEMA DE BOTONES UNIFICADO (.btn)
+   ========================================================================== */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-family: var(--font-sans);
+    font-size: 0.88rem;
+    font-weight: 600;
+    line-height: 1.25;
+    border-radius: var(--radius-md);
+    padding: 9px 18px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+    white-space: nowrap;
+    user-select: none;
+}
+
+.btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.btn:disabled,
+.btn.disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    pointer-events: none;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.btn.loading {
+    position: relative;
+    color: transparent !important;
+    pointer-events: none;
+}
+
+.btn.loading::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: calc(50% - 8px);
+    left: calc(50% - 8px);
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: btnSpinner 0.65s linear infinite;
+    color: inherit;
+}
+
+@keyframes btnSpinner {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Variante: Primario (Terracota en ambas superficies) */
+.btn-primary {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+    border-color: transparent;
+    box-shadow: var(--btn-primary-shadow);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--btn-primary-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--btn-primary-shadow-hover);
+}
+
+.btn-primary:active:not(:disabled) {
+    background: var(--btn-primary-active);
+    transform: translateY(0);
+}
+
+/* Variante: Secundario */
+.btn-secondary {
+    background: var(--btn-secondary-bg);
+    color: var(--btn-secondary-text);
+    border-color: var(--btn-secondary-border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: var(--btn-secondary-hover);
+    color: var(--text-primary);
+}
+
+/* Variante: Danger */
+.btn-danger {
+    background: var(--color-error);
+    color: var(--text-inverted);
+    border-color: transparent;
+    box-shadow: var(--btn-danger-shadow);
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: var(--color-error-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--btn-danger-shadow-hover);
+}
+
+.btn-danger:focus-visible {
+    box-shadow: 0 0 0 3px var(--color-error-ring);
+}
+
+/* Variante: Ghost */
+.btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border-color: transparent;
+}
+
+.btn-ghost:hover:not(:disabled) {
+    background: var(--bg-subtle);
+    color: var(--text-primary);
+}
+
+/* ==========================================================================
+   BADGES DE ESTADO SEMÁNTICOS
+   ========================================================================== */
+
+.estado-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 11px;
+    border-radius: var(--radius-full);
+    font-size: 0.74rem;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+.estado-badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+}
+
+.estado-badge.estado-prereserva,
+.badge-warning {
+    background: var(--badge-prereserva-bg);
+    color: var(--badge-prereserva-text);
+    border-color: var(--badge-prereserva-border);
+}
+
+.estado-badge.estado-confirmada,
+.badge-success {
+    background: var(--badge-confirmada-bg);
+    color: var(--badge-confirmada-text);
+    border-color: var(--badge-confirmada-border);
+}
+
+.estado-badge.estado-ocupada,
+.badge-info {
+    background: var(--badge-ocupada-bg);
+    color: var(--badge-ocupada-text);
+    border-color: var(--badge-ocupada-border);
+}
+
+.estado-badge.estado-cancelada,
+.badge-danger {
+    background: var(--badge-cancelada-bg);
+    color: var(--badge-cancelada-text);
+    border-color: var(--badge-cancelada-border);
+}
+
+/* ==========================================================================
+   INPUTS Y CONTROLES COMPARTIDOS
+   ========================================================================== */
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+input[type="number"],
+input[type="search"],
+select,
+textarea {
+    background: var(--input-bg);
+    color: var(--input-text);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    padding: 9px 13px;
+    font-family: var(--font-sans);
+    font-size: 0.88rem;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--input-focus-border);
+    box-shadow: 0 0 0 3px var(--input-focus-ring);
+}
+
+/* ==========================================================================
+   IMÁGENES (Proporción 16:10, Esquinas 12px, Naturales)
+   ========================================================================== */
+
+.room-card-image img,
+.hotel-card-image img,
+.hp-photo-card img,
+.card-img-16-10 {
+    aspect-ratio: 16 / 10;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 12px;
+}
+
+/* ==========================================================================
+   MOTION Y ACCESIBILIDAD (prefers-reduced-motion)
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

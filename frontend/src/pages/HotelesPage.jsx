@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Building, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, MapPin, Phone, Mail, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Building, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, MapPin, Phone, Mail, RefreshCw, Search, XCircle } from 'lucide-react';
 import { getHoteles, crearHotel, actualizarHotel, eliminarHotel } from '../api/hotelApi';
 import KpiCard from '../components/KpiCard';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import EstadoBadge from '../components/EstadoBadge';
 
 export default function HotelesPage() {
     const [hoteles, setHoteles] = useState([]);
@@ -13,7 +14,11 @@ export default function HotelesPage() {
     const [modalAbierto, setModalAbierto] = useState(false);
     const [hotelAEditar, setHotelAEditar] = useState(null);
     const [hotelAEliminar, setHotelAEliminar] = useState(null);
-    
+
+    // Filtros
+    const [filtroEstado, setFiltroEstado] = useState('TODOS'); // 'TODOS' | 'ACTIVOS' | 'INACTIVOS'
+    const [busqueda, setBusqueda] = useState('');
+
     const [formHotel, setFormHotel] = useState({
         nombre: '',
         direccion: '',
@@ -78,14 +83,14 @@ export default function HotelesPage() {
         // Validación forzosa de exactamente 10 dígitos numéricos para teléfono
         const telLimpio = formHotel.telefono ? formHotel.telefono.trim() : '';
         if (!/^\d{10}$/.test(telLimpio)) {
-            mostrarMensaje('error', 'El número telefónico forzosamente debe ser de 10 números (ej. 5512345678).');
+            mostrarMensaje('error', 'El número telefónico forzosamente debe ser de 10 dígitos numéricos.');
             return;
         }
 
         // Validación de correo electrónico
         const emailLimpio = formHotel.email ? formHotel.email.trim().toLowerCase() : '';
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLimpio)) {
-            mostrarMensaje('error', 'El correo electrónico debe ser válido (ejemplo: contacto@hotel.com).');
+            mostrarMensaje('error', 'El correo electrónico debe ser válido (ej. contacto@hotel.com).');
             return;
         }
 
@@ -146,7 +151,27 @@ export default function HotelesPage() {
         }
     };
 
-    const activosCount = hoteles.filter(h => h.activo).length;
+    // KPIs interactivos
+    const kpis = useMemo(() => {
+        const total = hoteles.length;
+        const activos = hoteles.filter(h => h.activo).length;
+        const inactivos = hoteles.filter(h => !h.activo).length;
+        return { total, activos, inactivos };
+    }, [hoteles]);
+
+    // Filtrado de hoteles
+    const hotelesFiltrados = useMemo(() => {
+        return hoteles.filter(h => {
+            const coincideEstado = filtroEstado === 'TODOS' || (filtroEstado === 'ACTIVOS' && h.activo) || (filtroEstado === 'INACTIVOS' && !h.activo);
+            const q = busqueda.trim().toLowerCase();
+            const coincideBusqueda = !q ||
+                h.nombre?.toLowerCase().includes(q) ||
+                h.ciudad?.toLowerCase().includes(q) ||
+                h.direccion?.toLowerCase().includes(q) ||
+                h.telefono?.includes(q);
+            return coincideEstado && coincideBusqueda;
+        });
+    }, [hoteles, filtroEstado, busqueda]);
 
     return (
         <div className="page-container">
@@ -166,11 +191,11 @@ export default function HotelesPage() {
                     <p className="page-description">Control de establecimientos y sedes de la cadena hotelera.</p>
                 </div>
                 <div className="page-header-actions">
-                    <button className="btn btn-secondary btn-icon" onClick={cargarHoteles} disabled={cargando}>
+                    <button type="button" className="btn btn-secondary btn-icon" onClick={cargarHoteles} disabled={cargando} title="Actualizar datos">
                         <RefreshCw size={17} className={cargando ? 'spin-animation' : ''} />
-                        <span>Refrescar</span>
+                        <span>Actualizar</span>
                     </button>
-                    <button className="btn btn-primary" onClick={handleAbrirNuevo}>
+                    <button type="button" className="btn btn-primary" onClick={handleAbrirNuevo}>
                         <Plus size={18} />
                         <span>Nuevo Hotel</span>
                     </button>
@@ -185,52 +210,86 @@ export default function HotelesPage() {
                 </div>
             )}
 
-            {/* Tarjetas KPI */}
-            <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+            {/* Tarjetas KPI como Filtro Único de Estado */}
+            <div className="kpi-grid">
                 <KpiCard
-                    title="Total de Hoteles"
-                    value={hoteles.length}
+                    title="Total Hoteles"
+                    value={kpis.total}
                     icon={Building}
                     colorClass="kpi-blue"
                     subtitle="Registrados en la cadena"
+                    isActive={filtroEstado === 'TODOS'}
+                    onClick={() => setFiltroEstado('TODOS')}
                 />
                 <KpiCard
                     title="Hoteles Activos"
-                    value={activosCount}
+                    value={kpis.activos}
                     icon={CheckCircle2}
                     colorClass="kpi-green"
                     subtitle="Operando normalmente"
+                    isActive={filtroEstado === 'ACTIVOS'}
+                    onClick={() => setFiltroEstado('ACTIVOS')}
                 />
+                <KpiCard
+                    title="Hoteles Inactivos"
+                    value={kpis.inactivos}
+                    icon={XCircle}
+                    colorClass="kpi-red"
+                    subtitle="Cierre o mantenimiento"
+                    isActive={filtroEstado === 'INACTIVOS'}
+                    onClick={() => setFiltroEstado('INACTIVOS')}
+                />
+            </div>
+
+            {/* Buscador y Contador */}
+            <div className="filters-card">
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                    <div className="search-input-wrapper" style={{ flex: 1, minWidth: '260px', maxWidth: '420px' }}>
+                        <Search size={16} className="search-icon" />
+                        <input
+                            type="text"
+                            placeholder="Buscar por hotel, ciudad, dirección o teléfono..."
+                            className="search-input"
+                            value={busqueda}
+                            onChange={(e) => setBusqueda(e.target.value)}
+                        />
+                    </div>
+                    <div className="table-counter">
+                        Mostrando <strong>{hotelesFiltrados.length}</strong> de {hoteles.length} hoteles
+                    </div>
+                </div>
             </div>
 
             {/* Tabla de Resultados */}
             <div className="table-card">
-                <div className="table-header-info">
-                    <div className="table-counter">Mostrando <strong>{hoteles.length}</strong> hoteles</div>
-                </div>
-
-                {cargando ? (
-                    <div className="loading-state"><div className="spinner"></div><p>Cargando hoteles...</p></div>
-                ) : hoteles.length === 0 ? (
+                {cargando && hoteles.length === 0 ? (
+                    <div className="loading-state">
+                        <div className="spinner"></div>
+                        <p>Cargando hoteles...</p>
+                    </div>
+                ) : hotelesFiltrados.length === 0 ? (
                     <div className="empty-state">
                         <Building size={48} className="empty-icon" />
-                        <h3>No hay hoteles registrados</h3>
-                        <p>Comienza agregando una nueva sede usando el botón superior.</p>
+                        <h3>No se encontraron hoteles</h3>
+                        <p>Ningún hotel coincide con los filtros aplicados.</p>
+                        <button type="button" className="btn btn-secondary" onClick={() => { setFiltroEstado('TODOS'); setBusqueda(''); }}>
+                            Limpiar filtros
+                        </button>
                     </div>
                 ) : (
                     <div className="table-responsive">
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th>HOTEL</th>
-                                    <th>DIRECCIÓN & CIUDAD</th>
-                                    <th>CONTACTO</th>
-                                    <th>ESTADO</th>
-                                    <th className="text-right">ACCIONES</th>
+                                    <th>Hotel</th>
+                                    <th>Dirección & Ciudad</th>
+                                    <th>Contacto</th>
+                                    <th>Estado</th>
+                                    <th className="text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {hoteles.map((h) => (
+                                {hotelesFiltrados.map((h) => (
                                     <tr key={h.idHotel} className="table-row">
                                         <td>
                                             <div className="room-number-pill">
@@ -245,22 +304,36 @@ export default function HotelesPage() {
                                             </div>
                                         </td>
                                         <td>
-                                            <div style={{ fontSize: '0.85rem' }}>
-                                                <div><Phone size={12} style={{ display: 'inline', marginRight: '4px' }} />{h.telefono || 'N/A'}</div>
-                                                <div style={{ color: '#6b7280' }}><Mail size={12} style={{ display: 'inline', marginRight: '4px' }} />{h.email || 'N/A'}</div>
+                                            <div className="hotel-cell">
+                                                <div className="num" style={{ fontSize: '0.8rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                                    <Phone size={12} /> {h.telefono || 'N/A'}
+                                                </div>
+                                                <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                                    <Mail size={12} /> {h.email || 'N/A'}
+                                                </div>
                                             </div>
                                         </td>
                                         <td>
-                                            <span className={`status-select status-${h.activo ? 'disponible' : 'mantenimiento'}`} style={{ display: 'inline-block', textAlign: 'center', pointerEvents: 'none' }}>
-                                                {h.activo ? 'Activo' : 'Inactivo'}
-                                            </span>
+                                            <EstadoBadge estado={h.activo ? 'Activo' : 'Inactivo'} />
                                         </td>
                                         <td className="text-right">
                                             <div className="row-actions">
-                                                <button className="btn-action btn-action-edit" onClick={() => handleAbrirEditar(h)} title="Editar hotel">
+                                                <button
+                                                    type="button"
+                                                    className="btn-action btn-action-edit"
+                                                    onClick={() => handleAbrirEditar(h)}
+                                                    title="Editar hotel"
+                                                    aria-label="Editar hotel"
+                                                >
                                                     <Edit2 size={16} />
                                                 </button>
-                                                <button className="btn-action btn-action-delete" onClick={() => handleEliminar(h.idHotel, h.nombre)} title="Eliminar hotel">
+                                                <button
+                                                    type="button"
+                                                    className="btn-action btn-action-delete"
+                                                    onClick={() => handleEliminar(h.idHotel, h.nombre)}
+                                                    title="Eliminar hotel"
+                                                    aria-label="Eliminar hotel"
+                                                >
                                                     <Trash2 size={16} />
                                                 </button>
                                             </div>
@@ -284,7 +357,7 @@ export default function HotelesPage() {
             >
                 <form onSubmit={handleGuardar} className="modal-form">
                     <div className="form-group">
-                        <label className="form-label">NOMBRE DEL HOTEL *</label>
+                        <label className="form-label">Nombre del hotel *</label>
                         <input
                             type="text"
                             required
@@ -295,7 +368,7 @@ export default function HotelesPage() {
                         />
                     </div>
                     <div className="form-group">
-                        <label className="form-label">DIRECCIÓN *</label>
+                        <label className="form-label">Dirección *</label>
                         <input
                             type="text"
                             required
@@ -306,7 +379,7 @@ export default function HotelesPage() {
                         />
                     </div>
                     <div className="form-group">
-                        <label className="form-label">CIUDAD *</label>
+                        <label className="form-label">Ciudad *</label>
                         <input
                             type="text"
                             required
@@ -318,7 +391,7 @@ export default function HotelesPage() {
                     </div>
                     <div className="form-grid">
                         <div className="form-group">
-                            <label className="form-label">TELÉFONO (10 DÍGITOS) *</label>
+                            <label className="form-label">Teléfono (10 dígitos) *</label>
                             <input
                                 type="tel"
                                 required
@@ -326,11 +399,11 @@ export default function HotelesPage() {
                                 placeholder="Ej. 5512345678"
                                 value={formHotel.telefono}
                                 onChange={e => setFormHotel({ ...formHotel, telefono: e.target.value.replace(/\D/g, '') })}
-                                className="form-input"
+                                className="form-input num"
                             />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">CORREO ELECTRÓNICO *</label>
+                            <label className="form-label">Correo electrónico *</label>
                             <input
                                 type="email"
                                 required
@@ -342,14 +415,14 @@ export default function HotelesPage() {
                         </div>
                     </div>
                     <div className="form-group">
-                        <label className="form-label">ESTADO OPERATIVO</label>
+                        <label className="form-label">Estado operativo</label>
                         <select
                             value={formHotel.activo ? 'true' : 'false'}
                             onChange={e => setFormHotel({ ...formHotel, activo: e.target.value === 'true' })}
                             className="form-select"
                         >
-                            <option value="true">Activo</option>
-                            <option value="false">Inactivo</option>
+                            <option value="true">🟢 Activo</option>
+                            <option value="false">🔴 Inactivo</option>
                         </select>
                     </div>
                     <div className="modal-actions">

@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
-    MessageSquare, X, Send, Bot, User, Sparkles, Loader2, Square, RotateCcw,
+    MessageSquare, X, Send, Bot, User, Sparkles, Square, RotateCcw,
     Maximize2, Minimize2, Plus, Trash2, MessageCircle, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { marked } from 'marked';
 import ConfirmDialog from './ConfirmDialog';
+import { useAuth } from '../context/AuthContext';
+import { API_BASE_URL, getStoredToken, clearAuthSession } from '../api/hotelApi';
+import './ChatWidget.css';
 
 // Configurar marked para saltos de línea automáticos y tablas
 marked.setOptions({
@@ -12,21 +15,130 @@ marked.setOptions({
     gfm: true
 });
 
-const DEFAULT_WELCOME_MSG = {
-    sender: 'bot',
-    text: '¡Hola! Soy el Recepcionista Virtual. Con gusto le asisto con información sobre nuestros hoteles, disponibilidad de habitaciones, servicios y tarifas.'
-};
+function renderMarkdownWithTables(text) {
+    if (!text) return '';
+    try {
+        let html = marked.parse(text);
+        html = html.replace(/<table(\s*[^>]*)>/gi, '<div class="chat-table-wrapper"><table$1>');
+        html = html.replace(/<\/table>/gi, '</table></div>');
+        return html;
+    } catch {
+        return text;
+    }
+}
 
-const STORAGE_SESSIONS_KEY = 'hotel_chat_sessions_v2';
-const STORAGE_ACTIVE_ID_KEY = 'hotel_chat_active_session_id_v2';
+/**
+ * Animación de ola orgánica que aparece únicamente mientras se consulta información
+ * y se desvanece suavemente en cuanto la IA comienza a escribir.
+ */
+function OceanWaveAnimation({ label = 'Consultando información', isFadingOut = false }) {
+    return (
+        <div
+            className={`ocean-wave-status-card ${isFadingOut ? 'is-fading-out' : ''}`}
+            role="status"
+            aria-live="polite"
+        >
+            <div className="ocean-wave-top-row">
+                <div className="ocean-wave-bars" aria-hidden="true">
+                    <span className="ocean-wave-bar bar-1" />
+                    <span className="ocean-wave-bar bar-2" />
+                    <span className="ocean-wave-bar bar-3" />
+                    <span className="ocean-wave-bar bar-4" />
+                </div>
+                <span className="ocean-wave-label">{label}</span>
+            </div>
+            <div className="ocean-wave-ribbon" aria-hidden="true">
+                <svg className="ocean-wave-svg ocean-wave-layer-back" viewBox="0 0 800 36" preserveAspectRatio="none">
+                    <path
+                        d="M0,18 C100,4 200,32 300,18 C400,4 500,32 600,18 C700,4 750,26 800,18 L800,36 L0,36 Z"
+                        fill="rgba(42, 111, 151, 0.22)"
+                    />
+                </svg>
+                <svg className="ocean-wave-svg ocean-wave-layer-mid" viewBox="0 0 800 36" preserveAspectRatio="none">
+                    <path
+                        d="M0,20 C120,34 240,6 400,20 C560,34 680,6 800,20 L800,36 L0,36 Z"
+                        fill="rgba(22, 50, 79, 0.36)"
+                    />
+                </svg>
+                <svg className="ocean-wave-svg ocean-wave-layer-front" viewBox="0 0 800 36" preserveAspectRatio="none">
+                    <path
+                        d="M0,24 C90,12 180,33 280,22 C380,11 480,33 580,22 C680,11 740,29 800,24 L800,36 L0,36 Z"
+                        fill="rgba(184, 93, 56, 0.55)"
+                    />
+                </svg>
+            </div>
+        </div>
+    );
+}
+
+const CHIPS_HUESPED = [
+    { label: 'Hoteles de la cadena', q: '¿Cuáles son los hoteles activos de la cadena y en qué ciudades están?' },
+    { label: 'Disponibles hoy', q: '¿Qué habitaciones están disponibles actualmente?' },
+    { label: 'Tipos y precios', q: '¿Qué tipos de habitaciones existen y cuánto cuestan?' },
+    { label: 'Reservar habitación', q: 'Quiero hacer una reservación' },
+    { label: 'Mis reservaciones', q: 'Muéstrame mis reservaciones registradas' },
+    { label: 'Libres en planta baja', q: '¿Qué habitaciones están disponibles en planta baja para un adulto mayor?' },
+    { label: 'Para 4 personas', q: '¿Qué habitaciones o tipos tienen para 4 personas?' },
+    { label: 'Habitación más exclusiva', q: '¿Cuál es la habitación más cara de la cadena?' },
+    { label: 'Vigencia pre-reserva', q: '¿Cuánto tiempo dura una pre-reserva y cuándo se cancela si no pagan?' },
+    { label: 'Cancelación y reembolso', q: '¿Cuál es la política de cancelación y porcentaje de reembolso según los días?' }
+];
+
+const CHIPS_RECEPCIONISTA = [
+    { label: 'Disponibles hoy', q: '¿Qué habitaciones están disponibles actualmente?' },
+    { label: 'Reservar habitación', q: 'Quiero hacer una reservación' },
+    { label: 'Habitaciones en pre-reserva', q: 'Dame las habitaciones en pre reserva' },
+    { label: 'Consultar reservación', q: 'Consultar reservación' },
+    { label: 'Resumen operativo de hoy', q: 'Dame el resumen operativo completo del hotel' },
+    { label: 'Libres en planta baja', q: '¿Qué habitaciones están disponibles en planta baja para un adulto mayor?' },
+    { label: 'Mantenimiento', q: 'Dame las habitaciones en mantenimiento' },
+    { label: 'Tipos y precios', q: '¿Qué tipos de habitaciones existen y cuánto cuestan?' },
+    { label: 'Cancelación y reembolso', q: '¿Cuál es la política de cancelación y porcentaje de reembolso según los días?' },
+    { label: 'No-Show a las 10 PM', q: '¿Cómo se maneja el No-Show a las 8 PM y a las 10 PM?' },
+    { label: 'Sobreventa (Overbooking)', q: '¿Cuál es el protocolo del hotel en caso de sobreventa o overbooking?' }
+];
+
+const CHIPS_GERENTE = [
+    { label: 'Métricas financieras 2026', q: 'Dame el resumen financiero y métricas clave del año 2026' },
+    { label: 'Comparar 2021 vs 2025', q: 'Compara el desempeño histórico de ingresos entre 2021 y 2025' },
+    { label: 'Estacionalidad mensual 2025', q: '¿Cuál fue el comportamiento mensual de ingresos en 2025?' },
+    { label: 'Resumen operativo de hoy', q: 'Dame el resumen operativo completo del hotel' },
+    { label: 'Ingreso potencial', q: '¿Cuánto dinero se ingresaría si se rentan todas las habitaciones?' },
+    { label: 'Habitaciones en pre-reserva', q: 'Dame las habitaciones en pre reserva' },
+    { label: 'Mantenimiento', q: 'Dame las habitaciones en mantenimiento' },
+    { label: 'Total por hotel', q: '¿Cuántas habitaciones hay en cada hotel de la cadena?' },
+    { label: 'Cancelación y reembolso', q: '¿Cuál es la política de cancelación y porcentaje de reembolso según los días?' },
+    { label: 'No-Show a las 10 PM', q: '¿Cómo se maneja el No-Show a las 8 PM y a las 10 PM?' }
+];
+
+const CHIPS_ADMIN = [
+    { label: 'Métricas financieras 2026', q: 'Dame el resumen financiero y métricas clave del año 2026' },
+    { label: 'Comparar 2021 vs 2025', q: 'Compara el desempeño histórico de ingresos entre 2021 y 2025' },
+    { label: 'Hoteles activos', q: '¿Cuáles son los hoteles activos de la cadena?' },
+    { label: 'Reservar habitación', q: 'Quiero hacer una reservación' },
+    { label: 'Habitaciones en pre-reserva', q: 'Dame las habitaciones en pre reserva' },
+    { label: 'Consultar reservación', q: 'Consultar reservación' },
+    { label: 'Resumen operativo de hoy', q: 'Dame el resumen operativo completo del hotel' },
+    { label: 'Disponibles hoy', q: '¿Qué habitaciones están disponibles actualmente?' },
+    { label: 'Libres en planta baja', q: '¿Qué habitaciones están disponibles en planta baja para un adulto mayor?' },
+    { label: 'Mantenimiento', q: 'Dame las habitaciones en mantenimiento' },
+    { label: 'Total por hotel', q: '¿Cuántas habitaciones hay en cada hotel de la cadena?' },
+    { label: 'Tipos y precios', q: '¿Qué tipos de habitaciones existen y cuánto cuestan?' },
+    { label: 'Cancelación y reembolso', q: '¿Cuál es la política de cancelación y porcentaje de reembolso según los días?' },
+    { label: 'Ingreso potencial', q: '¿Cuánto dinero se ingresaría si se rentan todas las habitaciones?' }
+];
 
 export default function ChatWidget() {
+    const { user, isAdmin, isGerente, isRecepcionista, isStaff } = useAuth();
+    const userScopeKey = user?.idUsuario ? `u${user.idUsuario}` : 'anon';
+    const STORAGE_SESSIONS_KEY = `hotel_chat_sessions_v2_${userScopeKey}`;
+    const STORAGE_ACTIVE_ID_KEY = `hotel_chat_active_session_id_v2_${userScopeKey}`;
+
     const [isOpen, setIsOpen] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-    // Lista de conversaciones guardadas (solo las que tienen mensajes reales)
     const [conversations, setConversations] = useState(() => {
         try {
             const saved = localStorage.getItem(STORAGE_SESSIONS_KEY);
@@ -42,7 +154,6 @@ export default function ChatWidget() {
         return [];
     });
 
-    // ID de la conversación activa en memoria. Si no hay conversaciones guardadas, genera un ID nuevo pendiente
     const [activeId, setActiveId] = useState(() => {
         try {
             const savedId = localStorage.getItem(STORAGE_ACTIVE_ID_KEY);
@@ -51,48 +162,66 @@ export default function ChatWidget() {
         return (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `rec-${Date.now()}`;
     });
 
-    // Mensajes para un chat nuevo antes de ser guardado
     const [pendingMessages, setPendingMessages] = useState([]);
 
-    // Buscar si la conversación activa ya existe en la lista guardada
+    // Recargar historial al cambiar de usuario en sesión
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem(STORAGE_SESSIONS_KEY);
+            const parsed = saved ? JSON.parse(saved) : [];
+            setConversations(Array.isArray(parsed) ? parsed : []);
+            const savedId = localStorage.getItem(STORAGE_ACTIVE_ID_KEY);
+            setActiveId(savedId || ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `rec-${Date.now()}`));
+            setPendingMessages([]);
+        } catch {
+            setConversations([]);
+            setPendingMessages([]);
+        }
+    }, [STORAGE_SESSIONS_KEY, STORAGE_ACTIVE_ID_KEY]);
+
     const currentConv = useMemo(() => {
         return conversations.find(c => c.id === activeId) || null;
     }, [conversations, activeId]);
 
-    // Mensajes a mostrar: los de la conversación guardada o los pendientes
     const messages = currentConv ? (currentConv.messages || []) : pendingMessages;
 
-    // Sincronizar conversaciones y sesión activa en localStorage
     useEffect(() => {
         try {
             localStorage.setItem(STORAGE_SESSIONS_KEY, JSON.stringify(conversations));
         } catch (e) {
             console.error('Error al guardar conversaciones:', e);
         }
-    }, [conversations]);
+    }, [conversations, STORAGE_SESSIONS_KEY]);
 
     useEffect(() => {
         try {
             localStorage.setItem(STORAGE_ACTIVE_ID_KEY, activeId);
         } catch (e) {}
-    }, [activeId]);
+    }, [activeId, STORAGE_ACTIVE_ID_KEY]);
 
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [model, setModel] = useState('gemini');
+    const [streamingMsgIndex, setStreamingMsgIndex] = useState(null);
+    const [fadingWaveIndex, setFadingWaveIndex] = useState(null);
+    const [model, setModel] = useState('ollama');
+    const messagesContainerRef = useRef(null);
     const messagesEndRef = useRef(null);
     const abortControllerRef = useRef(null);
     const typingIntervalRef = useRef(null);
+    const fadeWaveTimeoutRef = useRef(null);
+
+    const isResponding = isLoading || streamingMsgIndex !== null;
 
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
     };
 
     useEffect(() => {
         if (isOpen) scrollToBottom();
-    }, [messages, isOpen, isFullscreen]);
+    }, [messages, isOpen, isFullscreen, streamingMsgIndex]);
 
-    // Actualizador de mensajes para la conversación activa (guardada o pendiente)
     const updateActiveMessages = (updater) => {
         setConversations(prev => {
             const exists = prev.some(c => c.id === activeId);
@@ -109,7 +238,6 @@ export default function ChatWidget() {
                     return conv;
                 });
             } else {
-                // Actualizar estado pendiente
                 setPendingMessages(prevPend => typeof updater === 'function' ? updater(prevPend) : updater);
                 return prev;
             }
@@ -119,9 +247,18 @@ export default function ChatWidget() {
     const typeMessage = (fullText, index) => {
         let i = 0;
         if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+        if (fadeWaveTimeoutRef.current) clearTimeout(fadeWaveTimeoutRef.current);
+
+        // Activar desvanecimiento suave de la ola en cuanto inicia la escritura
+        setFadingWaveIndex(index);
+        fadeWaveTimeoutRef.current = setTimeout(() => {
+            setFadingWaveIndex(null);
+        }, 360);
+
+        setStreamingMsgIndex(index);
         
         typingIntervalRef.current = setInterval(() => {
-            i += 2; // velocidad ágil
+            i += 3;
             updateActiveMessages((prev) => {
                 const updated = [...prev];
                 updated[index] = { sender: 'bot', text: fullText.slice(0, Math.min(i, fullText.length)) };
@@ -130,15 +267,14 @@ export default function ChatWidget() {
             if (i >= fullText.length) {
                 clearInterval(typingIntervalRef.current);
                 typingIntervalRef.current = null;
+                setStreamingMsgIndex(null);
             }
-        }, 12);
+        }, 18);
     };
 
-    // Parser para extraer botones de acción interactivos generados por la IA: [BOTON: Etiqueta | Acción/Consulta]
     const parseBotContent = (rawText) => {
-        if (!rawText) return { cleanText: '', buttons: [] };
+        if (!rawText) return { cleanText: '', buttons: [], hasTable: false };
         
-        // Soporta [BOTON: ... | ...] y variaciones con negritas [**BOTON: ...**]
         const buttonRegex = /\[(?:\*{1,2})?BOTON:\s*([^|\]]+)\|\s*([^\]*]+)(?:\*{1,2})?\]/gi;
         const buttons = [];
         let match;
@@ -152,7 +288,6 @@ export default function ChatWidget() {
         
         let cleanText = rawText.replace(buttonRegex, '').trim();
 
-        // REGLA FUNDAMENTAL DE UX: Si el mensaje ya contiene una tabla de detalle, NO mostrar botones
         const hasTable = cleanText.includes('| ---') || cleanText.includes('|:---') || cleanText.includes('| :---') || cleanText.includes('|---');
         if (hasTable) {
             cleanText = cleanText
@@ -162,14 +297,14 @@ export default function ChatWidget() {
                 .replace(/(\n\s*por\s*favor,?\s*$|\n\s*puede\s*seleccionar:?\s*$)/gi, '')
                 .replace(/\n{3,}/g, '\n\n')
                 .trim();
-            return { cleanText, buttons: [] };
+            return { cleanText, buttons: [], hasTable: true };
         }
 
-        return { cleanText, buttons };
+        return { cleanText, buttons, hasTable: false };
     };
 
     const handleButtonClick = (actionPrompt) => {
-        if (isLoading) return;
+        if (isResponding) return;
         handleSend(null, actionPrompt);
     };
 
@@ -182,23 +317,30 @@ export default function ChatWidget() {
             clearInterval(typingIntervalRef.current);
             typingIntervalRef.current = null;
         }
+        if (fadeWaveTimeoutRef.current) {
+            clearTimeout(fadeWaveTimeoutRef.current);
+            fadeWaveTimeoutRef.current = null;
+        }
         setIsLoading(false);
+        setStreamingMsgIndex(null);
+        setFadingWaveIndex(null);
         updateActiveMessages((prev) => {
             const updated = [...prev];
             const lastIdx = updated.length - 1;
-            if (lastIdx >= 0 && updated[lastIdx].sender === 'bot' && !updated[lastIdx].text) {
+            if (lastIdx >= 0 && updated[lastIdx].sender === 'bot') {
+                const existingText = (updated[lastIdx].text || '').trim();
                 updated[lastIdx] = {
                     sender: 'bot',
-                    text: '⏹️ *Consulta detenida por el recepcionista.*'
+                    text: existingText || '__CONSULTA_DETENIDA__',
+                    stopped: true
                 };
             }
             return updated;
         });
     };
 
-    // Crear una nueva conversación (estilo Gemini / ChatGPT: inicia limpia sin guardarse hasta el primer envío)
     const handleNewConversation = () => {
-        if (isLoading) handleCancelQuery();
+        if (isResponding) handleCancelQuery();
         const freshId = (typeof crypto !== 'undefined' && crypto.randomUUID)
             ? crypto.randomUUID()
             : `rec-${Date.now()}`;
@@ -207,28 +349,24 @@ export default function ChatWidget() {
         setInput('');
     };
 
-    // Cambiar de conversación
     const handleSelectConversation = (id) => {
         if (id === activeId) return;
-        if (isLoading) handleCancelQuery();
+        if (isResponding) handleCancelQuery();
         setActiveId(id);
         setInput('');
     };
 
-    // Estado para confirmación de eliminación con el diseño del sistema
     const [convToDelete, setConvToDelete] = useState(null);
 
-    // Solicitar confirmación antes de eliminar una conversación del historial
     const handleRequestDeleteConversation = (e, conv) => {
         e.stopPropagation();
         setConvToDelete(conv);
     };
 
-    // Confirmación ejecutada por el usuario
     const handleConfirmDelete = () => {
         if (!convToDelete) return;
         const id = convToDelete.id;
-        if (isLoading && id === activeId) handleCancelQuery();
+        if (isResponding && id === activeId) handleCancelQuery();
 
         const remaining = conversations.filter(c => c.id !== id);
         setConversations(remaining);
@@ -245,15 +383,15 @@ export default function ChatWidget() {
     const handleSend = async (e, overridePrompt = null) => {
         e?.preventDefault();
         const userText = (overridePrompt || input).trim();
-        if (!userText || isLoading) return;
+        if (!userText || isResponding) return;
 
         if (!overridePrompt) setInput('');
         setIsLoading(true);
+        setFadingWaveIndex(null);
 
         const controller = new AbortController();
         abortControllerRef.current = controller;
 
-        // Calcular título a partir del primer mensaje
         const isFirstMessage = messages.length === 0 || !messages.some(m => m.sender === 'user');
         const computedTitle = isFirstMessage 
             ? (userText.length > 28 ? userText.slice(0, 25) + '...' : userText)
@@ -265,8 +403,8 @@ export default function ChatWidget() {
             { sender: 'bot', text: '' }
         ];
         const botIndex = newMsgs.length - 1;
+        setStreamingMsgIndex(botIndex);
 
-        // Si la conversación no existía aún en el historial guardado, se crea formalmente en este primer mensaje (estilo Gemini)
         setConversations(prev => {
             const exists = prev.some(c => c.id === activeId);
             if (exists) {
@@ -293,12 +431,25 @@ export default function ChatWidget() {
         });
 
         try {
-            const response = await fetch('http://localhost:8080/api/v1/chat', {
+            const token = getStoredToken();
+            const response = await fetch(`${API_BASE_URL}/v1/chat`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
                 body: JSON.stringify({ prompt: userText, model, conversationId: activeId }),
                 signal: controller.signal
             });
+
+            if (response.status === 401) {
+                setStreamingMsgIndex(null);
+                clearAuthSession();
+                window.dispatchEvent(new CustomEvent('auth:session-expired', {
+                    detail: { message: 'Su sesión ha expirado. Inicie sesión nuevamente para usar el asistente.' }
+                }));
+                return;
+            }
 
             if (!response.ok) {
                 if (response.status === 500) {
@@ -320,7 +471,7 @@ export default function ChatWidget() {
 
         } catch (error) {
             if (error.name === 'AbortError') {
-                console.log('Consulta cancelada por el usuario');
+                setStreamingMsgIndex(null);
                 return;
             }
 
@@ -333,6 +484,7 @@ export default function ChatWidget() {
                 friendlyError = `⚠️ ${error.message}`;
             }
 
+            setStreamingMsgIndex(null);
             updateActiveMessages((prev) => {
                 const updated = [...prev];
                 updated[botIndex] = {
@@ -348,7 +500,7 @@ export default function ChatWidget() {
     };
 
     const handleCloseChat = () => {
-        if (isLoading) handleCancelQuery();
+        if (isResponding) handleCancelQuery();
         setIsClosing(true);
         setTimeout(() => {
             setIsOpen(false);
@@ -364,14 +516,28 @@ export default function ChatWidget() {
         }
     };
 
+    const suggestionChips = isAdmin
+        ? CHIPS_ADMIN
+        : isGerente
+            ? CHIPS_GERENTE
+            : isRecepcionista
+                ? CHIPS_RECEPCIONISTA
+                : CHIPS_HUESPED;
+
+    const statusRolTexto = isAdmin
+        ? 'En línea · Administración'
+        : isGerente
+            ? 'En línea · Gerencia General'
+            : isRecepcionista
+                ? 'En línea · Recepción'
+                : 'En línea · Atención 24/7';
+
     return (
-        <div className={`chat-widget-container ${isFullscreen && isOpen ? 'fullscreen-active' : ''}`}>
+        <div className={`chat-widget-container ${isFullscreen && isOpen ? 'fullscreen-active' : ''} ${isStaff ? 'is-admin-chat' : ''}`}>
             {isOpen && (
                 <div className={`chat-window ${isFullscreen ? 'chat-window-fullscreen' : ''} ${isClosing ? 'chat-window-exit' : 'chat-window-enter'}`}>
-                    {/* Header Principal del Asistente */}
                     <div className="chat-header">
                         <div className="chat-header-title">
-                            {/* Botón para colapsar/expandir barra lateral en pantalla completa */}
                             {isFullscreen && (
                                 <button 
                                     className="chat-sidebar-toggle-btn" 
@@ -382,27 +548,29 @@ export default function ChatWidget() {
                                 </button>
                             )}
                             <div className="chat-avatar"><Bot size={18} /></div>
-                            <div>
-                                <h4 className="chat-name">Recepcionista Virtual</h4>
+                            <div className="chat-header-meta">
+                                <h4 className="chat-name">Concierge Virtual</h4>
                                 <span className="chat-status">
-                                    <span className="status-dot"></span> En línea · Recepción {isFullscreen && '· Pantalla Completa'}
+                                    <span className="status-dot"></span>
+                                    {statusRolTexto}
                                 </span>
                             </div>
                         </div>
                         <div className="chat-header-actions">
-                            <div className="chat-model-wrapper">
-                                <span className="chat-model-label">Motor:</span>
-                                <select
-                                    className="chat-model-select"
-                                    value={model}
-                                    onChange={(e) => setModel(e.target.value)}
-                                >
-                                    <option value="gemini">Gemini</option>
-                                    <option value="ollama">Ollama</option>
-                                </select>
-                            </div>
+                            {isStaff && (
+                                <div className="chat-model-wrapper" title="Seleccionar motor de inteligencia artificial">
+                                    <Sparkles size={11} style={{ color: '#fcd34d', flexShrink: 0 }} />
+                                    <select
+                                        className="chat-model-select"
+                                        value={model}
+                                        onChange={(e) => setModel(e.target.value)}
+                                    >
+                                        <option value="gemini">Gemini</option>
+                                        <option value="ollama">Ollama</option>
+                                    </select>
+                                </div>
+                            )}
                             
-                            {/* Botón de Nueva Conversación */}
                             <button
                                 className="chat-action-icon-btn"
                                 title="Nueva conversación (+)"
@@ -411,37 +579,21 @@ export default function ChatWidget() {
                                 <Plus size={16} />
                             </button>
 
-                            {/* Botón Limpiar conversación actual */}
-                            <button
-                                className="chat-action-icon-btn"
-                                title="Reiniciar mensajes de esta conversación"
-                                onClick={() => {
-                                    if (isLoading) handleCancelQuery();
-                                    updateActiveMessages([]);
-                                }}
-                            >
-                                <RotateCcw size={15} />
-                            </button>
-
-                            {/* Botón Pantalla Completa / Restaurar */}
                             <button
                                 className="chat-action-icon-btn chat-fullscreen-btn"
-                                title={isFullscreen ? "Restaurar a ventana normal" : "Pantalla completa"}
+                                title={isFullscreen ? "Restaurar a ventana normal" : "Expandir pantalla completa"}
                                 onClick={() => setIsFullscreen(!isFullscreen)}
                             >
                                 {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                             </button>
 
-                            {/* Botón Cerrar */}
                             <button className="chat-close-btn" title="Cerrar ventana" onClick={handleCloseChat}>
                                 <X size={16} />
                             </button>
                         </div>
                     </div>
 
-                    {/* Cuerpo Principal del Chat (con Sidebar si está en Pantalla Completa) */}
                     <div className="chat-body-layout">
-                        {/* SIDEBAR DE CONVERSACIONES (Estilo ChatGPT / Gemini) */}
                         {isFullscreen && isSidebarOpen && (
                             <aside className="chat-sidebar">
                                 <div className="chat-sidebar-header">
@@ -489,7 +641,7 @@ export default function ChatWidget() {
                                 <div className="chat-sidebar-footer">
                                     <div className="chat-sidebar-meta">
                                         <Sparkles size={14} className="sparkle-icon" />
-                                        <span>IA Hotel Paraíso</span>
+                                        <span>Hotel Paraíso</span>
                                     </div>
                                     <span className="chat-sidebar-badge">
                                         {conversations.length} {conversations.length === 1 ? 'chat' : 'chats'}
@@ -498,27 +650,57 @@ export default function ChatWidget() {
                             </aside>
                         )}
 
-                        {/* ÁREA DE CONTENIDO Y MENSAJES */}
                         <div className="chat-main-area">
-                            <div className="chat-messages">
+                            <div className="chat-messages" ref={messagesContainerRef}>
                                 {messages.length === 0 ? (
                                     <div className="chat-welcome-container">
                                         <div className="chat-welcome-hero">
                                             <div className="chat-welcome-avatar">
-                                                <Bot size={36} />
+                                                <Bot size={32} />
                                             </div>
-                                            <h2 className="chat-welcome-title">¿En qué puedo ayudarte hoy?</h2>
+                                            <h2 className="chat-welcome-title">
+                                                ¡Hola, {user?.nombre || 'Bienvenido'}! ¿En qué puedo ayudarte hoy?
+                                            </h2>
                                             <p className="chat-welcome-subtitle">
-                                                Soy el Recepcionista Virtual de <strong>Hotel Paraíso</strong> y <strong>Hotel Paraíso Ejecutivo</strong>. 
-                                                Pregúntame sobre disponibilidad, tarifas, estatus de habitaciones o solicitud de reservaciones.
+                                                {isGerente ? (
+                                                    <>
+                                                        Consulta análisis financiero 2020–2026, ADR, RevPAR, ocupación histórica, balances de caja y estado operativo de toda la cadena.
+                                                    </>
+                                                ) : isRecepcionista ? (
+                                                    <>
+                                                        Consulta disponibilidad en tiempo real, registra reservaciones, verifica pre-reservas, anticipos y estado de habitaciones en mostrador.
+                                                    </>
+                                                ) : isAdmin ? (
+                                                    <>
+                                                        Consulta inventario completo, métricas financieras, mantenimiento, información de turno, ingresos y reservaciones de toda la cadena.
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        Estoy a tu disposición para ayudarte a encontrar la habitación ideal, cotizar tu estancia, resolver dudas sobre nuestras instalaciones o consultar tus reservaciones.
+                                                    </>
+                                                )}
                                             </p>
                                         </div>
                                     </div>
                                 ) : (
                                     messages.map((msg, index) => {
-                                        const { cleanText, buttons } = msg.sender === 'bot' 
-                                            ? parseBotContent(msg.text) 
-                                            : { cleanText: msg.text, buttons: [] };
+                                        const isLegacyStopped = typeof msg.text === 'string' && (
+                                            msg.text.includes('Consulta detenida') ||
+                                            msg.text === '__CONSULTA_DETENIDA__'
+                                        );
+                                        const isStoppedMsg = Boolean(msg.stopped || isLegacyStopped);
+                                        const rawTextForParse = isLegacyStopped ? '' : msg.text;
+
+                                        const { cleanText, buttons, hasTable } = msg.sender === 'bot' 
+                                            ? parseBotContent(rawTextForParse) 
+                                            : { cleanText: msg.text, buttons: [], hasTable: false };
+                                        const isThisBotStreaming = msg.sender === 'bot' && streamingMsgIndex === index;
+                                        const isWaveFadingOut = msg.sender === 'bot' && fadingWaveIndex === index;
+
+                                        // Encontrar la consulta del usuario inmediatamente anterior por si desea reintentar
+                                        const previousUserPrompt = index > 0 && messages[index - 1]?.sender === 'user'
+                                            ? messages[index - 1].text
+                                            : null;
 
                                         return (
                                             <div
@@ -528,37 +710,68 @@ export default function ChatWidget() {
                                                 {msg.sender === 'bot' && (
                                                     <div className="bubble-icon bot-icon"><Sparkles size={14} /></div>
                                                 )}
-                                                <div className={`chat-bubble ${msg.sender === 'user' ? 'bubble-user' : 'bubble-bot'}`}>
-                                                    {msg.text ? (
-                                                        msg.sender === 'bot' ? (
-                                                            <>
+                                                <div className={`chat-bubble ${msg.sender === 'user' ? 'bubble-user' : 'bubble-bot'} ${hasTable ? 'has-table-bubble' : ''} ${isStoppedMsg && !cleanText ? 'is-stopped-bubble' : ''}`}>
+                                                    {msg.sender === 'bot' ? (
+                                                        <>
+                                                            {/* Ola: aparece mientras consulta (!cleanText && !isStoppedMsg) y se desvanece cuando inicia la escritura */}
+                                                            {((!cleanText && !isStoppedMsg) || isWaveFadingOut) && (
+                                                                <OceanWaveAnimation
+                                                                    label="Consultando información"
+                                                                    isFadingOut={isWaveFadingOut}
+                                                                />
+                                                            )}
+
+                                                            {/* Contenido de la respuesta de la IA */}
+                                                            {cleanText && (
                                                                 <div 
                                                                     className="markdown-content"
-                                                                    dangerouslySetInnerHTML={{ __html: marked.parse(cleanText) }} 
+                                                                    dangerouslySetInnerHTML={{ __html: renderMarkdownWithTables(cleanText) }} 
                                                                 />
-                                                                {buttons.length > 0 && (
-                                                                    <div className="chat-action-buttons">
-                                                                        {buttons.map((btn, bIdx) => (
-                                                                            <button
-                                                                                key={bIdx}
-                                                                                type="button"
-                                                                                className={`chat-action-btn ${btn.label.toLowerCase().includes('ambos') ? 'chat-action-btn-both' : ''}`}
-                                                                                onClick={() => handleButtonClick(btn.prompt)}
-                                                                            >
-                                                                                🏢 {btn.label}
-                                                                            </button>
-                                                                        ))}
+                                                            )}
+
+                                                            {/* Tarjeta elegante cuando la consulta fue detenida */}
+                                                            {isStoppedMsg && (
+                                                                <div className={`chat-stopped-notice ${cleanText ? 'with-partial-text' : ''}`}>
+                                                                    <div className="chat-stopped-left">
+                                                                        <span className="chat-stopped-icon-badge" aria-hidden="true">
+                                                                            <Square size={10} fill="currentColor" />
+                                                                        </span>
+                                                                        <div className="chat-stopped-copy">
+                                                                            <span className="chat-stopped-title">Consulta detenida</span>
+                                                                            <span className="chat-stopped-sub">Respuesta interrumpida a petición tuya</span>
+                                                                        </div>
                                                                     </div>
-                                                                )}
-                                                            </>
-                                                        ) : (
-                                                            <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
-                                                        )
+                                                                    {previousUserPrompt && !isResponding && (
+                                                                        <button
+                                                                            type="button"
+                                                                            className="chat-stopped-retry-btn"
+                                                                            onClick={() => handleButtonClick(previousUserPrompt)}
+                                                                            title="Volver a enviar esta consulta"
+                                                                        >
+                                                                            <RotateCcw size={12} />
+                                                                            <span>Reintentar</span>
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            {!isThisBotStreaming && !isStoppedMsg && buttons.length > 0 && (
+                                                                <div className="chat-action-buttons">
+                                                                    {buttons.map((btn, bIdx) => (
+                                                                        <button
+                                                                            key={bIdx}
+                                                                            type="button"
+                                                                            className={`chat-action-btn ${btn.label.toLowerCase().includes('ambos') ? 'chat-action-btn-both' : ''}`}
+                                                                            onClick={() => handleButtonClick(btn.prompt)}
+                                                                        >
+                                                                            {btn.label}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </>
                                                     ) : (
-                                                        <div className="streaming-indicator">
-                                                            <Loader2 size={16} className="spin-icon" />
-                                                            <span>Consultando información...</span>
-                                                        </div>
+                                                        <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
                                                     )}
                                                 </div>
                                                 {msg.sender === 'user' && (
@@ -571,60 +784,38 @@ export default function ChatWidget() {
                                 <div ref={messagesEndRef} />
                             </div>
 
-                            {/* Sugerencias Rápidas */}
                             <div className="chat-quick-suggestions">
-                                {[
-                                    { label: '📝 Reservar habitación', q: 'Quiero hacer una reservación para la habitación 102' },
-                                    { label: '⏳ Habitaciones en pre-reserva', q: 'Dame las habitaciones en pre reserva' },
-                                    { label: '🔍 Consultar reservación', q: 'Consultar reservación HP-2026-00009' },
-                                    { label: '💎 Habitación más cara', q: '¿Cuál es la habitación más cara del hotel?' },
-                                    { label: '📊 Resumen operativo de hoy', q: 'Dame el resumen operativo completo del Hotel Paraíso' },
-                                    { label: '🟢 Disponibles hoy', q: '¿Qué habitaciones están disponibles actualmente?' },
-                                    { label: '♿ Libres en planta baja', q: '¿Qué habitaciones están disponibles en planta baja para un adulto mayor?' },
-                                    { label: '🛠️ Mantenimiento (Hotel)', q: 'Dame las habitaciones en mantenimiento de un hotel en específico' },
-                                    { label: '🔧 Mantenimiento (Ambos)', q: '¿Qué habitaciones están en mantenimiento? Revisa en ambos hoteles' },
-                                    { label: '🏨 Habitaciones Hotel Paraíso', q: '¿Qué habitaciones tiene el Hotel Paraíso?' },
-                                    { label: '📊 Total ambos hoteles', q: '¿Cuántas habitaciones hay por ambos hoteles?' },
-                                    { label: '🔍 Estatus de habitación', q: '¿Qué estatus tiene la habitación 202 del Hotel Paraíso?' },
-                                    { label: '👥 Para 4 personas', q: '¿Qué habitaciones o tipos tienen para 4 personas?' },
-                                    { label: '💵 Tipos y precios', q: '¿Qué tipos de habitaciones existen y cuánto cuestan?' },
-                                    { label: '⏳ Vigencia pre-reserva', q: '¿Cuánto tiempo dura una pre-reserva y cuándo se cancela si no pagan?' },
-                                    { label: '❌ Cancelación y reembolso', q: '¿Cuál es la política de cancelación y porcentaje de reembolso según los días?' },
-                                    { label: '🌙 No-Show a las 10 PM', q: '¿Cómo se maneja el No-Show a las 8 PM y a las 10 PM?' },
-                                    { label: '🚨 Sobreventa (Overbooking)', q: '¿Cuál es el protocolo del hotel en caso de sobreventa o overbooking?' },
-                                    { label: '💰 Ingreso potencial', q: '¿Cuánto dinero se ingresaría si se rentan todas las habitaciones?' }
-                                ].map((chip) => (
+                                {suggestionChips.map((chip) => (
                                     <button
                                         key={chip.label}
                                         type="button"
                                         className="suggestion-chip"
                                         onClick={() => setInput(chip.q)}
-                                        disabled={isLoading}
+                                        disabled={isResponding}
                                     >
                                         {chip.label}
                                     </button>
                                 ))}
                             </div>
 
-                            {/* Formulario de Entrada */}
                             <form onSubmit={handleSend} className="chat-input-form">
                                 <input
                                     type="text"
-                                    placeholder={isLoading ? "El recepcionista está respondiendo..." : "Pregunte sobre hoteles, tarifas, habitaciones o reservaciones..."}
+                                    placeholder="Escribe tu consulta sobre hoteles, tarifas o reservaciones..."
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
-                                    disabled={isLoading}
+                                    disabled={isResponding}
                                     className="chat-input"
                                 />
-                                {isLoading ? (
+                                {isResponding ? (
                                     <button
                                         type="button"
                                         onClick={handleCancelQuery}
                                         className="chat-stop-btn"
-                                        title="Detener / Cancelar respuesta"
+                                        title="Detener respuesta"
                                         aria-label="Detener respuesta"
                                     >
-                                        <Square size={16} fill="white" />
+                                        <Square size={15} fill="white" />
                                     </button>
                                 ) : (
                                     <button
@@ -658,7 +849,6 @@ export default function ChatWidget() {
                 )}
             </button>
 
-            {/* Diálogo de confirmación con el diseño del sistema */}
             <ConfirmDialog
                 isOpen={Boolean(convToDelete)}
                 onClose={() => setConvToDelete(null)}

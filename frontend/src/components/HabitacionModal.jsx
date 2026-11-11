@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { X, BedDouble, Building, Layers, Hash, Info, CheckCircle2 } from 'lucide-react';
+import { BedDouble, Building, Layers, Hash, Info, CheckCircle2 } from 'lucide-react';
+import Modal from './Modal';
 
 /**
  * HabitacionModal.jsx
@@ -50,20 +50,6 @@ export default function HabitacionModal({
         setError('');
     }, [habitacionParaEditar, isOpen, hoteles, tiposHabitacion, defaultPiso]);
 
-    // Difuminar fondo y manejar Escape
-    useEffect(() => {
-        if (!isOpen) return;
-        document.body.classList.add('modal-open');
-        const handleKeyDown = (e) => {
-            if (e.key === 'Escape' && onClose) onClose();
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            document.body.classList.remove('modal-open');
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [isOpen, onClose]);
-
     if (!isOpen) return null;
 
     const handleSubmit = async (e) => {
@@ -79,7 +65,7 @@ export default function HabitacionModal({
             return;
         }
         if (!formData.idTipo) {
-            setError('Debes seleccionar el tipo de habitación.');
+            setError('Debes seleccionar la categoría de habitación.');
             return;
         }
 
@@ -108,146 +94,131 @@ export default function HabitacionModal({
 
     const isEdit = Boolean(habitacionParaEditar);
 
-    return createPortal(
-        <div className="modal-overlay modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
-            <div className="modal-container modal-card" onClick={(e) => e.stopPropagation()}>
-                {/* Header del Modal */}
-                <div className="modal-header">
-                    <div className="modal-title-wrapper">
-                        <div className="modal-icon-badge">
-                            <BedDouble size={22} />
-                        </div>
-                        <div>
-                            <h2 className="modal-title">
-                                {isEdit ? `Editar Habitación #${habitacionParaEditar.numero}` : 'Registrar Nueva Habitación'}
-                            </h2>
-                            <p className="modal-subtitle">
-                                {isEdit
-                                    ? 'Modifica los datos y relaciones de la habitación seleccionada'
-                                    : 'Completa la información para dar de alta una nueva habitación'}
-                            </p>
-                        </div>
+    return (
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title={isEdit ? `Editar Habitación #${habitacionParaEditar.numero}` : 'Registrar Nueva Habitación'}
+            subtitle={
+                isEdit
+                    ? 'Modifica los datos y relaciones de la habitación seleccionada'
+                    : 'Completa la información para dar de alta una nueva habitación'
+            }
+            icon={BedDouble}
+            maxWidth="530px"
+        >
+            <form onSubmit={handleSubmit} className="modal-form">
+                {error && (
+                    <div className="alert alert-error">
+                        <Info size={18} />
+                        <span>{error}</span>
                     </div>
-                    <button className="modal-close-btn" onClick={onClose} aria-label="Cerrar modal">
-                        <X size={20} />
-                    </button>
+                )}
+
+                <div className="form-grid">
+                    {/* 1. Número de Habitación */}
+                    <div className="form-group">
+                        <label className="form-label">
+                            <Hash size={16} /> Número de Habitación *
+                        </label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            placeholder="Ej. 101, 204, Suite-A"
+                            value={formData.numero}
+                            onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
+                            required
+                        />
+                    </div>
+
+                    {/* 2. Piso Seleccionable Solo Existentes */}
+                    <div className="form-group">
+                        <label className="form-label">
+                            <Layers size={16} /> Piso / Nivel (Solo Existentes) *
+                        </label>
+                        <select
+                            className="form-select"
+                            value={formData.piso}
+                            onChange={(e) => setFormData({ ...formData, piso: e.target.value })}
+                            required
+                        >
+                            <option value="">-- Seleccionar Piso --</option>
+                            {pisosDisponibles.map((p) => (
+                                <option key={p} value={p}>
+                                    Piso {p}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
-                {/* Formulario */}
-                <form onSubmit={handleSubmit} className="modal-form">
-                    {error && (
-                        <div className="alert alert-error">
-                            <Info size={18} />
-                            <span>{error}</span>
-                        </div>
-                    )}
+                {/* 3. Selección de Hotel (Llave Foránea) */}
+                <div className="form-group">
+                    <label className="form-label">
+                        <Building size={16} /> Hotel de la Cadena *
+                    </label>
+                    <select
+                        className="form-select"
+                        value={formData.idHotel}
+                        onChange={(e) => setFormData({ ...formData, idHotel: e.target.value })}
+                        required
+                    >
+                        <option value="">-- Selecciona el Hotel --</option>
+                        {hoteles.map((h) => (
+                            <option key={h.idHotel} value={h.idHotel}>
+                                {h.nombre} ({h.ciudad}) {h.activo ? '• Activo' : '• Inactivo'}
+                            </option>
+                        ))}
+                    </select>
+                </div>
 
-                    <div className="form-grid">
-                        {/* 1. Número de Habitación */}
-                        <div className="form-group">
-                            <label className="form-label">
-                                <Hash size={16} /> Número de Habitación *
-                            </label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                placeholder="Ej. 101, 204, Suite-A"
-                                value={formData.numero}
-                                onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
-                                required
-                            />
-                        </div>
+                {/* 4. Selección de Categoría de Habitación (Llave Foránea) */}
+                <div className="form-group">
+                    <label className="form-label">
+                        <BedDouble size={16} /> Categoría de Habitación *
+                    </label>
+                    <select
+                        className="form-select"
+                        value={formData.idTipo}
+                        onChange={(e) => setFormData({ ...formData, idTipo: e.target.value })}
+                        required
+                    >
+                        <option value="">-- Selecciona la Categoría --</option>
+                        {tiposHabitacion.map((t) => (
+                            <option key={t.idTipo} value={t.idTipo}>
+                                {t.nombre} — Capacidad: {t.capacidad} pers. — ${Number(t.precioBase).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN/noche
+                            </option>
+                        ))}
+                    </select>
+                </div>
 
-                        {/* 2. Piso Seleccionable Solo Existentes */}
-                        <div className="form-group">
-                            <label className="form-label">
-                                <Layers size={16} /> Piso / Nivel (Solo Existentes) *
-                            </label>
-                            <select
-                                className="form-select"
-                                value={formData.piso}
-                                onChange={(e) => setFormData({ ...formData, piso: e.target.value })}
-                                required
-                            >
-                                <option value="">-- Seleccionar Piso --</option>
-                                {pisosDisponibles.map((p) => (
-                                    <option key={p} value={p}>
-                                        Piso {p}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
+                {/* 5. Estado de la Habitación */}
+                <div className="form-group">
+                    <label className="form-label">
+                        <CheckCircle2 size={16} /> Estado Inicial *
+                    </label>
+                    <select
+                        className="form-select"
+                        value={formData.estado}
+                        onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
+                    >
+                        <option value="Disponible">🟢 Disponible (Lista para rentar)</option>
+                        <option value="Pendiente">🟡 Pendiente (Pre-reserva temporal)</option>
+                        <option value="Ocupada">🔵 Ocupada (Huésped hospedado)</option>
+                        <option value="Mantenimiento">🟠 Mantenimiento (Limpieza o reparación)</option>
+                    </select>
+                </div>
 
-                    {/* 3. Selección de Hotel (Llave Foránea) */}
-                    <div className="form-group">
-                        <label className="form-label">
-                            <Building size={16} /> Hotel de la Cadena *
-                        </label>
-                        <select
-                            className="form-select"
-                            value={formData.idHotel}
-                            onChange={(e) => setFormData({ ...formData, idHotel: e.target.value })}
-                            required
-                        >
-                            <option value="">-- Selecciona el Hotel --</option>
-                            {hoteles.map((h) => (
-                                <option key={h.idHotel} value={h.idHotel}>
-                                    {h.nombre} ({h.ciudad}) {h.activo ? '• Activo' : '• Inactivo'}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* 4. Selección de Tipo de Habitación (Llave Foránea) */}
-                    <div className="form-group">
-                        <label className="form-label">
-                            <BedDouble size={16} /> Tipo de Habitación & Categoría *
-                        </label>
-                        <select
-                            className="form-select"
-                            value={formData.idTipo}
-                            onChange={(e) => setFormData({ ...formData, idTipo: e.target.value })}
-                            required
-                        >
-                            <option value="">-- Selecciona el Tipo de Habitación --</option>
-                            {tiposHabitacion.map((t) => (
-                                <option key={t.idTipo} value={t.idTipo}>
-                                    {t.nombre} — Capacidad: {t.capacidad} pers. — ${Number(t.precioBase).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN/noche
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* 5. Estado de la Habitación */}
-                    <div className="form-group">
-                        <label className="form-label">
-                            <CheckCircle2 size={16} /> Estado Inicial *
-                        </label>
-                        <select
-                            className="form-select"
-                            value={formData.estado}
-                            onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-                        >
-                            <option value="Disponible">🟢 Disponible (Lista para rentar)</option>
-                            <option value="Pendiente">🟡 Pendiente (Pre-reserva temporal)</option>
-                            <option value="Ocupada">🔵 Ocupada (Huésped hospedado)</option>
-                            <option value="Mantenimiento">🟠 Mantenimiento (Limpieza o reparación)</option>
-                        </select>
-                    </div>
-
-                    {/* Botones de Acción */}
-                    <div className="modal-actions">
-                        <button type="button" className="btn btn-secondary" onClick={onClose} disabled={guardando}>
-                            Cancelar
-                        </button>
-                        <button type="submit" className="btn btn-primary" disabled={guardando}>
-                            {guardando ? 'Guardando...' : isEdit ? 'Actualizar Cambios' : 'Registrar Habitación'}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>,
-        document.body
+                {/* Botones de Acción */}
+                <div className="modal-actions">
+                    <button type="button" className="btn btn-secondary" onClick={onClose} disabled={guardando}>
+                        Cancelar
+                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={guardando}>
+                        {guardando ? 'Guardando...' : isEdit ? 'Actualizar Cambios' : 'Registrar Habitación'}
+                    </button>
+                </div>
+            </form>
+        </Modal>
     );
 }
