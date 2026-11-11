@@ -1,11 +1,17 @@
 package com.ico.hotel.tools;
 
 import com.ico.hotel.models.Habitacion;
+import com.ico.hotel.models.Hotel;
+import com.ico.hotel.models.Rol;
 import com.ico.hotel.repository.HabitacionRepository;
+import com.ico.hotel.repository.HotelRepository;
+import com.ico.hotel.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -18,8 +24,39 @@ import java.util.Map;
 public class HabitacionSearchTool {
 
     private final HabitacionRepository habitacionRepository;
+    private final HotelRepository hotelRepository;
+    private static HotelRepository staticHotelRepository;
+
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        staticHotelRepository = this.hotelRepository;
+    }
+
     private final ThreadLocal<java.util.concurrent.atomic.AtomicInteger> callCount = ThreadLocal.withInitial(java.util.concurrent.atomic.AtomicInteger::new);
     public static final ThreadLocal<String> CURRENT_USER_PROMPT = new ThreadLocal<>();
+    public static final ThreadLocal<CustomUserDetails> CURRENT_AUTH_USER = new ThreadLocal<>();
+
+    public static CustomUserDetails getAuthenticatedUser() {
+        CustomUserDetails tl = CURRENT_AUTH_USER.get();
+        if (tl != null) return tl;
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof CustomUserDetails cud) {
+            return cud;
+        }
+        return null;
+    }
+
+    public static boolean esHuespedActual() {
+        CustomUserDetails u = getAuthenticatedUser();
+        return u != null && u.getRol() == Rol.HUESPED;
+    }
+
+    private List<Map<String, Object>> respuestaRestringidaHuesped() {
+        return List.of(Map.of(
+                "accesoRestringido", true,
+                "mensaje", "Por políticas de seguridad y privacidad del hotel, la información operativa interna (habitaciones en mantenimiento, habitaciones ocupadas, reportes de turno e ingresos) es exclusiva para el personal autorizado del hotel (Recepción, Gerencia y Administración). Como huésped, con gusto puedo brindarle información sobre habitaciones disponibles, tipos de habitación, tarifas y sus propias reservaciones."
+        ));
+    }
 
     public void resetCallTracker() {
         callCount.get().set(0);
@@ -35,33 +72,63 @@ public class HabitacionSearchTool {
     }
 
     public static String resolverNombreHotelExacto(String nombreHotel) {
+        List<Hotel> hotelesDisponibles = staticHotelRepository != null ? staticHotelRepository.findAll() : List.of();
+
         if (nombreHotel != null && !nombreHotel.isBlank()) {
             String norm = java.text.Normalizer.normalize(nombreHotel.toLowerCase().trim(), java.text.Normalizer.Form.NFD)
                     .replaceAll("\\p{M}", "");
-            if (norm.contains("ejecutiv")) {
-                return "Hotel Paraíso Ejecutivo";
+
+            // 1. Coincidencia exacta o por contención ordenada de mayor a menor longitud
+            List<Hotel> ordenados = hotelesDisponibles.stream()
+                    .filter(h -> h.getNombre() != null)
+                    .sorted((a, b) -> Integer.compare(b.getNombre().length(), a.getNombre().length()))
+                    .toList();
+
+            for (Hotel h : ordenados) {
+                String normH = java.text.Normalizer.normalize(h.getNombre().toLowerCase().trim(), java.text.Normalizer.Form.NFD)
+                        .replaceAll("\\p{M}", "");
+                if (norm.equals(normH) || norm.contains(normH) || normH.contains(norm)) {
+                    return h.getNombre();
+                }
             }
-            if (norm.contains("paraiso")) {
-                return "Hotel Paraíso";
-            }
+            return nombreHotel.trim();
         }
+
         String prompt = CURRENT_USER_PROMPT.get();
         if (prompt != null && !prompt.isBlank()) {
             String normPrompt = java.text.Normalizer.normalize(prompt.toLowerCase().trim(), java.text.Normalizer.Form.NFD)
                     .replaceAll("\\p{M}", "");
-            if (normPrompt.contains("ejecutiv")) {
-                return "Hotel Paraíso Ejecutivo";
-            }
-            if (normPrompt.contains("paraiso") && !normPrompt.contains("ambos")) {
-                return "Hotel Paraíso";
+
+            if (!normPrompt.contains("ambos") && !normPrompt.contains("toda")) {
+                List<Hotel> ordenados = hotelesDisponibles.stream()
+                        .filter(h -> h.getNombre() != null)
+                        .sorted((a, b) -> Integer.compare(b.getNombre().length(), a.getNombre().length()))
+                        .toList();
+
+                for (Hotel h : ordenados) {
+                    String normH = java.text.Normalizer.normalize(h.getNombre().toLowerCase().trim(), java.text.Normalizer.Form.NFD)
+                            .replaceAll("\\p{M}", "");
+                    if (normPrompt.contains(normH)) {
+                        return h.getNombre();
+                    }
+                }
             }
         }
         return null;
     }
 
-    @Tool(description = "Buscar habitaciones disponibles en un hotel específico (Hotel Paraíso o Hotel Paraíso Ejecutivo). Útil para: 'dame las habitaciones disponibles del Hotel Paraíso', 'habitaciones disponibles en Paraíso'.")
+    private List<Habitacion> filtrarParaRolActual(List<Habitacion> lista) {
+        if (!esHuespedActual()) {
+            return lista;
+        }
+        return lista.stream()
+                .filter(h -> "Disponible".equalsIgnoreCase(h.getEstado()))
+                .toList();
+    }
+
+    @Tool(description = "Buscar habitaciones disponibles en un hotel específico (ej. Hotel Paraíso, Hotel Paraíso Ejecutivo o cualquier hotel registrado). Útil para: 'dame las habitaciones disponibles del Hotel Paraíso', 'habitaciones disponibles en [hotel]'.")
     public List<Map<String, Object>> findDisponiblesEnHotel(
-            @ToolParam(description = "Nombre del hotel, por ejemplo: Hotel Paraíso, Hotel Paraíso Ejecutivo", required = false)
+            @ToolParam(description = "Nombre del hotel, por ejemplo: Hotel Paraíso, Hotel Paraíso Ejecutivo, Hotel UAEM", required = false)
             String hotel) {
         log.info("Tool invocada — findDisponiblesEnHotel: hotel={}", hotel);
         if (checkLoop("findDisponiblesEnHotel")) {
@@ -76,26 +143,29 @@ public class HabitacionSearchTool {
                 .toList();
     }
 
-    @Tool(description = "Listar todas las habitaciones de un hotel especifico, sin importar su estado (Disponible, Ocupada o Mantenimiento). Útil para: ¿Qué habitaciones tiene el Hotel Paraíso?")
+    @Tool(description = "Listar las habitaciones de un hotel específico. Si el usuario es ADMINISTRADOR muestra todas; si es HUESPED muestra solo las disponibles.")
     public List<Map<String, Object>> findHabitacionesPorHotel(
-            @ToolParam(description = "Nombre del hotel, por ejemplo: Hotel Paraíso, Hotel Paraíso Ejecutivo", required = false)
+            @ToolParam(description = "Nombre del hotel, por ejemplo: Hotel Paraíso, Hotel Paraíso Ejecutivo, Hotel UAEM", required = false)
             String hotel) {
         log.info("Tool invocada — findHabitacionesPorHotel: hotel={}", hotel);
         if (checkLoop("findHabitacionesPorHotel")) {
             return List.of(Map.of("aviso", "Información suficiente obtenida. Procede a redactar la respuesta final ahora."));
         }
         String exactHotel = resolverNombreHotelExacto(hotel);
-        if (exactHotel == null) {
-            return habitacionRepository.findAll().stream().map(this::mapearHabitacionSimple).toList();
-        }
-        return habitacionRepository.findByHotelNombreExacto(exactHotel).stream()
+        List<Habitacion> base = (exactHotel == null)
+                ? habitacionRepository.findAll()
+                : habitacionRepository.findByHotelNombreExacto(exactHotel);
+        return filtrarParaRolActual(base).stream()
                 .map(this::mapearHabitacionSimple)
                 .toList();
     }
 
-    @Tool(description = "Listar directamente las habitaciones que están en mantenimiento en toda la cadena. IMPORTANTE: Esta herramienta ya devuelve toda la información. NO necesitas llamar a ninguna otra herramienta después de esta.")
+    @Tool(description = "Listar directamente las habitaciones que están en mantenimiento en toda la cadena. EXCLUSIVO PARA ADMINISTRADOR.")
     public List<Map<String, Object>> findHabitacionesEnMantenimiento() {
         log.info("Tool invocada — findHabitacionesEnMantenimiento");
+        if (esHuespedActual()) {
+            return respuestaRestringidaHuesped();
+        }
         if (checkLoop("findHabitacionesEnMantenimiento")) {
             return List.of(Map.of("aviso", "Información suficiente obtenida. Procede a redactar la respuesta final ahora."));
         }
@@ -104,11 +174,14 @@ public class HabitacionSearchTool {
                 .toList();
     }
 
-    @Tool(description = "Listar las habitaciones que están en mantenimiento en un hotel específico (Hotel Paraíso o Hotel Paraíso Ejecutivo). Ya devuelve todos los datos completos.")
+    @Tool(description = "Listar las habitaciones que están en mantenimiento en un hotel específico. EXCLUSIVO PARA ADMINISTRADOR.")
     public List<Map<String, Object>> findMantenimientoEnHotel(
-            @ToolParam(description = "Nombre del hotel, por ejemplo: Hotel Paraíso, Hotel Paraíso Ejecutivo", required = false)
+            @ToolParam(description = "Nombre del hotel, por ejemplo: Hotel Paraíso, Hotel Paraíso Ejecutivo, Hotel UAEM", required = false)
             String hotel) {
         log.info("Tool invocada — findMantenimientoEnHotel: hotel={}", hotel);
+        if (esHuespedActual()) {
+            return respuestaRestringidaHuesped();
+        }
         if (checkLoop("findMantenimientoEnHotel")) {
             return List.of(Map.of("aviso", "Información suficiente obtenida. Procede a redactar la respuesta final ahora."));
         }
@@ -121,11 +194,11 @@ public class HabitacionSearchTool {
                 .toList();
     }
 
-    @Tool(description = "Consultar los datos de una única habitación específica por su número (ej. 101, 202, 301) y opcionalmente el nombre del hotel para saber su estatus actual, piso, tipo y precio.")
+    @Tool(description = "Consultar los datos de una única habitación específica por su número (ej. 101, 202, 301) y opcionalmente el nombre del hotel.")
     public List<Map<String, Object>> findEstadoHabitacionEnHotel(
             @ToolParam(description = "Número exacto de la habitación, por ejemplo: '101', '201', '202', '301'")
             String numero,
-            @ToolParam(description = "Nombre del hotel (ej. 'Hotel Paraíso' o 'Hotel Paraíso Ejecutivo'), opcional", required = false)
+            @ToolParam(description = "Nombre del hotel (ej. 'Hotel Paraíso', 'Hotel Paraíso Ejecutivo', 'Hotel UAEM'), opcional", required = false)
             String hotel) {
         log.info("Tool invocada — findEstadoHabitacionEnHotel: numero={}, hotel={}", numero, hotel);
         if (checkLoop("findEstadoHabitacionEnHotel")) {
@@ -135,6 +208,16 @@ public class HabitacionSearchTool {
         List<Habitacion> lista = (exactHotel == null)
                 ? habitacionRepository.findByNumero(numero)
                 : habitacionRepository.findByNumeroAndHotelNombre(numero, exactHotel);
+        if (esHuespedActual()) {
+            return lista.stream().map(h -> Map.<String, Object>of(
+                    "hotel", h.getHotel() != null ? h.getHotel().getNombre() : "N/A",
+                    "numero", h.getNumero() != null ? h.getNumero() : "N/A",
+                    "piso", h.getPiso() != null ? h.getPiso() : 1,
+                    "tipo", h.getTipoHabitacion() != null ? h.getTipoHabitacion().getNombre() : "N/A",
+                    "precioBase", h.getTipoHabitacion() != null && h.getTipoHabitacion().getPrecioBase() != null ? h.getTipoHabitacion().getPrecioBase() : BigDecimal.ZERO,
+                    "disponibleHoy", "Disponible".equalsIgnoreCase(h.getEstado()) ? "Disponible" : "No disponible en este momento"
+            )).toList();
+        }
         return lista.stream().map(this::mapearHabitacionSimple).toList();
     }
 
@@ -153,28 +236,31 @@ public class HabitacionSearchTool {
     @Tool(description = "Obtener la habitación más cara o exclusiva de toda la cadena hotelera, incluyendo hotel, número, tipo y precio por noche.")
     public List<Map<String, Object>> findHabitacionMasCara() {
         log.info("Tool invocada — findHabitacionMasCara");
-        return soloLaPrimera(habitacionRepository.findOrdenadasPorPrecioDesc());
+        return soloLaPrimera(filtrarParaRolActual(habitacionRepository.findOrdenadasPorPrecioDesc()));
     }
 
-    @Tool(description = "Obtener la habitación más cara o exclusiva de un hotel en específico, o de toda la cadena si no se menciona un hotel. Útil para: ¿Cuál es la habitación más cara del hotel?, ¿Cuál es la habitación más cara del Hotel Paraíso?")
+    @Tool(description = "Obtener la habitación más cara o exclusiva de un hotel en específico, o de toda la cadena si no se menciona un hotel.")
     public List<Map<String, Object>> findHabitacionMasCaraEnHotel(
             @ToolParam(description = "Nombre del hotel, por ejemplo: Hotel Paraíso, Hotel Paraíso Ejecutivo. Déjelo vacío si no indicaron hotel.", required = false)
             String hotel) {
         log.info("Tool invocada — findHabitacionMasCaraEnHotel: hotel={}", hotel);
         String exactHotel = resolverNombreHotelExacto(hotel);
         if (exactHotel == null) {
-            return soloLaPrimera(habitacionRepository.findOrdenadasPorPrecioDesc());
+            return soloLaPrimera(filtrarParaRolActual(habitacionRepository.findOrdenadasPorPrecioDesc()));
         }
-        return soloLaPrimera(habitacionRepository.findOrdenadasPorPrecioDescEnHotel(exactHotel));
+        return soloLaPrimera(filtrarParaRolActual(habitacionRepository.findOrdenadasPorPrecioDescEnHotel(exactHotel)));
     }
 
-    @Tool(description = "Listar todas las habitaciones ocupadas actualmente en la cadena hotelera.")
+    @Tool(description = "Listar todas las habitaciones ocupadas actualmente en la cadena hotelera. EXCLUSIVO PARA ADMINISTRADOR.")
     public List<Map<String, Object>> findHabitacionesOcupadas() {
         log.info("Tool invocada — findHabitacionesOcupadas");
+        if (esHuespedActual()) {
+            return respuestaRestringidaHuesped();
+        }
         return habitacionRepository.findOcupadas().stream().map(this::mapearHabitacionSimple).toList();
     }
 
-    @Tool(description = "Listar todas las habitaciones disponibles en la cadena hotelera ÚNICAMENTE cuando el usuario NO mencione ningún presupuesto ni límite de precio. ESTRICTAMENTE PROHIBIDO llamar a esta función si el usuario menciona un presupuesto, un precio tope o dinero (para presupuestos o montos usar OBLIGATORIAMENTE findHabitacionesDisponiblesPorPresupuesto).")
+    @Tool(description = "Listar todas las habitaciones disponibles en la cadena hotelera ÚNICAMENTE cuando el usuario NO mencione ningún presupuesto ni límite de precio.")
     public List<Map<String, Object>> findHabitacionesDisponibles() {
         log.info("Tool invocada — findHabitacionesDisponibles");
         if (checkLoop("findHabitacionesDisponibles")) {
@@ -182,7 +268,6 @@ public class HabitacionSearchTool {
         }
         String exactHotel = resolverNombreHotelExacto(null);
         if (exactHotel != null) {
-            log.info("findHabitacionesDisponibles: Filtrando automáticamente por hotel detectado en el contexto: {}", exactHotel);
             return habitacionRepository.findDisponiblesEnHotel(exactHotel).stream()
                     .map(this::mapearHabitacionSimple)
                     .toList();
@@ -190,7 +275,7 @@ public class HabitacionSearchTool {
         return habitacionRepository.findDisponibles().stream().map(this::mapearHabitacionSimple).toList();
     }
 
-    @Tool(description = "Listar las habitaciones de un piso específico (ej. piso 1, 2 o 3) de un hotel. OBLIGATORIA para: 'Mostrar el detalle de habitaciones en el piso 1 en Hotel Paraíso', 'habitaciones en el piso 1'.")
+    @Tool(description = "Listar las habitaciones de un piso específico (ej. piso 1, 2 o 3) de un hotel.")
     public List<Map<String, Object>> findHabitacionesPorPiso(
             @ToolParam(description = "Número de piso, por ejemplo: 1, 2, 3")
             Integer piso,
@@ -211,7 +296,7 @@ public class HabitacionSearchTool {
         List<Habitacion> lista = (exactHotel == null)
                 ? habitacionRepository.findByPiso(piso)
                 : habitacionRepository.findByHotelNombreAndPiso(exactHotel, piso);
-        return lista.stream().map(this::mapearHabitacionSimple).toList();
+        return filtrarParaRolActual(lista).stream().map(this::mapearHabitacionSimple).toList();
     }
 
     @Tool(description = "Listar todas las habitaciones de un tipo específico, por ejemplo: Habitación Individual, Habitación Doble, Habitación Matrimonial, Habitación Familiar o Suite Ejecutiva.")
@@ -219,24 +304,30 @@ public class HabitacionSearchTool {
             @ToolParam(description = "Nombre exacto o aproximado del tipo de habitación, por ejemplo: Suite Ejecutiva, Habitación Familiar")
             String tipoNombre) {
         log.info("Tool invocada — findHabitacionesPorTipo: tipo={}", tipoNombre);
-        return habitacionRepository.findByTipoNombre(tipoNombre).stream().map(this::mapearHabitacionSimple).toList();
+        return filtrarParaRolActual(habitacionRepository.findByTipoNombre(tipoNombre)).stream()
+                .map(this::mapearHabitacionSimple)
+                .toList();
     }
 
-    @Tool(description = "Listar todas las habitaciones en una ciudad específica (Cancún o Ciudad de México). PROHIBIDO usar si preguntan por pisos, hoteles o disponibilidad de habitaciones.")
+    @Tool(description = "Listar todas las habitaciones en una ciudad específica (Cancún o Ciudad de México).")
     public List<Map<String, Object>> findHabitacionesPorCiudad(
             @ToolParam(description = "Nombre de la ciudad: Cancún o Ciudad de México")
             String ciudad) {
         log.info("Tool invocada — findHabitacionesPorCiudad: ciudad={}", ciudad);
         if (ciudad != null && (ciudad.toLowerCase().contains("piso") || ciudad.toLowerCase().contains("paraiso") || ciudad.toLowerCase().contains("planta"))) {
-            log.info("findHabitacionesPorCiudad: La llamada era para piso o hotel. Redirigiendo a findHabitacionesPorPiso.");
             return findHabitacionesPorPiso(1, ciudad);
         }
-        return habitacionRepository.findByCiudad(ciudad).stream().map(this::mapearHabitacionSimple).toList();
+        return filtrarParaRolActual(habitacionRepository.findByCiudad(ciudad)).stream()
+                .map(this::mapearHabitacionSimple)
+                .toList();
     }
 
-    @Tool(description = "Obtener un resumen de cuántas habitaciones hay por cada estado (Disponible, Ocupada, Mantenimiento) en toda la cadena.")
+    @Tool(description = "Obtener un resumen de cuántas habitaciones hay por cada estado (Disponible, Ocupada, Mantenimiento) en toda la cadena. EXCLUSIVO PARA ADMINISTRADOR.")
     public List<Map<String, Object>> countHabitacionesPorEstado() {
         log.info("Tool invocada — countHabitacionesPorEstado");
+        if (esHuespedActual()) {
+            return respuestaRestringidaHuesped();
+        }
         return habitacionRepository.countHabitacionesPorEstado();
     }
 
@@ -246,27 +337,36 @@ public class HabitacionSearchTool {
         return habitacionRepository.countTotalHabitaciones();
     }
 
-    @Tool(description = "Contar cuántas habitaciones están en mantenimiento en toda la cadena hotelera.")
-    public Long countMantenimiento() {
+    @Tool(description = "Contar cuántas habitaciones están en mantenimiento en toda la cadena hotelera. EXCLUSIVO PARA ADMINISTRADOR.")
+    public Object countMantenimiento() {
         log.info("Tool invocada — countMantenimiento");
+        if (esHuespedActual()) {
+            return respuestaRestringidaHuesped();
+        }
         return habitacionRepository.countMantenimiento();
     }
 
-    @Tool(description = "Calcular el ingreso potencial máximo por noche si se rentan todas las habitaciones de la cadena.")
-    public BigDecimal sumIngresoPotencial() {
+    @Tool(description = "Calcular el ingreso potencial máximo por noche si se rentan todas las habitaciones de la cadena. EXCLUSIVO PARA ADMINISTRADOR.")
+    public Object sumIngresoPotencial() {
         log.info("Tool invocada — sumIngresoPotencial");
+        if (esHuespedActual()) {
+            return respuestaRestringidaHuesped();
+        }
         return habitacionRepository.sumIngresoPotencial();
     }
 
-    @Tool(description = "Listar las habitaciones disponibles ordenadas de la más barata a la más cara, con su tipo y precio por noche. NO usar si el usuario indicó un presupuesto máximo o tope de precio; para presupuestos usar findHabitacionesDisponiblesPorPresupuesto.")
+    @Tool(description = "Listar las habitaciones disponibles ordenadas de la más barata a la más cara, con su tipo y precio por noche.")
     public List<Map<String, Object>> findDisponiblesOrdenadasPorPrecio() {
         log.info("Tool invocada — findDisponiblesOrdenadasPorPrecio");
         return habitacionRepository.findDisponiblesOrdenadasPorPrecio().stream().map(this::mapearHabitacionSimple).toList();
     }
 
-    @Tool(description = "Obtener todas las habitaciones con su tipo y su precio por noche.")
+    @Tool(description = "Obtener las habitaciones con su tipo y su precio por noche.")
     public List<Map<String, Object>> getHabitacionesConTipoYPrecio() {
         log.info("Tool invocada — getHabitacionesConTipoYPrecio");
+        if (esHuespedActual()) {
+            return habitacionRepository.findDisponibles().stream().map(this::mapearHabitacionSimple).toList();
+        }
         return habitacionRepository.findHabitacionesConTipoYPrecio();
     }
 
@@ -282,10 +382,10 @@ public class HabitacionSearchTool {
         List<Habitacion> lista = (exactHotel == null)
                 ? habitacionRepository.findByPiso(1)
                 : habitacionRepository.findByHotelNombreAndPiso(exactHotel, 1);
-        return lista.stream().map(this::mapearHabitacionSimple).toList();
+        return filtrarParaRolActual(lista).stream().map(this::mapearHabitacionSimple).toList();
     }
 
-    @Tool(description = "Buscar habitaciones disponibles que se ajusten a un presupuesto máximo por noche en pesos. OBLIGATORIO usar cuando el recepcionista o huésped mencione un presupuesto o monto en dinero (ej. 'hasta 1000 pesos', 'menos de 1500'). PROHIBIDO usar si no hay un presupuesto o monto numérico.")
+    @Tool(description = "Buscar habitaciones disponibles que se ajusten a un presupuesto máximo por noche en pesos.")
     public List<Map<String, Object>> findHabitacionesDisponiblesPorPresupuesto(
             @ToolParam(description = "Presupuesto máximo por noche en pesos, ej. 850, 1200, 1500, 2000")
             Double presupuestoMaximo) {
@@ -311,37 +411,37 @@ public class HabitacionSearchTool {
         return habitacionRepository.countDisponiblesPorHotel();
     }
 
-    @Tool(description = "Buscar habitaciones que estén DISPONIBLES en Planta Baja (Piso 1) en un hotel o en toda la cadena. Especialmente útil cuando llega o llama un adulto mayor o una persona con movilidad reducida (sillas de ruedas).")
+    @Tool(description = "Buscar habitaciones que estén DISPONIBLES en Planta Baja (Piso 1) en un hotel o en toda la cadena.")
     public List<Map<String, Object>> findDisponiblesPlantaBaja(
             @ToolParam(description = "Nombre del hotel (opcional). Por ejemplo: Hotel Paraíso, Hotel Paraíso Ejecutivo. Dejar vacío para revisar ambos hoteles.", required = false)
             String hotel) {
         log.info("Tool invocada — findDisponiblesPlantaBaja: hotel={}", hotel);
         String exactHotel = resolverNombreHotelExacto(hotel);
-        List<Habitacion> piso1;
-        if (exactHotel == null) {
-            piso1 = habitacionRepository.findByPiso(1);
-        } else {
-            piso1 = habitacionRepository.findByHotelNombreAndPiso(exactHotel, 1);
-        }
+        List<Habitacion> piso1 = (exactHotel == null)
+                ? habitacionRepository.findByPiso(1)
+                : habitacionRepository.findByHotelNombreAndPiso(exactHotel, 1);
         return piso1.stream()
                 .filter(h -> "Disponible".equalsIgnoreCase(h.getEstado()))
                 .map(this::mapearHabitacionSimple)
                 .toList();
     }
 
-    @Tool(description = "Buscar habitaciones que tienen capacidad para 4 personas o huéspedes (Habitación Familiar). Útil para: ¿Qué habitaciones tienen capacidad para 4 huéspedes?, ¿Habitaciones familiares?")
+    @Tool(description = "Buscar habitaciones que tienen capacidad para 4 personas o huéspedes (Habitación Familiar).")
     public List<Map<String, Object>> findHabitacionesPara4Huespedes() {
         log.info("Tool invocada — findHabitacionesPara4Huespedes");
-        return habitacionRepository.findHabitacionesPara4Huespedes().stream()
+        return filtrarParaRolActual(habitacionRepository.findHabitacionesPara4Huespedes()).stream()
                 .map(this::mapearHabitacionSimple)
                 .toList();
     }
 
-    @Tool(description = "Obtener el resumen operativo completo o reporte de turno de ocupación: total de habitaciones, disponibles, ocupadas y en mantenimiento con porcentaje de ocupación. Usar para 'resumen operativo', 'reporte de turno' o estado general de un hotel o de la cadena. Devuelve todos los datos estructurados en una sola llamada.")
+    @Tool(description = "Obtener el resumen operativo completo o reporte de turno de ocupación: total de habitaciones, disponibles, ocupadas y en mantenimiento. EXCLUSIVO PARA ADMINISTRADOR.")
     public Map<String, Object> getResumenOperativoHotel(
             @ToolParam(description = "Nombre del hotel, por ejemplo: Hotel Paraíso, Hotel Paraíso Ejecutivo. Dejar vacío para toda la cadena.", required = false)
             String hotel) {
         log.info("Tool invocada — getResumenOperativoHotel: hotel={}", hotel);
+        if (esHuespedActual()) {
+            return respuestaRestringidaHuesped().get(0);
+        }
         if (checkLoop("getResumenOperativoHotel")) {
             return Map.of("aviso", "Información suficiente obtenida. Procede a redactar el resumen final ahora.");
         }

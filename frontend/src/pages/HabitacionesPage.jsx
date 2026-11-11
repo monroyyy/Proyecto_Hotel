@@ -16,12 +16,18 @@ import {
     Layers,
     DollarSign,
     RefreshCw,
-    Hourglass
+    Calendar,
+    CalendarPlus,
+    Eye,
+    X,
+    Sparkles
 } from 'lucide-react';
 
 import KpiCard from '../components/KpiCard';
 import HabitacionModal from '../components/HabitacionModal';
+import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useAuth } from '../context/AuthContext';
 import {
     getHabitaciones,
     getHoteles,
@@ -30,25 +36,39 @@ import {
     crearHabitacion,
     actualizarHabitacion,
     cambiarEstadoHabitacion,
-    eliminarHabitacion
+    eliminarHabitacion,
+    agregarDiaExtraHabitacion
 } from '../api/hotelApi';
+
+function formatearFechaCorta(fechaStr) {
+    if (!fechaStr) return '—';
+    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const partes = String(fechaStr).split('T')[0].split('-');
+    if (partes.length !== 3) return fechaStr;
+    return `${partes[2]} ${meses[parseInt(partes[1], 10) - 1] || partes[1]} ${partes[0]}`;
+}
 
 /**
  * HabitacionesPage.jsx
- * Interfaz principal para la administración de Habitaciones (La más compleja del sistema).
- * Incluye: KPIs interactivos, filtros combinados, CRUD completo, y cambio rápido de estados.
+ * Interfaz de administración de Habitaciones.
+ * Visualización clara, espaciosa, con modal detallado (botón "Ver"),
+ * gestión de ocupación y extensión de +1 día extra en habitaciones ocupadas.
  */
 export default function HabitacionesPage() {
+    const { isGerente, isAdmin } = useAuth();
+    const puedeGestionarCatalogo = isGerente || isAdmin;
+
     // Estados principales de datos
     const [habitaciones, setHabitaciones] = useState([]);
     const [hoteles, setHoteles] = useState([]);
     const [tiposHabitacion, setTiposHabitacion] = useState([]);
-    const [resumen, setResumen] = useState({ total: 0, disponibles: 0, pendientes: 0, ocupadas: 0, mantenimiento: 0 });
+    const [resumen, setResumen] = useState({ total: 0, disponibles: 0, ocupadas: 0, mantenimiento: 0 });
 
     // Estados de carga y alertas
     const [cargando, setCargando] = useState(true);
     const [errorMsg, setErrorMsg] = useState('');
     const [notificacion, setNotificacion] = useState(null);
+    const [extendiendoHabId, setExtendiendoHabId] = useState(null);
 
     // Estados de filtros
     const [busqueda, setBusqueda] = useState('');
@@ -57,12 +77,13 @@ export default function HabitacionesPage() {
     const [filtroEstado, setFiltroEstado] = useState('TODOS');
     const [filtroPiso, setFiltroPiso] = useState('');
 
-    // Estado del modal
+    // Estado de modales
     const [modalAbierto, setModalAbierto] = useState(false);
     const [habitacionAEditar, setHabitacionAEditar] = useState(null);
     const [habitacionAEliminar, setHabitacionAEliminar] = useState(null);
+    const [habitacionDetalle, setHabitacionDetalle] = useState(null);
 
-    // Cargar datos iniciales desde el backend de Spring Boot
+    // Cargar datos desde el backend
     const cargarDatos = async () => {
         try {
             setCargando(true);
@@ -80,16 +101,27 @@ export default function HabitacionesPage() {
             setTiposHabitacion(tiposData || []);
 
             if (resumenData) {
-                setResumen(resumenData);
+                setResumen({
+                    total: resumenData.total || 0,
+                    disponibles: resumenData.disponibles || 0,
+                    ocupadas: resumenData.ocupadas || 0,
+                    mantenimiento: resumenData.mantenimiento || 0
+                });
             } else if (habsData) {
-                // Cálculo de respaldo si el endpoint de resumen no estuviera disponible
                 setResumen({
                     total: habsData.length,
                     disponibles: habsData.filter(h => h.estado === 'Disponible').length,
-                    pendientes: habsData.filter(h => h.estado === 'Pendiente').length,
                     ocupadas: habsData.filter(h => h.estado === 'Ocupada').length,
                     mantenimiento: habsData.filter(h => h.estado === 'Mantenimiento').length
                 });
+            }
+
+            // Si hay un modal de detalle abierto, sincronizar sus datos
+            if (habitacionDetalle && habsData) {
+                const actualizada = habsData.find(h => h.idHabitacion === habitacionDetalle.idHabitacion);
+                if (actualizada) {
+                    setHabitacionDetalle(actualizada);
+                }
             }
         } catch (err) {
             console.error('Error al cargar datos:', err);
@@ -101,12 +133,36 @@ export default function HabitacionesPage() {
 
     useEffect(() => {
         cargarDatos();
+        const onUpdate = () => cargarDatos();
+        window.addEventListener('hotel:reserva-actualizada', onUpdate);
+        return () => window.removeEventListener('hotel:reserva-actualizada', onUpdate);
     }, []);
 
-    // Notificación flotante temporal
+    // Notificación flotante
     const mostrarMensaje = (tipo, texto) => {
         setNotificacion({ tipo, texto });
-        setTimeout(() => setNotificacion(null), 4000);
+        setTimeout(() => setNotificacion(null), 4500);
+    };
+
+    // Agregar +1 Día Extra a una habitación ya ocupada
+    const handleAgregarDiaExtra = async (hab) => {
+        if (!hab || extendiendoHabId) return;
+        setExtendiendoHabId(hab.idHabitacion);
+        try {
+            const actualizada = await agregarDiaExtraHabitacion(hab.idHabitacion, 1);
+            mostrarMensaje(
+                'exito',
+                `¡Día extra agregado a la Habitación #${actualizada.numero}! Nueva desocupación: ${formatearFechaCorta(actualizada.fechaOcupacionFin)} (12:00 hrs).`
+            );
+            await cargarDatos();
+            // Mantener detalle actualizado
+            setHabitacionDetalle(actualizada);
+            window.dispatchEvent(new CustomEvent('hotel:refresh-notifications'));
+        } catch (err) {
+            mostrarMensaje('error', err.message || 'No se pudo agregar el día extra a la habitación.');
+        } finally {
+            setExtendiendoHabId(null);
+        }
     };
 
     // Guardar (Crear o Actualizar)
@@ -121,13 +177,14 @@ export default function HabitacionesPage() {
         await cargarDatos();
     };
 
-    // Cambio rápido de estado desde la tabla
+    // Cambio rápido de estado
     const handleCambiarEstado = async (id, estadoActual, nuevoEstado) => {
         if (estadoActual === nuevoEstado) return;
         try {
             await cambiarEstadoHabitacion(id, nuevoEstado);
             mostrarMensaje('info', `Estado actualizado a "${nuevoEstado}".`);
             await cargarDatos();
+            window.dispatchEvent(new CustomEvent('hotel:refresh-notifications'));
         } catch (err) {
             mostrarMensaje('error', 'Error al cambiar estado: ' + err.message);
         }
@@ -135,12 +192,10 @@ export default function HabitacionesPage() {
 
     // Eliminar con confirmación
     const handleEliminar = (habitacion) => {
-        // Regla de negocio: No se puede eliminar habitaciones ocupadas
         if (habitacion.estado === 'Ocupada') {
             mostrarMensaje('error', `No se puede eliminar la habitación #${habitacion.numero} porque actualmente está Ocupada.`);
             return;
         }
-
         setHabitacionAEliminar(habitacion);
     };
 
@@ -167,15 +222,13 @@ export default function HabitacionesPage() {
         setFiltroPiso('');
     };
 
-    // Filtrado reactivo en el cliente para máxima velocidad de respuesta
+    // Filtrado reactivo en el cliente
     const habitacionesFiltradas = useMemo(() => {
         return habitaciones.filter((h) => {
-            // Regla de negocio: Si el hotel está inactivo, ocultar sus habitaciones
             if (h.hotel && h.hotel.activo === false) {
                 return false;
             }
 
-            // Filtro por búsqueda (número o nombre de hotel)
             if (busqueda.trim()) {
                 const term = busqueda.toLowerCase().trim();
                 const coincideNumero = h.numero?.toLowerCase().includes(term);
@@ -184,22 +237,18 @@ export default function HabitacionesPage() {
                 if (!coincideNumero && !coincideHotel && !coincideTipo) return false;
             }
 
-            // Filtro por Hotel
             if (filtroHotel && h.hotel?.idHotel !== parseInt(filtroHotel, 10)) {
                 return false;
             }
 
-            // Filtro por Tipo de Habitación
             if (filtroTipo && h.tipoHabitacion?.idTipo !== parseInt(filtroTipo, 10)) {
                 return false;
             }
 
-            // Filtro por Estado
             if (filtroEstado !== 'TODOS' && h.estado?.toLowerCase() !== filtroEstado.toLowerCase()) {
                 return false;
             }
 
-            // Filtro por Piso
             if (filtroPiso && h.piso !== parseInt(filtroPiso, 10)) {
                 return false;
             }
@@ -208,7 +257,7 @@ export default function HabitacionesPage() {
         });
     }, [habitaciones, busqueda, filtroHotel, filtroTipo, filtroEstado, filtroPiso]);
 
-    // Obtener lista única de pisos existentes para el filtro y el formulario
+    // Obtener lista única de pisos
     const pisosDisponibles = useMemo(() => {
         const habsValidas = habitaciones.filter(h => !h.hotel || h.hotel.activo !== false);
         const setPisos = new Set(habsValidas.map(h => h.piso).filter(Boolean));
@@ -232,6 +281,9 @@ export default function HabitacionesPage() {
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Gestión de Habitaciones</h1>
+                    <p className="page-description">
+                        Supervisa el estado del inventario de suites, niveles, ocupación y disponibilidad en tiempo real.
+                    </p>
                 </div>
                 <div className="page-header-actions">
                     <button
@@ -241,22 +293,24 @@ export default function HabitacionesPage() {
                         disabled={cargando}
                     >
                         <RefreshCw size={17} className={cargando ? 'spin-animation' : ''} />
-                        <span>Refrescar</span>
+                        <span>Actualizar</span>
                     </button>
-                    <button
-                        className="btn btn-primary"
-                        onClick={() => {
-                            setHabitacionAEditar(null);
-                            setModalAbierto(true);
-                        }}
-                    >
-                        <Plus size={18} />
-                        <span>Nueva Habitación</span>
-                    </button>
+                    {puedeGestionarCatalogo && (
+                        <button
+                            className="btn btn-primary"
+                            onClick={() => {
+                                setHabitacionAEditar(null);
+                                setModalAbierto(true);
+                            }}
+                        >
+                            <Plus size={18} />
+                            <span>Nueva Habitación</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Banner de error de conexión si ocurre */}
+            {/* Banner de error si ocurre */}
             {errorMsg && (
                 <div className="alert alert-error">
                     <AlertCircle size={20} />
@@ -266,7 +320,7 @@ export default function HabitacionesPage() {
                 </div>
             )}
 
-            {/* Tarjetas KPI de Resumen Estadístico */}
+            {/* Tarjetas KPI de Resumen (4 estados operativos claros) */}
             <div className="kpi-grid">
                 <KpiCard
                     title="Total Habitaciones"
@@ -282,25 +336,16 @@ export default function HabitacionesPage() {
                     value={resumen.disponibles}
                     icon={CheckCircle2}
                     colorClass="kpi-green"
-                    subtitle="Listas para reservar"
+                    subtitle="Listas para hospedar"
                     isActive={filtroEstado === 'Disponible'}
                     onClick={() => setFiltroEstado('Disponible')}
-                />
-                <KpiCard
-                    title="Pendientes"
-                    value={resumen.pendientes || 0}
-                    icon={Hourglass}
-                    colorClass="kpi-amber"
-                    subtitle="Pre-reservas temporales"
-                    isActive={filtroEstado === 'Pendiente'}
-                    onClick={() => setFiltroEstado('Pendiente')}
                 />
                 <KpiCard
                     title="Ocupadas"
                     value={resumen.ocupadas}
                     icon={Clock}
                     colorClass="kpi-amber"
-                    subtitle="Con huéspedes activos"
+                    subtitle="Con estancia activa hoy"
                     isActive={filtroEstado === 'Ocupada'}
                     onClick={() => setFiltroEstado('Ocupada')}
                 />
@@ -309,7 +354,7 @@ export default function HabitacionesPage() {
                     value={resumen.mantenimiento}
                     icon={AlertCircle}
                     colorClass="kpi-red"
-                    subtitle="En limpieza o servicio"
+                    subtitle="Fuera de servicio"
                     isActive={filtroEstado === 'Mantenimiento'}
                     onClick={() => setFiltroEstado('Mantenimiento')}
                 />
@@ -330,14 +375,14 @@ export default function HabitacionesPage() {
                 </div>
 
                 <div className="filters-grid">
-                    {/* Búsqueda en texto */}
+                    {/* Búsqueda de texto */}
                     <div className="filter-item search-item">
                         <div className="search-input-wrapper">
                             <Search size={18} className="search-icon" />
                             <input
                                 type="text"
                                 className="search-input"
-                                placeholder="Buscar por número (#101), hotel o tipo..."
+                                placeholder="Buscar por número (#101), hotel o categoría..."
                                 value={busqueda}
                                 onChange={(e) => setBusqueda(e.target.value)}
                             />
@@ -360,14 +405,14 @@ export default function HabitacionesPage() {
                         </select>
                     </div>
 
-                    {/* Filtro por Tipo */}
+                    {/* Filtro por Categoría */}
                     <div className="filter-item">
                         <select
                             className="form-select filter-select"
                             value={filtroTipo}
                             onChange={(e) => setFiltroTipo(e.target.value)}
                         >
-                            <option value="">Todos los Tipos</option>
+                            <option value="">Todas las Categorías</option>
                             {tiposHabitacion.map((t) => (
                                 <option key={t.idTipo} value={t.idTipo}>
                                     {t.nombre}
@@ -392,23 +437,9 @@ export default function HabitacionesPage() {
                         </select>
                     </div>
                 </div>
-
-                {/* Chips de estado rápido */}
-                <div className="status-chips-bar">
-                    <span className="chips-label">Estado:</span>
-                    {['TODOS', 'Disponible', 'Pendiente', 'Ocupada', 'Mantenimiento'].map((est) => (
-                        <button
-                            key={est}
-                            className={`status-chip-btn ${filtroEstado === est ? 'active' : ''}`}
-                            onClick={() => setFiltroEstado(est)}
-                        >
-                            {est === 'TODOS' ? 'Todas' : est}
-                        </button>
-                    ))}
-                </div>
             </div>
 
-            {/* Tabla de Resultados */}
+            {/* Tabla de Resultados Operativa y Espaciosa */}
             <div className="table-card">
                 <div className="table-header-info">
                     <div className="table-counter">
@@ -435,19 +466,21 @@ export default function HabitacionesPage() {
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th>Habitación</th>
-                                    <th>Hotel & Sede</th>
-                                    <th>Tipo & Capacidad</th>
+                                    <th style={{ width: '130px' }}>Habitación</th>
+                                    <th>Hotel & Ubicación</th>
+                                    <th>Categoría</th>
                                     <th>Piso</th>
                                     <th>Precio / Noche</th>
                                     <th>Estado</th>
-                                    <th className="text-right">Acciones</th>
+                                    <th>Ocupación</th>
+                                    <th className="text-right" style={{ width: '140px' }}>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {habitacionesFiltradas.map((hab) => {
                                     const tipo = hab.tipoHabitacion;
                                     const hotel = hab.hotel;
+                                    const esOcupada = (hab.estado || '').toLowerCase() === 'ocupada';
 
                                     return (
                                         <tr key={hab.idHabitacion} className="table-row">
@@ -474,7 +507,7 @@ export default function HabitacionesPage() {
                                                 <div className="type-cell">
                                                     <div className="type-name">{tipo?.nombre || 'Estándar'}</div>
                                                     <div className="type-capacity">
-                                                        <Users size={12} /> Capacidad: {tipo?.capacidad || 2} personas
+                                                        <Users size={12} /> {tipo?.capacidad || 2} huéspedes
                                                     </div>
                                                 </div>
                                             </td>
@@ -488,7 +521,7 @@ export default function HabitacionesPage() {
 
                                             {/* Precio Base */}
                                             <td>
-                                                <div className="price-tag">
+                                                <div className="price-tag num">
                                                     ${Number(tipo?.precioBase || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
                                                     <span className="price-period">/noche</span>
                                                 </div>
@@ -501,37 +534,72 @@ export default function HabitacionesPage() {
                                                         className={`status-select status-${hab.estado?.toLowerCase()}`}
                                                         value={hab.estado}
                                                         onChange={(e) => handleCambiarEstado(hab.idHabitacion, hab.estado, e.target.value)}
-                                                        title="Clic para cambiar estado inmediatamente"
+                                                        title="Clic para cambiar estado de la habitación"
                                                     >
                                                         <option value="Disponible">Disponible</option>
-                                                        <option value="Pendiente">Pendiente</option>
                                                         <option value="Ocupada">Ocupada</option>
                                                         <option value="Mantenimiento">Mantenimiento</option>
                                                     </select>
                                                 </div>
                                             </td>
 
+                                            {/* Ocupación resumida y limpia */}
+                                            <td>
+                                                {esOcupada && hab.fechaOcupacionFin ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                        <span style={{ color: '#047857', fontWeight: 700, fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                            <Clock size={13} />
+                                                            Desocupa: {formatearFechaCorta(hab.fechaOcupacionFin)}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                                            Check-out a las 12:00 hrs
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span style={{ color: '#059669', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: 5, fontWeight: 500 }}>
+                                                        <CheckCircle2 size={14} />
+                                                        Libre
+                                                    </span>
+                                                )}
+                                            </td>
+
                                             {/* Acciones */}
                                             <td className="text-right">
                                                 <div className="row-actions">
                                                     <button
-                                                        className="btn-action btn-action-edit"
-                                                        title="Editar habitación"
-                                                        onClick={() => {
-                                                            setHabitacionAEditar(hab);
-                                                            setModalAbierto(true);
-                                                        }}
+                                                        type="button"
+                                                        className="btn-action btn-action-view"
+                                                        title="Ver a detalle y gestionar habitación"
+                                                        onClick={() => setHabitacionDetalle(hab)}
+                                                        aria-label="Ver detalle"
                                                     >
-                                                        <Edit2 size={16} />
+                                                        <Eye size={16} />
                                                     </button>
-                                                    <button
-                                                        className="btn-action btn-action-delete"
-                                                        title={hab.estado === 'Ocupada' ? 'No se puede eliminar una habitación ocupada' : 'Eliminar habitación'}
-                                                        onClick={() => handleEliminar(hab)}
-                                                        style={hab.estado === 'Ocupada' ? { opacity: 0.45, cursor: 'not-allowed' } : {}}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                                    {puedeGestionarCatalogo && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                className="btn-action btn-action-edit"
+                                                                title="Editar habitación"
+                                                                onClick={() => {
+                                                                    setHabitacionAEditar(hab);
+                                                                    setModalAbierto(true);
+                                                                }}
+                                                            >
+                                                                <Edit2 size={15} />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="btn-action btn-action-delete"
+                                                                title={hab.estado === 'Ocupada' ? 'No se puede eliminar una habitación ocupada' : 'Eliminar habitación'}
+                                                                onClick={() => handleEliminar(hab)}
+                                                                disabled={hab.estado === 'Ocupada'}
+                                                                style={hab.estado === 'Ocupada' ? { opacity: 0.45, cursor: 'not-allowed' } : {}}
+                                                            >
+                                                                <Trash2 size={15} />
+                                                            </button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -542,6 +610,167 @@ export default function HabitacionesPage() {
                     </div>
                 )}
             </div>
+
+            {/* Modal de Detalle de Habitación ("Ver") */}
+            {habitacionDetalle && (
+                <Modal
+                    isOpen={Boolean(habitacionDetalle)}
+                    onClose={() => setHabitacionDetalle(null)}
+                    title={`Habitación #${habitacionDetalle.numero} — Detalle Operativo`}
+                    subtitle={`${habitacionDetalle.hotel?.nombre || 'Hotel'} · Nivel ${habitacionDetalle.piso}`}
+                    icon={BedDouble}
+                    maxWidth="620px"
+                >
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        {/* Ficha técnica en tarjetas */}
+                        <div className="hab-detail-grid">
+                            <div className="hab-detail-card">
+                                <span className="hab-detail-label">Hotel & Sede</span>
+                                <span className="hab-detail-val">{habitacionDetalle.hotel?.nombre || 'No asignado'}</span>
+                                <span style={{ fontSize: '0.74rem', color: '#64748b' }}>{habitacionDetalle.hotel?.ciudad || ''}</span>
+                            </div>
+                            <div className="hab-detail-card">
+                                <span className="hab-detail-label">Categoría</span>
+                                <span className="hab-detail-val">{habitacionDetalle.tipoHabitacion?.nombre || 'Estándar'}</span>
+                                <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                    Capacidad: hasta {habitacionDetalle.tipoHabitacion?.capacidad || 2} personas
+                                </span>
+                            </div>
+                            <div className="hab-detail-card">
+                                <span className="hab-detail-label">Nivel / Piso</span>
+                                <span className="hab-detail-val">Piso {habitacionDetalle.piso}</span>
+                                <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Puerta #{habitacionDetalle.numero}</span>
+                            </div>
+                            <div className="hab-detail-card">
+                                <span className="hab-detail-label">Tarifa por Noche</span>
+                                <span className="hab-detail-val num" style={{ color: 'var(--brand-terracotta, #b45309)' }}>
+                                    ${Number(habitacionDetalle.tipoHabitacion?.precioBase || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
+                                </span>
+                                <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Precio estándar</span>
+                            </div>
+                        </div>
+
+                        {/* Bloque de Ocupación y Extensión de Día Extra */}
+                        {habitacionDetalle.estado === 'Ocupada' && habitacionDetalle.fechaOcupacionFin ? (
+                            <div className="hab-occupancy-box">
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#92400e', fontWeight: 700, fontSize: '0.92rem' }}>
+                                        <Clock size={18} />
+                                        <span>Estancia en Curso</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.76rem', background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
+                                        Check-out a las 12:00 hrs
+                                    </span>
+                                </div>
+
+                                <div style={{ fontSize: '0.84rem', color: '#334155', lineHeight: 1.5 }}>
+                                    <div>
+                                        Ocupada del <strong>{formatearFechaCorta(habitacionDetalle.fechaOcupacionInicio)}</strong> al <strong>{formatearFechaCorta(habitacionDetalle.fechaOcupacionFin)}</strong>
+                                    </div>
+                                    <div style={{ color: '#047857', fontWeight: 700, marginTop: 2 }}>
+                                        Fecha de desocupación: {formatearFechaCorta(habitacionDetalle.fechaOcupacionFin)} (12:00 hrs)
+                                    </div>
+                                </div>
+
+                                {/* Botón de Día Extra dentro del detalle de la habitación ocupada */}
+                                <div style={{ paddingTop: 8, borderTop: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                                    <div>
+                                        <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#0f172a' }}>
+                                            ¿Desea extender la estancia?
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                            {habitacionDetalle.diaExtraDisponible
+                                                ? `Siguiente fecha libre: ${formatearFechaCorta(habitacionDetalle.nuevaFechaDesocupacion)} (12:00 hrs)`
+                                                : 'El día siguiente ya está reservado por otra estancia en esta habitación.'}
+                                        </div>
+                                    </div>
+
+                                    {habitacionDetalle.diaExtraDisponible ? (
+                                        <button
+                                            type="button"
+                                            className="btn btn-primary"
+                                            onClick={() => handleAgregarDiaExtra(habitacionDetalle)}
+                                            disabled={extendiendoHabId === habitacionDetalle.idHabitacion}
+                                            style={{
+                                                background: '#059669',
+                                                borderColor: '#047857',
+                                                padding: '8px 16px',
+                                                fontSize: '0.84rem',
+                                                fontWeight: 700
+                                            }}
+                                        >
+                                            <CalendarPlus size={16} />
+                                            <span>
+                                                {extendiendoHabId === habitacionDetalle.idHabitacion
+                                                    ? 'Agregando día extra...'
+                                                    : `+1 Día extra (+$${Number(habitacionDetalle.costoDiaExtra || habitacionDetalle.tipoHabitacion?.precioBase || 0).toLocaleString('es-MX')})`}
+                                            </span>
+                                        </button>
+                                    ) : (
+                                        <span style={{ fontSize: '0.78rem', color: '#b91c1c', fontWeight: 600, background: '#fee2e2', padding: '4px 8px', borderRadius: 6 }}>
+                                            Día siguiente no disponible
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="hab-occupancy-free">
+                                <CheckCircle2 size={20} />
+                                <div>
+                                    <div style={{ fontSize: '0.88rem' }}>Habitación disponible sin huéspedes hospedados</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 400 }}>
+                                        Puede ser reservada libremente para cualquier fecha no reservada.
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Próximas reservaciones programadas para esta habitación */}
+                        {Array.isArray(habitacionDetalle.periodosOcupados) && habitacionDetalle.periodosOcupados.length > 0 && (
+                            <div style={{ marginTop: '0.5rem' }}>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                    Calendario de reservaciones programadas ({habitacionDetalle.periodosOcupados.length})
+                                </span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6, maxHeight: 130, overflowY: 'auto' }}>
+                                    {habitacionDetalle.periodosOcupados.map((p, idx) => (
+                                        <div
+                                            key={idx}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                background: '#f8fafc',
+                                                padding: '6px 12px',
+                                                borderRadius: 6,
+                                                border: '1px solid #e2e8f0',
+                                                fontSize: '0.78rem'
+                                            }}
+                                        >
+                                            <span style={{ fontWeight: 600, color: '#1e293b' }}>
+                                                {formatearFechaCorta(p.fechaEntrada)} → {formatearFechaCorta(p.fechaSalida)}
+                                            </span>
+                                            <span style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                                                Check-out 12:00 hrs
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Botón cerrar */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setHabitacionDetalle(null)}
+                            >
+                                Cerrar detalle
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
 
             {/* Modal para Crear/Editar Habitación */}
             <HabitacionModal

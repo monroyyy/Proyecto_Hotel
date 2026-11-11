@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 /**
  * Modal.jsx
  * Componente modal accesible y reutilizable renderizado en document.body (Portal).
- * Aplica difuminado gaussiano completo sobre la aplicación de fondo (body.modal-open).
+ * Detecta la superficie activa (brand vs product) para resolver tokens correctamente.
  */
 export default function Modal({
     isOpen = true,
@@ -16,7 +16,8 @@ export default function Modal({
     subtitulo,
     icon: Icon,
     children,
-    maxWidth = '510px'
+    maxWidth = '510px',
+    surface
 }) {
     const modalTitle = title || titulo;
     const modalSubtitle = subtitle || subtitulo;
@@ -36,15 +37,32 @@ export default function Modal({
         window.addEventListener('keydown', handleKeyDown);
 
         return () => {
-            document.body.classList.remove('modal-open');
             window.removeEventListener('keydown', handleKeyDown);
+            setTimeout(() => {
+                if (document.querySelectorAll('.modal-overlay').length === 0) {
+                    document.body.classList.remove('modal-open');
+                }
+            }, 0);
         };
     }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
+    const handleOverlayClick = (e) => {
+        if (e.target === e.currentTarget && onClose) {
+            onClose();
+        }
+    };
+
+    // Detectar superficie activa si no se especificó explícitamente
+    const activeSurface = surface || (
+        typeof document !== 'undefined' && document.querySelector('.admin-layout-container')
+            ? 'product'
+            : 'brand'
+    );
+
     return createPortal(
-        <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+        <div className="modal-overlay" data-surface={activeSurface} onClick={handleOverlayClick} role="dialog" aria-modal="true">
             <div
                 className="modal-card modal-container"
                 onClick={(e) => e.stopPropagation()}
@@ -75,7 +93,9 @@ export default function Modal({
                         )}
                     </div>
                 )}
-                {children}
+                <div className="modal-body">
+                    {children}
+                </div>
             </div>
         </div>,
         document.body

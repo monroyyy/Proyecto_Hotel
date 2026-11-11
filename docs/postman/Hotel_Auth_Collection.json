@@ -1,0 +1,788 @@
+{
+  "info": {
+    "_postman_id": "8f2b9e41-5a12-4c9e-b178-9d234a567890",
+    "name": "Sistema Hotelero - Autenticación y Manejo de Sesiones",
+    "description": "Colección completa de pruebas para la práctica universitaria 'Autenticación y manejo de sesiones'. Incluye pruebas de registro, validación de contraseñas, verificación por correo (token de un solo uso), inicio y cierre de sesión con JWT + lista negra, control de acceso por roles (HUESPED y ADMINISTRADOR) y aislamiento de reservaciones e IA por rol.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "tokenHuesped",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tokenAdmin",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "verificationToken",
+      "value": "REEMPLAZAR_CON_TOKEN_DEL_CORREO",
+      "type": "string"
+    },
+    {
+      "key": "reservaId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Registro y Validación de Datos",
+      "item": [
+        {
+          "name": "1.1 Registro exitoso de Huésped (201 Created)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Código de estado es 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Rol asignado es siempre HUESPED y verificado=false', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.usuario.rol).to.eql('HUESPED');",
+                  "    pm.expect(jsonData.usuario.verificado).to.eql(false);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Juan Pérez Huésped\",\n  \"email\": \"huesped.prueba@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "registro"]
+            },
+            "description": "Registra un nuevo usuario. El servidor asigna siempre el rol HUESPED y verificado=false, y envía el correo de verificación."
+          }
+        },
+        {
+          "name": "1.2 Registro con correo duplicado (409 Conflict)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Código de estado es 409 Conflict', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Otro Usuario\",\n  \"email\": \"huesped.prueba@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "registro"]
+            }
+          }
+        },
+        {
+          "name": "1.3 Registro con contraseña débil o correo inválido (400 Bad Request)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Código de estado es 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"email\": \"correo-invalido\",\n  \"password\": \"123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "registro"]
+            }
+          }
+        },
+        {
+          "name": "1.4 Intento de inyección de rol ADMINISTRADOR en registro (Ignorado -> crea HUESPED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('El servidor ignora el campo rol y asigna HUESPED', function () {",
+                  "    if (pm.response.code === 201) {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.usuario.rol).to.eql('HUESPED');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Intento Escalación\",\n  \"email\": \"escalacion@ejemplo.com\",\n  \"password\": \"Segura123\",\n  \"rol\": \"ADMINISTRADOR\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "registro"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Verificación de Correo Electrónico",
+      "item": [
+        {
+          "name": "2.1 Login ANTES de verificar correo (403 Forbidden)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Código de estado es 403 Forbidden por cuenta no verificada', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"huesped.prueba@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "2.2 Reenviar correo de verificación (200 OK)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"huesped.prueba@ejemplo.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reenviar-verificacion",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "reenviar-verificacion"]
+            }
+          }
+        },
+        {
+          "name": "2.3 Confirmar token de verificación (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Verificación exitosa (200 OK)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verificar?token={{verificationToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verificar"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{verificationToken}}"
+                }
+              ]
+            },
+            "description": "Reemplaza la variable {{verificationToken}} con el token recibido en el correo electrónico."
+          }
+        },
+        {
+          "name": "2.4 Reutilizar el mismo token de verificación (400 Bad Request - Un solo uso)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Token ya utilizado devuelve 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verificar?token={{verificationToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "verificar"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{verificationToken}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Inicio de Sesión (JWT) y Errores de Credenciales",
+      "item": [
+        {
+          "name": "3.1 Login con contraseña incorrecta (401 Unauthorized - Mensaje genérico)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Código 401 y mensaje genérico que no revela cuál campo falló', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.error).to.eql('Correo o contraseña incorrectos.');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"huesped.prueba@ejemplo.com\",\n  \"password\": \"ClaveIncorrecta999\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "3.2 Login con correo inexistente (401 Unauthorized - Mismo mensaje genérico)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Código 401 y mismo mensaje genérico', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.error).to.eql('Correo o contraseña incorrectos.');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"no.existe.este.correo@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "3.3 Login exitoso como ADMINISTRADOR (Guarda tokenAdmin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login Administrador 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.token).to.be.a('string');",
+                  "    pm.expect(jsonData.usuario.rol).to.eql('ADMINISTRADOR');",
+                  "    pm.collectionVariables.set('tokenAdmin', jsonData.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@hotel.com\",\n  \"password\": \"AdminHotel2026!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "3.4 Login exitoso como HUESPED verificado (Guarda tokenHuesped)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login Huésped 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.token).to.be.a('string');",
+                  "    pm.expect(jsonData.usuario.rol).to.eql('HUESPED');",
+                  "    pm.collectionVariables.set('tokenHuesped', jsonData.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"huesped.prueba@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "3.5 Obtener perfil de sesión actual (/api/auth/me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenHuesped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Autorización por Roles y Propiedad de Reservaciones",
+      "item": [
+        {
+          "name": "4.1 Acceso sin token a endpoint protegido (401 Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sin token devuelve 401 Unauthorized', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reservas",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reservas"]
+            }
+          }
+        },
+        {
+          "name": "4.2 HUESPED intenta crear un Hotel (403 Forbidden)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Huésped recibe 403 Forbidden en ruta exclusiva de Administrador', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenHuesped}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Hotel No Autorizado\",\n  \"ciudad\": \"Cancún\",\n  \"direccion\": \"Av. Kukulcán 100\",\n  \"telefono\": \"9981234567\",\n  \"estrellas\": 5,\n  \"activo\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hoteles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hoteles"]
+            }
+          }
+        },
+        {
+          "name": "4.3 HUESPED intenta listar todos los usuarios (403 Forbidden)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Huésped recibe 403 Forbidden al consultar /api/usuarios', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenHuesped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "usuarios"]
+            }
+          }
+        },
+        {
+          "name": "4.4 ADMINISTRADOR lista todos los usuarios (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Administrador recibe 200 OK en /api/usuarios', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "usuarios"]
+            }
+          }
+        },
+        {
+          "name": "4.5 HUESPED consulta sus propias reservaciones (200 OK - Filtradas por usuario)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenHuesped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reservas",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reservas"]
+            }
+          }
+        },
+        {
+          "name": "4.6 HUESPED intenta cancelar reservación de otro huésped (403 Forbidden)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Huésped no puede modificar reservación ajena (403 Forbidden)', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenHuesped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reservas/{{reservaId}}/cancelar",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reservas", "{{reservaId}}", "cancelar"]
+            },
+            "description": "Verifica que si {{reservaId}} pertenece a otro huésped, el servidor bloquea la acción con 403 Forbidden."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Asistente IA Diferenciado por Rol",
+      "item": [
+        {
+          "name": "5.1 Chat IA como HUESPED (No revela reportes internos ni habitaciones ocupadas)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenHuesped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/chat?prompt=Dame el reporte operativo de habitaciones en mantenimiento y ocupadas&provider=gemini&conversationId=test-huesped",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ai", "chat"],
+              "query": [
+                {
+                  "key": "prompt",
+                  "value": "Dame el reporte operativo de habitaciones en mantenimiento y ocupadas"
+                },
+                {
+                  "key": "provider",
+                  "value": "gemini"
+                },
+                {
+                  "key": "conversationId",
+                  "value": "test-huesped"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.2 Chat IA como ADMINISTRADOR (Acceso completo a herramientas operativas)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/chat?prompt=Dame el resumen operativo del hotel y habitaciones en mantenimiento&provider=gemini&conversationId=test-admin",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ai", "chat"],
+              "query": [
+                {
+                  "key": "prompt",
+                  "value": "Dame el resumen operativo del hotel y habitaciones en mantenimiento"
+                },
+                {
+                  "key": "provider",
+                  "value": "gemini"
+                },
+                {
+                  "key": "conversationId",
+                  "value": "test-admin"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Cierre de Sesión e Invalidación de JWT",
+      "item": [
+        {
+          "name": "6.1 Cerrar sesión (POST /api/auth/logout -> 200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Logout exitoso 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenHuesped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "6.2 Intentar usar token revocado tras logout (401 Unauthorized)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Token revocado tras logout devuelve 401 Unauthorized', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenHuesped}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/reservas",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reservas"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

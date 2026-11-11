@@ -5,6 +5,7 @@ import com.ico.hotel.tools.HotelSearchTool;
 import com.ico.hotel.tools.HabitacionSearchTool;
 import com.ico.hotel.tools.TipoHabitacionTool;
 import com.ico.hotel.tools.ReservaTool;
+import com.ico.hotel.tools.EstadisticasTool;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -39,6 +40,7 @@ public class HotelAiConfig {
     private final TipoHabitacionTool tipoHabitacionTool;
     private final HotelPolicyTool hotelPolicyTool;
     private final ReservaTool reservaTool;
+    private final EstadisticasTool estadisticasTool;
     private final ChatMemory chatMemory;
 
     @Bean("geminiClient")
@@ -47,7 +49,7 @@ public class HotelAiConfig {
                 .replace("{currentDate}", LocalDate.now().toString());
         return ChatClient.builder(chatModel)
                 .defaultSystem(systemPrompt)
-                .defaultTools(hotelSearchTool, habitacionSearchTool, tipoHabitacionTool, hotelPolicyTool, reservaTool)
+                .defaultTools(hotelSearchTool, habitacionSearchTool, tipoHabitacionTool, hotelPolicyTool, reservaTool, estadisticasTool)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();
     }
@@ -57,14 +59,14 @@ public class HotelAiConfig {
         String systemPrompt = systemPromptResource.getContentAsString(StandardCharsets.UTF_8)
                 .replace("{currentDate}", LocalDate.now().toString());
 
-        List<ToolCallback> toolCallbacks = Arrays.asList(ToolCallbacks.from(hotelSearchTool, habitacionSearchTool, tipoHabitacionTool, hotelPolicyTool, reservaTool));
+        List<ToolCallback> toolCallbacks = Arrays.asList(ToolCallbacks.from(hotelSearchTool, habitacionSearchTool, tipoHabitacionTool, hotelPolicyTool, reservaTool, estadisticasTool));
         ToolCallingManager toolCallingManager = DefaultToolCallingManager.builder()
                 .toolCallbackResolver(new StaticToolCallbackResolver(toolCallbacks))
                 .build();
 
         return ChatClient.builder(chatModel)
                 .defaultSystem(systemPrompt)
-                .defaultTools(hotelSearchTool, habitacionSearchTool, tipoHabitacionTool, hotelPolicyTool, reservaTool)
+                .defaultTools(hotelSearchTool, habitacionSearchTool, tipoHabitacionTool, hotelPolicyTool, reservaTool, estadisticasTool)
                 .defaultAdvisors(
                         new OllamaToolCallingAdvisor(toolCallingManager),
                         MessageChatMemoryAdvisor.builder(chatMemory).build()

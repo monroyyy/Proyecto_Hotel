@@ -33,6 +33,22 @@ build/
 .vscode/
 
 ### Node & Frontend ###
+node_modules/
 frontend/node_modules/
 frontend/dist/
 
+### Variables de Entorno y Secretos ###
+.env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+### Respaldos locales y artefactos temporales ###
+backup_*.sql
+/scratch/
+/.agent/
+/docs/capturas/
+/src/data/
+/public/

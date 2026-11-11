@@ -18,6 +18,9 @@ public class ClientResolver {
     }
 
     public ChatClient resolve(String model) {
-        return "ollama".equalsIgnoreCase(model) ? ollamaClient : geminiClient;
+        if (model == null || model.isBlank()) {
+            return ollamaClient;
+        }
+        return "gemini".equalsIgnoreCase(model) ? geminiClient : ollamaClient;
     }
 }
