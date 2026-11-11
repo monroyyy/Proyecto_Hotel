@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 
 @SpringBootApplication
-@org.springframework.scheduling.annotation.EnableScheduling
 public class HotelApplication implements CommandLineRunner {
 
     private final HotelRepository hotelRepository;

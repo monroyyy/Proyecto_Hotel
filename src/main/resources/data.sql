@@ -6,10 +6,10 @@
 
 -- 1. HOTELES (IDs 1 y 2)
 INSERT IGNORE INTO hotel (id_hotel, nombre, direccion, ciudad, telefono, email, activo) 
-VALUES (1, 'Hotel Paraíso', 'Av. Reforma #125, Col. Centro', 'Ciudad de México', '55-1234-5678', 'contacto@hotelparaiso.com', TRUE);
+VALUES (1, 'Hotel Paraíso', 'Av. Reforma #125, Col. Centro', 'Ciudad de México', '5512345678', 'contacto@hotelparaiso.com', TRUE);
 
 INSERT IGNORE INTO hotel (id_hotel, nombre, direccion, ciudad, telefono, email, activo) 
-VALUES (2, 'Hotel Paraíso Ejecutivo', 'Av. Insurgentes Sur #850, Col. Del Valle', 'Ciudad de México', '55-8765-4321', 'contacto@hotelparaisoejecutivo.com', TRUE);
+VALUES (2, 'Hotel Paraíso Ejecutivo', 'Av. Insurgentes Sur #850, Col. Del Valle', 'Ciudad de México', '5587654321', 'contacto@hotelparaisoejecutivo.com', TRUE);
 
 -- 2. TIPOS DE HABITACIÓN (IDs del 1 al 5)
 INSERT IGNORE INTO tipo_habitacion (id_tipo, nombre, capacidad, descripcion, precio_base) 
