@@ -284,9 +284,19 @@ export default function LoginPage() {
                         </div>
 
                         <div className="auth-input-group" style={{ marginBottom: '1.1rem' }}>
-                            <label className="auth-label" htmlFor="login-password">
-                                Contraseña
-                            </label>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <label className="auth-label" htmlFor="login-password">
+                                    Contraseña
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate(`/recuperar-password${email ? `?email=${encodeURIComponent(email.trim())}` : ''}`)}
+                                    className="auth-switch-link"
+                                    style={{ fontSize: '0.78rem', fontWeight: 600, padding: 0 }}
+                                >
+                                    ¿Olvidaste tu contraseña?
+                                </button>
+                            </div>
                             <div className="auth-input-wrapper">
                                 <Lock size={15} className="auth-input-icon" />
                                 <input

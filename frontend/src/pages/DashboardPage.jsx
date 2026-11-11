@@ -43,6 +43,7 @@ export default function DashboardPage() {
     // Filtros principales
     const [anoSeleccionado, setAnoSeleccionado] = useState(2026);
     const [idHotelFiltro, setIdHotelFiltro] = useState('');
+    const [incluirInactivos, setIncluirInactivos] = useState(false);
     const [metricaGrafica, setMetricaGrafica] = useState('ingresos'); // 'ingresos' | 'ocupacion' | 'reservas'
 
     // Años activos en la gráfica multianual (por defecto mostramos 2020, 2021 y 2026 como en el pizarrón)
@@ -70,7 +71,7 @@ export default function DashboardPage() {
     // Cargar datos del dashboard al cambiar filtros
     useEffect(() => {
         cargarDatosDashboard();
-    }, [anoSeleccionado, idHotelFiltro, metricaGrafica, anosActivos]);
+    }, [anoSeleccionado, idHotelFiltro, incluirInactivos, metricaGrafica, anosActivos]);
 
     const cargarDatosDashboard = async () => {
         setCargando(true);
@@ -79,10 +80,10 @@ export default function DashboardPage() {
             const hotelIdParam = idHotelFiltro ? parseInt(idHotelFiltro, 10) : null;
 
             const [kpisRes, serieRes, catRes, hotRes] = await Promise.all([
-                getDashboardKpis(anoSeleccionado, hotelIdParam),
-                getDashboardMensualComparativo(anosActivos, hotelIdParam, metricaGrafica),
-                getDashboardPorCategoria(anoSeleccionado, hotelIdParam),
-                getDashboardPorHotel(anoSeleccionado)
+                getDashboardKpis(anoSeleccionado, hotelIdParam, incluirInactivos),
+                getDashboardMensualComparativo(anosActivos, hotelIdParam, metricaGrafica, incluirInactivos),
+                getDashboardPorCategoria(anoSeleccionado, hotelIdParam, incluirInactivos),
+                getDashboardPorHotel(anoSeleccionado, incluirInactivos)
             ]);
 
             setKpis(kpisRes);
@@ -208,7 +209,7 @@ export default function DashboardPage() {
                         Dashboard de Inteligencia y Finanzas
                     </h1>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', margin: '4px 0 0' }}>
-                        Monitoreo de ingresos brutos, ADR, RevPAR, estacionalidad y balances de caja en tiempo real.
+                        Monitoreo de ingresos contratados, ADR, RevPAR, estacionalidad y separación entre flujo cobrado y proyectado.
                     </p>
                 </div>
 
@@ -245,13 +246,38 @@ export default function DashboardPage() {
                             }}
                         >
                             <option value="">Toda la Cadena (Consolidado)</option>
-                            {hoteles.map(h => (
+                            {hoteles
+                                .filter(h => incluirInactivos || h.activo !== false)
+                                .map(h => (
                                 <option key={h.idHotel} value={h.idHotel}>
-                                    {h.nombre} ({h.ciudad})
+                                    {h.nombre} ({h.ciudad}){h.activo === false ? ' [Inactiva]' : ''}
                                 </option>
                             ))}
                         </select>
                     </div>
+
+                    <label
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            background: 'var(--bg-elevated)',
+                            padding: '6px 12px',
+                            borderRadius: 10,
+                            border: '1px solid var(--border-color)',
+                            fontSize: '0.82rem',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <input
+                            type="checkbox"
+                            checked={incluirInactivos}
+                            onChange={(e) => setIncluirInactivos(e.target.checked)}
+                        />
+                        <span>Incluir sedes inactivas</span>
+                    </label>
 
                     <button
                         type="button"
@@ -282,14 +308,14 @@ export default function DashboardPage() {
                 gap: '1rem',
                 marginBottom: '1.75rem'
             }}>
-                {/* KPI 1: Ingresos Brutos Totales */}
+                {/* KPI 1: Ingresos Contratados Brutos */}
                 <div style={{
                     background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
                     borderRadius: 14, padding: '1.25rem', position: 'relative', overflow: 'hidden'
                 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                            Ingresos Brutos ({anoSeleccionado})
+                            Ingresos Contratados ({anoSeleccionado})
                         </span>
                         <div style={{ padding: 6, borderRadius: 8, background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}>
                             <DollarSign size={16} />
@@ -308,7 +334,7 @@ export default function DashboardPage() {
                                 <ArrowDownRight size={14} /> {kpis?.cambioIngresosPct}%
                             </span>
                         )}
-                        <span style={{ color: 'var(--text-muted)' }}>vs año anterior</span>
+                        <span style={{ color: 'var(--text-muted)' }}>vs año anterior (proyectado)</span>
                     </div>
                 </div>
 
@@ -647,19 +673,25 @@ export default function DashboardPage() {
                     borderRadius: 16, padding: '1.5rem'
                 }}>
                     <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 12px' }}>
-                        Flujo de Caja y Saldos ({anoSeleccionado})
+                        Cobrado vs Proyectado ({anoSeleccionado})
                     </h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'var(--bg-elevated)' }}>
-                            <span style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Anticipos Cobrados (50%)</span>
+                            <span style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Anticipos Cobrados (Efectivo / Recibido)</span>
                             <span style={{ fontWeight: 700, color: '#22c55e', fontVariantNumeric: 'tabular-nums' }}>
                                 {formatoMoneda(kpis?.anticiposCobrados)}
                             </span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'var(--bg-elevated)' }}>
-                            <span style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Saldos Liquidados (Check-in)</span>
+                            <span style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Saldos Liquidados Cobrados (Finalizadas)</span>
                             <span style={{ fontWeight: 700, color: '#22c55e', fontVariantNumeric: 'tabular-nums' }}>
                                 {formatoMoneda(kpis?.saldosLiquidados)}
+                            </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+                            <span style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Saldos Pendientes Proyectados (Por cobrar)</span>
+                            <span style={{ fontWeight: 700, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
+                                {formatoMoneda(kpis?.saldosPendientes)}
                             </span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 8, background: 'var(--bg-elevated)' }}>
@@ -678,7 +710,7 @@ export default function DashboardPage() {
                             display: 'flex', justifyContent: 'space-between', padding: '10px 14px',
                             borderRadius: 8, background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)'
                         }}>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#22c55e' }}>Ingreso Neto Real de Caja</span>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#22c55e' }}>Ingreso Neto Contratado (Proyectado − Reembolsos)</span>
                             <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#22c55e', fontVariantNumeric: 'tabular-nums' }}>
                                 {formatoMoneda(kpis?.ingresosNetos)}
                             </span>
@@ -692,7 +724,7 @@ export default function DashboardPage() {
                     borderRadius: 16, padding: '1.5rem'
                 }}>
                     <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 12px' }}>
-                        Ingresos por Categoría de Habitación
+                        Ingresos Contratados por Categoría de Habitación
                     </h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {distribucionCategorias.map((cat, idx) => (
@@ -731,8 +763,8 @@ export default function DashboardPage() {
                             <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
                                 <th style={{ padding: '8px 12px' }}>Hotel / Sede</th>
                                 <th style={{ padding: '8px 12px' }}>Ciudad</th>
-                                <th style={{ padding: '8px 12px', textAlign: 'right' }}>Ingresos Brutos</th>
-                                <th style={{ padding: '8px 12px', textAlign: 'right' }}>Ingresos Netos</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'right' }}>Contratado Bruto</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'right' }}>Contratado Neto</th>
                                 <th style={{ padding: '8px 12px', textAlign: 'right' }}>Ocupación</th>
                                 <th style={{ padding: '8px 12px', textAlign: 'right' }}>ADR</th>
                                 <th style={{ padding: '8px 12px', textAlign: 'right' }}>RevPAR</th>
@@ -744,6 +776,19 @@ export default function DashboardPage() {
                                 <tr key={idx} style={{ borderBottom: '1px solid var(--border-light)' }}>
                                     <td style={{ padding: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
                                         {h.nombre}
+                                        {h.activo === false && (
+                                            <span style={{
+                                                marginLeft: 8,
+                                                fontSize: '0.72rem',
+                                                fontWeight: 600,
+                                                padding: '2px 7px',
+                                                borderRadius: 999,
+                                                background: 'rgba(148, 163, 184, 0.2)',
+                                                color: 'var(--text-muted)'
+                                            }}>
+                                                Inactiva
+                                            </span>
+                                        )}
                                     </td>
                                     <td style={{ padding: '12px', color: 'var(--text-muted)' }}>
                                         {h.ciudad}

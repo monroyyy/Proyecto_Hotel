@@ -839,17 +839,17 @@ function ListaReservas({ onNueva }) {
                     </div>
                 ) : (
                     <div className="table-responsive" style={{ overflowX: 'auto' }}>
-                        <table className="data-table">
+                        <table className="data-table reservas-table">
                             <thead>
                                 <tr>
-                                    <th style={{ width: '110px' }}>Folio</th>
+                                    <th style={{ width: '96px' }}>Folio</th>
                                     <th>Huésped</th>
                                     <th>Habitación</th>
                                     <th>Estancia & Fechas</th>
                                     <th className="text-right">Total</th>
                                     <th className="text-right">Saldo</th>
                                     <th>Estado</th>
-                                    <th className="text-right" style={{ minWidth: '210px' }}>Acciones</th>
+                                    <th className="text-right" style={{ minWidth: '165px' }}>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>

@@ -254,7 +254,7 @@ function evaluarDisponibilidadHabitacion(hab, entradaStr, salidaStr) {
 }
 
 export default function PortalHuespedPage({ initialSection = 'explorar' }) {
-    const { user, isAuthenticated, navigate, logout } = useAuth();
+    const { user, isAuthenticated, navigate, logout, updateProfile, updateToken } = useAuth();
     const [activeSection, setActiveSection] = useState(initialSection);
     const [heroIndex, setHeroIndex] = useState(0);
     const [modalRequiereSesion, setModalRequiereSesion] = useState(null);
@@ -289,9 +289,16 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
     // Modal de Reservación (con selector interactivo de noches)
     const [habitacionSeleccionada, setHabitacionSeleccionada] = useState(null);
     const [fechaMinimaReserva, setFechaMinimaReserva] = useState(todayStr);
-    const [telefonoHuesped, setTelefonoHuesped] = useState(() => {
-        return localStorage.getItem('hp_pref_telefono') || '5512345678';
-    });
+    const [nombrePerfil, setNombrePerfil] = useState(() => user?.nombre || '');
+    const [telefonoHuesped, setTelefonoHuesped] = useState(() => user?.telefono || '');
+    const [guardandoPerfil, setGuardandoPerfil] = useState(false);
+
+    useEffect(() => {
+        setNombrePerfil(user?.nombre || '');
+        if (user?.telefono) {
+            setTelefonoHuesped(user.telefono);
+        }
+    }, [user?.nombre, user?.telefono]);
     const [adultosReserva, setAdultosReserva] = useState(1);
     const [ninosReserva, setNinosReserva] = useState(0);
     const [cunaExtra, setCunaExtra] = useState(false);
@@ -727,10 +734,27 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
         }
     };
 
-    const handleGuardarPreferenciasPerfil = (e) => {
+    const handleGuardarPreferenciasPerfil = async (e) => {
         e.preventDefault();
-        localStorage.setItem('hp_pref_telefono', telefonoHuesped);
-        showAlert('success', 'Tus datos de contacto han sido guardados correctamente.');
+        const nombreLimpio = nombrePerfil.trim();
+        const telefonoLimpio = telefonoHuesped.trim();
+        if (!nombreLimpio) {
+            showAlert('error', 'El nombre del titular no puede estar vacío.');
+            return;
+        }
+        if (!/^\d{10}$/.test(telefonoLimpio)) {
+            showAlert('error', 'El teléfono debe contener exactamente 10 dígitos numéricos.');
+            return;
+        }
+        try {
+            setGuardandoPerfil(true);
+            await updateProfile({ nombre: nombreLimpio, telefono: telefonoLimpio });
+            showAlert('success', 'Tus datos de perfil se actualizaron correctamente.');
+        } catch (err) {
+            showAlert('error', err.message || 'No se pudo actualizar tu perfil.');
+        } finally {
+            setGuardandoPerfil(false);
+        }
     };
 
     const handleCambiarPassword = async (e) => {
@@ -758,6 +782,9 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
         try {
             setPwCargando(true);
             const res = await cambiarPasswordUsuario(pwActual, pwNueva, pwConfirmar);
+            if (res?.token) {
+                updateToken(res.token);
+            }
             setPwSuccess(res?.mensaje || '¡Contraseña actualizada exitosamente! Tu cuenta está protegida.');
             setPwActual('');
             setPwNueva('');
@@ -1940,29 +1967,39 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 
                                 <div className="hp-profile-fields-grid">
                                     <div className="form-group" style={{ marginBottom: 0 }}>
-                                        <label className="form-label">Nombre del Titular</label>
-                                        <input type="text" className="form-input" value={user?.nombre || ''} disabled />
+                                        <label className="form-label" htmlFor="perfil-nombre">Nombre del Titular</label>
+                                        <input
+                                            id="perfil-nombre"
+                                            type="text"
+                                            className="form-input"
+                                            value={nombrePerfil}
+                                            onChange={e => setNombrePerfil(e.target.value)}
+                                            maxLength={120}
+                                            required
+                                        />
                                     </div>
                                     <div className="form-group" style={{ marginBottom: 0 }}>
-                                        <label className="form-label">Correo Electrónico</label>
-                                        <input type="email" className="form-input" value={user?.email || ''} disabled />
+                                        <label className="form-label" htmlFor="perfil-email">Correo Electrónico (no editable)</label>
+                                        <input id="perfil-email" type="email" className="form-input" value={user?.email || ''} disabled />
                                     </div>
                                     <div className="form-group" style={{ marginBottom: 0, gridColumn: 'span 2' }}>
-                                        <label className="form-label">Teléfono de Contacto (10 dígitos)</label>
+                                        <label className="form-label" htmlFor="perfil-telefono">Teléfono de Contacto (10 dígitos)</label>
                                         <input
+                                            id="perfil-telefono"
                                             type="tel"
                                             className="form-input"
                                             value={telefonoHuesped}
-                                            onChange={e => setTelefonoHuesped(e.target.value)}
+                                            onChange={e => setTelefonoHuesped(e.target.value.replace(/\D/g, '').slice(0, 10))}
                                             placeholder="Ej. 5512345678"
                                             maxLength={10}
+                                            required
                                         />
                                     </div>
                                 </div>
 
                                 <div className="hp-profile-contact-actions">
-                                    <button type="submit" className="btn btn-primary hp-profile-save-btn">
-                                        <CheckCircle2 size={16} /> Guardar datos de contacto
+                                    <button type="submit" className="btn btn-primary hp-profile-save-btn" disabled={guardandoPerfil}>
+                                        <CheckCircle2 size={16} /> {guardandoPerfil ? 'Guardando...' : 'Guardar datos de contacto'}
                                     </button>
                                 </div>
                             </form>
