@@ -12,6 +12,7 @@ import com.ico.hotel.repository.HuespedRepository;
 import com.ico.hotel.repository.ReservaRepository;
 import com.ico.hotel.security.CustomUserDetails;
 import com.ico.hotel.services.ReservaService;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -19,8 +20,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.testcontainers.mysql.MySQLContainer;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -71,13 +74,13 @@ class FlywayYTimezoneTestcontainersTest extends AbstractMysqlTestcontainerTest {
     }
 
     @Test
-    @DisplayName("BD vacía en Testcontainers MySQL 8 ejecuta V1-V5, pasa ddl-auto=validate y seeder respeta P0.4")
+    @DisplayName("BD vacía en Testcontainers MySQL 8 ejecuta V1-V7, pasa ddl-auto=validate y seeder respeta P0.4")
     void testArranqueBdVaciaFlywayV1AV5YSeeder() throws Exception {
         List<Map<String, Object>> historial = jdbcTemplate.queryForList(
                 "SELECT version, script, success FROM flyway_schema_history WHERE version IS NOT NULL ORDER BY installed_rank"
         );
         assertThat(historial).extracting(m -> String.valueOf(m.get("version")))
-                .containsExactly("1", "2", "3", "4", "5");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7");
         assertThat(historial).allMatch(m -> Boolean.TRUE.equals(m.get("success")) || Integer.valueOf(1).equals(m.get("success")));
 
         LocalDate hoy = LocalDate.now(hotelClock);
@@ -186,5 +189,98 @@ class FlywayYTimezoneTestcontainersTest extends AbstractMysqlTestcontainerTest {
         assertThat(evs).hasSize(2);
         assertThat(evs.get(0).get("fh")).isEqualTo("2019-05-10 16:40:34");
         assertThat(evs.get(1).get("fh")).isEqualTo("2019-05-11 11:15:20");
+    }
+
+    @Test
+    @DisplayName("Migración escalonada V6 -> inserta 5 filas de ejemplo -> V7 liquida saldo, conserva metodo_pago y crea 5 eventos")
+    void testMigracionV6AV7RegularizaLas5FilasYNoTocaOtras() {
+        try (MySQLContainer tc = new MySQLContainer("mysql:8.0.40")
+                .withDatabaseName("hotel_v7_test")
+                .withUsername("test")
+                .withPassword("test")) {
+            tc.start();
+            String url = tc.getJdbcUrl() + (tc.getJdbcUrl().contains("?") ? "&" : "?")
+                    + "useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Mexico_City";
+            DriverManagerDataSource ds = new DriverManagerDataSource(url, tc.getUsername(), tc.getPassword());
+            JdbcTemplate jdbc = new JdbcTemplate(ds);
+
+            // 1. Migrar únicamente hasta v6
+            Flyway flywayV6 = Flyway.configure()
+                    .dataSource(ds)
+                    .locations("classpath:db/migration")
+                    .target("6")
+                    .load();
+            flywayV6.migrate();
+
+            // Crear padres de FK dedicados para que no dependan ni choquen con R__seed_catalogo_inicial al migrar a v7
+            jdbc.update("INSERT INTO hotel (id_hotel, activo, ciudad, direccion, email, nombre, telefono) " +
+                    "VALUES (999, b'1', 'Cancún', 'Av. Kukulcán', 'v7test@hotel.com', 'Hotel V7 Test', '9981234567')");
+            jdbc.update("INSERT INTO tipo_habitacion (id_tipo, capacidad, descripcion, nombre, precio_base) " +
+                    "VALUES (999, 2, 'Tipo prueba V7', 'Estándar V7', 1200.00)");
+            jdbc.update("INSERT INTO habitacion (id_habitacion, estado, numero, piso, id_hotel, id_tipo) " +
+                    "VALUES (999, 'Disponible', 'V7-101', 1, 999, 999)");
+            jdbc.update("INSERT INTO huesped (id_huesped, email, nombre, telefono) " +
+                    "VALUES (999, 'huesped.v7@test.com', 'Huésped V7', '5512345678')");
+            Integer idHab = 999;
+            Integer idHue = 999;
+
+            // Insertar las 5 filas con los mismos id_reserva, folio, estado='Finalizada', saldo>0 y metodo_pago
+            Object[][] muestras = {
+                    {4, "HP-2026-00004", "Efectivo", new BigDecimal("1200.00"), new BigDecimal("600.00"), new BigDecimal("600.00")},
+                    {6, "HP-2026-00006", "Efectivo", new BigDecimal("1200.00"), new BigDecimal("600.00"), new BigDecimal("600.00")},
+                    {13, "HP-2026-00013", "Efectivo", new BigDecimal("1300.00"), new BigDecimal("650.00"), new BigDecimal("650.00")},
+                    {799, "HP-2026-00767", "TARJETA_DEBITO", new BigDecimal("2600.00"), new BigDecimal("1300.00"), new BigDecimal("1300.00")},
+                    {800, "HP-2026-00768", "TARJETA_CREDITO", new BigDecimal("2000.00"), new BigDecimal("1000.00"), new BigDecimal("1000.00")},
+                    // Fila extra con distinto id/folio para confirmar que V7 NO la modifica
+                    {900, "HP-2026-00900", "Efectivo", new BigDecimal("1000.00"), new BigDecimal("500.00"), new BigDecimal("500.00")}
+            };
+            for (Object[] m : muestras) {
+                jdbc.update(
+                        "INSERT INTO reserva (id_reserva, folio, id_habitacion, id_huesped, fecha_entrada, fecha_salida, " +
+                        "noches, adultos, ninos, estado, total, anticipo, saldo, metodo_pago) " +
+                        "VALUES (?, ?, ?, ?, '2026-10-26', '2026-10-27', 1, 1, 0, 'Finalizada', ?, ?, ?, ?)",
+                        m[0], m[1], idHab, idHue, m[3], m[4], m[5], m[2]
+                );
+            }
+
+            // 2. Migrar hasta v7
+            Flyway flywayV7 = Flyway.configure()
+                    .dataSource(ds)
+                    .locations("classpath:db/migration")
+                    .target("7")
+                    .load();
+            var result = flywayV7.migrate();
+            assertThat(result.migrationsExecuted).isEqualTo(1);
+
+            // 3. Validar las 5 filas regularizadas y la fila 900 intacta
+            List<Map<String, Object>> regularizadas = jdbc.queryForList(
+                    "SELECT id_reserva, folio, saldo, metodo_pago, metodo_pago_saldo FROM reserva " +
+                    "WHERE id_reserva IN (4, 6, 13, 799, 800) ORDER BY id_reserva"
+            );
+            assertThat(regularizadas).hasSize(5);
+            for (Map<String, Object> filaRes : regularizadas) {
+                assertThat((BigDecimal) filaRes.get("saldo")).isEqualByComparingTo("0.00");
+                assertThat(filaRes.get("metodo_pago_saldo")).isEqualTo(filaRes.get("metodo_pago"));
+            }
+
+            BigDecimal saldo900 = jdbc.queryForObject("SELECT saldo FROM reserva WHERE id_reserva = 900", BigDecimal.class);
+            assertThat(saldo900).isEqualByComparingTo("500.00");
+
+            List<Map<String, Object>> eventos = jdbc.queryForList(
+                    "SELECT id_reserva, tipo, estado_anterior, estado_nuevo, usuario, " +
+                    "DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fh, detalle " +
+                    "FROM reserva_evento WHERE tipo = 'CORRECCION_DATOS' ORDER BY id_reserva"
+            );
+            assertThat(eventos).hasSize(5);
+            assertThat(eventos).extracting(e -> ((Number) e.get("id_reserva")).intValue())
+                    .containsExactly(4, 6, 13, 799, 800);
+            for (Map<String, Object> ev : eventos) {
+                assertThat(ev.get("estado_anterior")).isEqualTo("Finalizada");
+                assertThat(ev.get("estado_nuevo")).isEqualTo("Finalizada");
+                assertThat(ev.get("usuario")).isEqualTo("MIGRACION");
+                assertThat(ev.get("fh")).isEqualTo("2026-11-10 23:00:00");
+                assertThat(ev.get("detalle")).isEqualTo("Regularización de datos de prueba: saldo asumido liquidado");
+            }
+        }
     }
 }
