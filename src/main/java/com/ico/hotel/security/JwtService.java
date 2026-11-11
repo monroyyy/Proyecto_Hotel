@@ -35,10 +35,12 @@ public class JwtService {
     public String generateToken(Usuario usuario) {
         Date now = new Date();
         Date exp = new Date(now.getTime() + expirationMs);
+        int version = usuario.getTokenVersion() != null ? usuario.getTokenVersion() : 0;
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(usuario.getIdUsuario()))
                 .claim("rol", usuario.getRol().name())
+                .claim("ver", version)
                 .issuedAt(now)
                 .expiration(exp)
                 .signWith(signingKey)

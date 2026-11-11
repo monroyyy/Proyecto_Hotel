@@ -111,7 +111,7 @@ export async function apiRequest(endpoint, options = {}) {
         return await response.text();
     } catch (err) {
         if (err.name === 'TypeError' && err.message.includes('fetch')) {
-            throw new Error('No se pudo conectar con el servidor Backend (http://localhost:8080). Verifica que Spring Boot esté en ejecución.');
+            throw new Error(`No se pudo conectar con el servidor Backend (${API_BASE_URL}). Verifica que Spring Boot esté en ejecución.`);
         }
         throw err;
     }
@@ -174,11 +174,53 @@ export async function obtenerPerfilActual() {
     return await apiRequest('/auth/me');
 }
 
+export async function actualizarPerfilActual(datos) {
+    return await apiRequest('/auth/me', {
+        method: 'PUT',
+        body: JSON.stringify({
+            nombre: datos.nombre,
+            telefono: datos.telefono,
+        }),
+    });
+}
+
+export async function solicitarRecuperacionPassword(email) {
+    return await apiRequest('/auth/recuperar-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+    });
+}
+
+export async function restablecerPassword(datos) {
+    return await apiRequest('/auth/restablecer-password', {
+        method: 'POST',
+        body: JSON.stringify({
+            email: datos.email,
+            codigo: String(datos.codigo || '').trim(),
+            nuevaPassword: datos.nuevaPassword,
+            confirmarPassword: datos.confirmarPassword,
+        }),
+    });
+}
+
 export async function cambiarPasswordUsuario(passwordActual, nuevaPassword, confirmarPassword) {
-    return await apiRequest('/auth/cambiar-password', {
+    const res = await apiRequest('/auth/cambiar-password', {
         method: 'POST',
         body: JSON.stringify({ passwordActual, nuevaPassword, confirmarPassword }),
     });
+    if (res?.token) {
+        const storedUser = getStoredUser();
+        if (storedUser) {
+            saveAuthSession(res.token, storedUser);
+        } else {
+            try {
+                localStorage.setItem(TOKEN_STORAGE_KEY, res.token);
+            } catch {
+                // ignorar error de almacenamiento
+            }
+        }
+    }
+    return res;
 }
 
 // ==========================================
@@ -447,31 +489,35 @@ export async function buscarHuespedes(q = '') {
 // SERVICIOS DE DASHBOARD Y ANALÍTICA (GERENCIA)
 // ==========================================
 
-export async function getDashboardKpis(year, hotelId) {
+export async function getDashboardKpis(year, hotelId, incluirInactivos = false) {
     const params = new URLSearchParams();
     if (year) params.append('year', year);
     if (hotelId) params.append('hotelId', hotelId);
+    if (incluirInactivos) params.append('incluirInactivos', 'true');
     return await apiRequest(`/dashboard/kpis?${params.toString()}`);
 }
 
-export async function getDashboardMensualComparativo(years, hotelId, metrica = 'ingresos') {
+export async function getDashboardMensualComparativo(years, hotelId, metrica = 'ingresos', incluirInactivos = false) {
     const params = new URLSearchParams();
     if (years) params.append('years', Array.isArray(years) ? years.join(',') : years);
     if (hotelId) params.append('hotelId', hotelId);
     if (metrica) params.append('metrica', metrica);
+    if (incluirInactivos) params.append('incluirInactivos', 'true');
     return await apiRequest(`/dashboard/mensual-comparativo?${params.toString()}`);
 }
 
-export async function getDashboardPorCategoria(year, hotelId) {
+export async function getDashboardPorCategoria(year, hotelId, incluirInactivos = false) {
     const params = new URLSearchParams();
     if (year) params.append('year', year);
     if (hotelId) params.append('hotelId', hotelId);
+    if (incluirInactivos) params.append('incluirInactivos', 'true');
     return await apiRequest(`/dashboard/por-categoria?${params.toString()}`);
 }
 
-export async function getDashboardPorHotel(year) {
+export async function getDashboardPorHotel(year, incluirInactivos = false) {
     const params = new URLSearchParams();
     if (year) params.append('year', year);
+    if (incluirInactivos) params.append('incluirInactivos', 'true');
     return await apiRequest(`/dashboard/por-hotel?${params.toString()}`);
 }
 

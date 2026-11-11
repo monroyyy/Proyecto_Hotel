@@ -1,18 +1,20 @@
 package com.ico.hotel.controllers;
 
 import com.ico.hotel.dto.auth.*;
-import com.ico.hotel.models.Usuario;
-import com.ico.hotel.repository.UsuarioRepository;
 import com.ico.hotel.security.CustomUserDetails;
+import com.ico.hotel.services.AuthRateLimiterService;
 import com.ico.hotel.services.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -25,7 +27,13 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
-    private final UsuarioRepository usuarioRepository;
+    private final AuthRateLimiterService authRateLimiterService;
+
+    @Value("${app.security.trust-forwarded-headers:false}")
+    private boolean trustForwardedHeaders;
+
+    @Value("${app.security.trusted-proxies:}")
+    private String trustedProxiesRaw;
 
     @PostMapping("/registro")
     public ResponseEntity<?> registrar(@Valid @RequestBody RegistroRequest request) {
@@ -120,9 +128,72 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("error", "No autenticado.", "status", 401));
         }
-        Usuario u = usuarioRepository.findById(principal.getIdUsuario())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado."));
-        return ResponseEntity.ok(UsuarioResponse.fromEntity(u));
+        try {
+            return ResponseEntity.ok(authService.obtenerPerfilUsuario(principal.getIdUsuario()));
+        } catch (ResponseStatusException ex) {
+            return errorResponse(ex);
+        }
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<?> actualizarPerfilActual(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @Valid @RequestBody ActualizarPerfilRequest request) {
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "No autenticado.", "status", 401));
+        }
+        try {
+            return ResponseEntity.ok(authService.actualizarPerfil(principal.getIdUsuario(), request));
+        } catch (ResponseStatusException ex) {
+            return errorResponse(ex);
+        }
+    }
+
+    @PostMapping("/recuperar-password")
+    public ResponseEntity<?> recuperarPassword(
+            @Valid @RequestBody RecuperarPasswordRequest request,
+            HttpServletRequest httpRequest) {
+        try {
+            authRateLimiterService.validarYRegistrar("recuperar", resolverIpCliente(httpRequest), request.getEmail());
+            return ResponseEntity.ok(authService.solicitarRecuperacionPassword(request.getEmail()));
+        } catch (ResponseStatusException ex) {
+            return errorResponse(ex);
+        }
+    }
+
+    @PostMapping("/restablecer-password")
+    public ResponseEntity<?> restablecerPassword(
+            @Valid @RequestBody RestablecerPasswordRequest request,
+            HttpServletRequest httpRequest) {
+        try {
+            authRateLimiterService.validarYRegistrar("restablecer", resolverIpCliente(httpRequest), request.getEmail());
+            return ResponseEntity.ok(authService.restablecerPassword(request));
+        } catch (ResponseStatusException ex) {
+            return errorResponse(ex);
+        }
+    }
+
+    private String resolverIpCliente(HttpServletRequest request) {
+        if (request == null) return "desconocida";
+        String remoteAddr = request.getRemoteAddr() != null ? request.getRemoteAddr().trim() : "desconocida";
+        if (!trustForwardedHeaders) {
+            return remoteAddr;
+        }
+        if (trustedProxiesRaw != null && !trustedProxiesRaw.isBlank()) {
+            boolean esProxyConfiable = Arrays.stream(trustedProxiesRaw.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .anyMatch(remoteAddr::equals);
+            if (!esProxyConfiable) {
+                return remoteAddr;
+            }
+        }
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+        return remoteAddr;
     }
 
     private ResponseEntity<Map<String, Object>> errorResponse(ResponseStatusException ex) {

@@ -72,14 +72,17 @@ En la raíz del proyecto, ejecuta el wrapper de Maven:
 
 El servidor iniciará en `http://localhost:8080`.
 
-Para ejecutar la suite de pruebas automatizadas:
+Para ejecutar la suite de pruebas automatizadas (aislada en Testcontainers MySQL 8; excluye `@Tag("ollama")` por defecto):
 
 ```bash
 # Windows
-.\mvnw.cmd test
+.\mvnw.cmd test "-DargLine=-Duser.timezone=UTC"
 
 # Linux / macOS
-./mvnw test
+./mvnw test -DargLine="-Duser.timezone=UTC"
+
+# Para incluir pruebas en vivo contra Ollama local (puerto 11434 con modelo configurado):
+.\mvnw.cmd test -Dgroups=ollama "-Dsurefire.excludedGroups="
 ```
 
 ---
@@ -133,6 +136,12 @@ El sistema incluye usuarios preconfigurados con diferentes niveles de autorizaci
    - Cancelación entre 48 y 72 horas antes del check-in: **50% de reembolso del anticipo**.
    - Menos de 48 horas antes del check-in: **0% de reembolso (penalización total)**.
    - En caso de aplicar reembolso, el sistema exige de forma mandatoria la captura de cuenta clabe (18 dígitos), titular y banco para garantizar la trazabilidad contable.
+
+4. **Recuperación de Contraseña, Rate Limiting en RAM y Riesgos Operativos:**
+   - **Límites en memoria (`AuthRateLimiterService`):** ventana deslizante en RAM por instancia JVM (`5` solicitudes/hora por correo en `/api/auth/recuperar-password`, `10` solicitudes/hora por correo en `/api/auth/restablecer-password` y `25` solicitudes/hora por IP en ambos).
+   - **Limitación por almacenamiento en RAM:** los contadores se reinician al reiniciar el proceso y no se comparten entre réplicas horizontales (en despliegues multi-instancia se recomienda migrar el bucket a Redis).
+   - **Riesgo de bloqueo por correo (DoS dirigido):** dado que el límite por correo aplica independientemente de la IP origen, un tercero que conozca la dirección de correo de un usuario podría consumir sus `5` solicitudes por hora impidiéndole pedir otro código temporalmente durante esa ventana (el límite por IP mitiga automatización desde un único origen y la respuesta HTTP genérica evita enumeración).
+   - **IP del cliente y proxy confiable:** por defecto (`APP_SECURITY_TRUST_FORWARDED_HEADERS=false`), la IP se obtiene exclusivamente con `request.getRemoteAddr()` ignorando `X-Forwarded-For`. Solo si se habilita `APP_SECURITY_TRUST_FORWARDED_HEADERS=true` (y opcionalmente se restringe `APP_SECURITY_TRUSTED_PROXIES` con la lista de IPs de proxy confiables) se leerá `X-Forwarded-For`.
 
 ---
 

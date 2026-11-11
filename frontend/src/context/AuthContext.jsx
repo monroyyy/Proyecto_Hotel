@@ -6,7 +6,8 @@ import {
     clearAuthSession,
     loginUsuario,
     logoutUsuario,
-    obtenerPerfilActual
+    obtenerPerfilActual,
+    actualizarPerfilActual
 } from '../api/hotelApi';
 
 const AuthContext = createContext(null);
@@ -102,6 +103,32 @@ export function AuthProvider({ children }) {
         navigate('/login', true);
     };
 
+    const refreshUser = useCallback(async () => {
+        const storedToken = getStoredToken();
+        if (!storedToken) return null;
+        const perfil = await obtenerPerfilActual();
+        saveAuthSession(storedToken, perfil);
+        setUser(perfil);
+        return perfil;
+    }, []);
+
+    const updateProfile = useCallback(async (datos) => {
+        const perfilActualizado = await actualizarPerfilActual(datos);
+        const storedToken = getStoredToken();
+        if (storedToken) {
+            saveAuthSession(storedToken, perfilActualizado);
+        }
+        setUser(perfilActualizado);
+        return perfilActualizado;
+    }, []);
+
+    const updateToken = useCallback((newToken) => {
+        if (!newToken) return;
+        const storedUser = getStoredUser();
+        saveAuthSession(newToken, storedUser || user);
+        setToken(newToken);
+    }, [user]);
+
     const isAuthenticated = Boolean(token && user);
     const isAdmin = user?.rol === 'ADMINISTRADOR';
     const isGerente = user?.rol === 'GERENTE';
@@ -122,6 +149,9 @@ export function AuthProvider({ children }) {
             isHuesped,
             login,
             logout,
+            refreshUser,
+            updateProfile,
+            updateToken,
             routePath,
             routeSearch,
             navigate,

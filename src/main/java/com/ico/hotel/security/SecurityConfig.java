@@ -98,6 +98,8 @@ public class SecurityConfig {
                                 "/api/auth/verificar",
                                 "/api/auth/reenviar-verificacion",
                                 "/api/auth/login",
+                                "/api/auth/recuperar-password",
+                                "/api/auth/restablecer-password",
                                 "/error"
                         ).permitAll()
                         // Endpoints de sesión autenticada

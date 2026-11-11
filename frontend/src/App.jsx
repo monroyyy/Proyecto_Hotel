@@ -13,10 +13,11 @@ import PortalHuespedPage from './pages/PortalHuespedPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
+import RecoverPasswordPage from './pages/RecoverPasswordPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 
-const AUTH_SCREEN_PATHS = ['/login', '/registro', '/verificar-correo'];
+const AUTH_SCREEN_PATHS = ['/login', '/registro', '/verificar-correo', '/recuperar-password'];
 const GUEST_PUBLIC_PATHS = ['/', '/portal-huesped', '/mis-reservas', '/experiencias', '/mi-perfil'];
 
 function AppContent() {
@@ -97,6 +98,9 @@ function AppContent() {
     const renderMainView = () => {
         if (routePath === '/verificar-correo') {
             return <VerifyEmailPage />;
+        }
+        if (routePath === '/recuperar-password') {
+            return <RecoverPasswordPage />;
         }
         if (routePath === '/registro') {
             return <RegisterPage />;

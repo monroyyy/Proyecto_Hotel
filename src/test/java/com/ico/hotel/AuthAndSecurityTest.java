@@ -339,4 +339,79 @@ class AuthAndSecurityTest {
         Map<String, Object> folioResult = reservaTool.consultarReservacionPorFolio("HP-2026-00099");
         assertThat(folioResult).containsEntry("accesoRestringido", true);
     }
+
+    @Test
+    @DisplayName("9. Recuperación de contraseña envía OTP 6 dígitos vía EmailService, guarda hash y permite restablecer")
+    void testRecuperacionEnviaCorreoYRestableceConOtpCapturado() {
+        TokenRecuperacionPasswordRepository recoveryRepo = mock(TokenRecuperacionPasswordRepository.class);
+        authService.setTokenRecuperacionRepository(recoveryRepo);
+
+        Usuario u = new Usuario();
+        u.setIdUsuario(44);
+        u.setNombre("Lucía");
+        u.setEmail("lucia@ejemplo.com");
+        u.setPasswordHash(passwordEncoder.encode("Anterior1"));
+        u.setRol(Rol.HUESPED);
+        u.setVerificado(true);
+        u.setActivo(true);
+        u.setTokenVersion(0);
+
+        when(usuarioRepository.findByEmailIgnoreCase("lucia@ejemplo.com")).thenReturn(Optional.of(u));
+        when(recoveryRepo.save(any(TokenRecuperacionPassword.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(usuarioRepository.save(any(Usuario.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Map<String, Object> respSol = authService.solicitarRecuperacionPassword("lucia@ejemplo.com");
+        assertThat(respSol).containsKey("mensaje");
+
+        ArgumentCaptor<String> otpCaptor = ArgumentCaptor.forClass(String.class);
+        verify(emailService).enviarCorreoRecuperacion(eq("lucia@ejemplo.com"), eq("Lucía"), otpCaptor.capture());
+        String otpEnviado = otpCaptor.getValue();
+        assertThat(otpEnviado).matches("^\\d{6}$");
+
+        ArgumentCaptor<TokenRecuperacionPassword> tokenCaptor = ArgumentCaptor.forClass(TokenRecuperacionPassword.class);
+        verify(recoveryRepo).save(tokenCaptor.capture());
+        TokenRecuperacionPassword guardado = tokenCaptor.getValue();
+        assertThat(guardado.getCodigoHash()).isNotEqualTo(otpEnviado);
+        assertThat(passwordEncoder.matches(otpEnviado, guardado.getCodigoHash())).isTrue();
+
+        when(recoveryRepo.findTopByUsuarioIdUsuarioAndUsadoFalseOrderByFechaCreacionDesc(44))
+                .thenReturn(Optional.of(guardado));
+
+        com.ico.hotel.dto.auth.RestablecerPasswordRequest reqReset = new com.ico.hotel.dto.auth.RestablecerPasswordRequest(
+                "lucia@ejemplo.com", otpEnviado, "NuevaSegura9", "NuevaSegura9"
+        );
+        Map<String, Object> respReset = authService.restablecerPassword(reqReset);
+        assertThat(respReset).containsEntry("status", 200);
+        assertThat(u.getTokenVersion()).isEqualTo(1);
+        assertThat(passwordEncoder.matches("NuevaSegura9", u.getPasswordHash())).isTrue();
+    }
+
+    @Test
+    @DisplayName("10. AuthController usa getRemoteAddr por defecto y solo confía en X-Forwarded-For si el proxy está configurado")
+    void testResolverIpConYSinProxyConfiable() {
+        com.ico.hotel.services.AuthRateLimiterService rateLimiter = mock(com.ico.hotel.services.AuthRateLimiterService.class);
+        com.ico.hotel.controllers.AuthController controller = new com.ico.hotel.controllers.AuthController(authService, rateLimiter);
+        com.ico.hotel.dto.auth.RecuperarPasswordRequest reqBody = new com.ico.hotel.dto.auth.RecuperarPasswordRequest("ip@test.com");
+
+        org.springframework.mock.web.MockHttpServletRequest req1 = new org.springframework.mock.web.MockHttpServletRequest();
+        req1.setRemoteAddr("198.51.100.5");
+        req1.addHeader("X-Forwarded-For", "1.2.3.4");
+
+        // Por defecto (trustForwardedHeaders=false) ignora X-Forwarded-For
+        controller.recuperarPassword(reqBody, req1);
+        verify(rateLimiter).validarYRegistrar("recuperar", "198.51.100.5", "ip@test.com");
+
+        // Con proxy confiable habilitado y coincidente usa el primer valor de X-Forwarded-For
+        ReflectionTestUtils.setField(controller, "trustForwardedHeaders", true);
+        ReflectionTestUtils.setField(controller, "trustedProxiesRaw", "10.0.0.1, 198.51.100.5");
+        controller.recuperarPassword(reqBody, req1);
+        verify(rateLimiter).validarYRegistrar("recuperar", "1.2.3.4", "ip@test.com");
+
+        // Si el proxy remoto NO está en trustedProxiesRaw, vuelve a usar remoteAddr
+        org.springframework.mock.web.MockHttpServletRequest reqNoConfiable = new org.springframework.mock.web.MockHttpServletRequest();
+        reqNoConfiable.setRemoteAddr("203.0.113.9");
+        reqNoConfiable.addHeader("X-Forwarded-For", "5.6.7.8");
+        controller.recuperarPassword(reqBody, reqNoConfiable);
+        verify(rateLimiter).validarYRegistrar("recuperar", "203.0.113.9", "ip@test.com");
+    }
 }

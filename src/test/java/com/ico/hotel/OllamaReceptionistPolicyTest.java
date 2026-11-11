@@ -3,6 +3,7 @@ package com.ico.hotel;
 import com.ico.hotel.services.HotelChatService;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assumptions;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,8 +15,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@Tag("ollama")
 @SpringBootTest
-class OllamaReceptionistPolicyTest {
+class OllamaReceptionistPolicyTest extends AbstractMysqlTestcontainerTest {
 
     @Autowired
     private HotelChatService hotelChatService;

@@ -69,11 +69,13 @@ class ReservaEstanciaTest extends AbstractMysqlTestcontainerTest {
     @BeforeEach
     void setup() {
         reservaService.setClock(systemClock);
+        reservaService.setExpiracionDryRun(false);
     }
 
     @AfterEach
     void cleanup() {
         reservaService.setClock(systemClock);
+        reservaService.setExpiracionDryRun(true);
         SecurityContextHolder.clearContext();
 
         transactionTemplate.executeWithoutResult(status -> {

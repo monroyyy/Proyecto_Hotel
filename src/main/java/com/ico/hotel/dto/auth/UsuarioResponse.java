@@ -18,16 +18,22 @@ public class UsuarioResponse {
     private Integer idUsuario;
     private String nombre;
     private String email;
+    private String telefono;
     private Rol rol;
     private Boolean verificado;
     private Boolean activo;
     private LocalDateTime fechaCreacion;
 
     public static UsuarioResponse fromEntity(Usuario u) {
+        return fromEntity(u, null);
+    }
+
+    public static UsuarioResponse fromEntity(Usuario u, String telefono) {
         return UsuarioResponse.builder()
                 .idUsuario(u.getIdUsuario())
                 .nombre(u.getNombre())
                 .email(u.getEmail())
+                .telefono(telefono)
                 .rol(u.getRol())
                 .verificado(u.getVerificado())
                 .activo(u.getActivo())
