@@ -9,4 +9,7 @@ import java.util.Optional;
 @Repository
 public interface HuespedRepository extends JpaRepository<Huesped, Integer> {
     Optional<Huesped> findFirstByEmailIgnoreCase(String email);
+    Optional<Huesped> findByEmailIgnoreCase(String email);
+    boolean existsByEmailIgnoreCase(String email);
+    boolean existsByEmailIgnoreCaseAndIdHuespedNot(String email, Integer idHuesped);
 }

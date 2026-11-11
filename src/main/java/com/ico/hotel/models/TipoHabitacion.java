@@ -16,12 +16,15 @@ public class TipoHabitacion {
     @Column(name = "id_tipo")
     private Integer idTipo;
 
+    @Column(nullable = false)
     private String nombre;
+
+    @Column(nullable = false)
     private Integer capacidad;
 
     @Column(columnDefinition = "TEXT")
     private String descripcion;
 
-    @Column(name = "precio_base")
+    @Column(name = "precio_base", nullable = false)
     private BigDecimal precioBase;
 }

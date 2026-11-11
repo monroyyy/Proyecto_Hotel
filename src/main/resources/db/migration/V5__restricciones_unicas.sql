@@ -1,0 +1,39 @@
+-- P0.3: Restricciones NOT NULL y UNIQUE tras la limpieza de V2-V4
+
+ALTER TABLE hotel
+    MODIFY COLUMN nombre VARCHAR(255) NOT NULL,
+    MODIFY COLUMN email VARCHAR(255) NOT NULL,
+    MODIFY COLUMN telefono VARCHAR(255) NOT NULL,
+    MODIFY COLUMN activo BIT(1) NOT NULL,
+    ADD CONSTRAINT uk_hotel_email UNIQUE (email),
+    ADD CONSTRAINT uk_hotel_telefono UNIQUE (telefono);
+
+ALTER TABLE tipo_habitacion
+    MODIFY COLUMN nombre VARCHAR(255) NOT NULL,
+    MODIFY COLUMN capacidad INT NOT NULL,
+    MODIFY COLUMN precio_base DECIMAL(38,2) NOT NULL;
+
+ALTER TABLE habitacion
+    MODIFY COLUMN id_hotel INT NOT NULL,
+    MODIFY COLUMN id_tipo INT NOT NULL,
+    MODIFY COLUMN numero VARCHAR(255) NOT NULL,
+    MODIFY COLUMN piso INT NOT NULL,
+    MODIFY COLUMN estado VARCHAR(255) NOT NULL,
+    ADD CONSTRAINT uk_habitacion_hotel_numero UNIQUE (id_hotel, numero);
+
+ALTER TABLE huesped
+    MODIFY COLUMN nombre VARCHAR(255) NOT NULL,
+    MODIFY COLUMN email VARCHAR(255) NOT NULL,
+    ADD CONSTRAINT uk_huesped_email UNIQUE (email);
+
+ALTER TABLE reserva
+    MODIFY COLUMN folio VARCHAR(255) NOT NULL,
+    MODIFY COLUMN id_habitacion INT NOT NULL,
+    MODIFY COLUMN id_huesped INT NOT NULL,
+    MODIFY COLUMN fecha_entrada DATE NOT NULL,
+    MODIFY COLUMN fecha_salida DATE NOT NULL,
+    MODIFY COLUMN estado VARCHAR(255) NOT NULL,
+    MODIFY COLUMN total DECIMAL(38,2) NOT NULL,
+    MODIFY COLUMN anticipo DECIMAL(38,2) NOT NULL,
+    MODIFY COLUMN saldo DECIMAL(38,2) NOT NULL,
+    ADD CONSTRAINT uk_reserva_folio UNIQUE (folio);

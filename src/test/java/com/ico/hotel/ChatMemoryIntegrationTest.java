@@ -15,7 +15,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
-class ChatMemoryIntegrationTest {
+class ChatMemoryIntegrationTest extends AbstractMysqlTestcontainerTest {
 
     @Autowired
     private ChatMemory chatMemory;

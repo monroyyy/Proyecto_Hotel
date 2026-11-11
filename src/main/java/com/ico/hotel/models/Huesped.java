@@ -8,7 +8,9 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "huesped")
+@Table(name = "huesped", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_huesped_email", columnNames = "email")
+})
 public class Huesped {
 
     @Id
@@ -16,7 +18,11 @@ public class Huesped {
     @Column(name = "id_huesped")
     private Integer idHuesped;
 
+    @Column(nullable = false)
     private String nombre;
+
     private String telefono;
+
+    @Column(nullable = false)
     private String email;
 }
