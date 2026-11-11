@@ -111,4 +111,8 @@ public interface HabitacionRepository extends JpaRepository<Habitacion, Integer>
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT h FROM Habitacion h WHERE h.idHabitacion = :id")
     java.util.Optional<Habitacion> findByIdForUpdate(@Param("id") Integer id);
+
+    boolean existsByHotelIdHotelAndNumeroIgnoreCase(Integer idHotel, String numero);
+
+    boolean existsByHotelIdHotelAndNumeroIgnoreCaseAndIdHabitacionNot(Integer idHotel, String numero, Integer idHabitacion);
 }

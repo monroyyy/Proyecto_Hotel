@@ -22,4 +22,12 @@ public interface HotelRepository extends JpaRepository<Hotel, Integer> {
     // 4. ¿Cuántas habitaciones tiene cada hotel?
     @Query("SELECT new map(hot.nombre as hotel, COUNT(hab) as total_habitaciones) FROM Hotel hot LEFT JOIN Habitacion hab ON hot.idHotel = hab.hotel.idHotel GROUP BY hot.idHotel, hot.nombre")
     List<Map<String, Object>> countTotalHabitacionesPorHotel();
+
+    boolean existsByEmailIgnoreCase(String email);
+
+    boolean existsByTelefono(String telefono);
+
+    boolean existsByEmailIgnoreCaseAndIdHotelNot(String email, Integer idHotel);
+
+    boolean existsByTelefonoAndIdHotelNot(String telefono, Integer idHotel);
 }

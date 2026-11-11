@@ -32,6 +32,9 @@ public class HabitacionController {
     @Autowired
     private TipoHabitacionRepository tipoHabitacionRepository;
 
+    @Autowired
+    private com.ico.hotel.services.ReservaService reservaService;
+
     /**
      * 1. Listar todas las habitaciones con filtros opcionales.
      * Soporta filtrar por hotel, tipo, estado o número.
@@ -44,15 +47,15 @@ public class HabitacionController {
             @RequestParam(required = false) Integer piso,
             @RequestParam(required = false, defaultValue = "false") Boolean incluirInactivos
     ) {
-        List<Habitacion> todas = habitacionRepository.findAll();
-
-        return todas.stream()
+        List<Habitacion> filtradas = habitacionRepository.findAll().stream()
                 .filter(h -> incluirInactivos || (h.getHotel() == null || !Boolean.FALSE.equals(h.getHotel().getActivo())))
                 .filter(h -> idHotel == null || (h.getHotel() != null && h.getHotel().getIdHotel().equals(idHotel)))
                 .filter(h -> idTipo == null || (h.getTipoHabitacion() != null && h.getTipoHabitacion().getIdTipo().equals(idTipo)))
                 .filter(h -> estado == null || estado.isBlank() || h.getEstado().equalsIgnoreCase(estado))
                 .filter(h -> piso == null || (h.getPiso() != null && h.getPiso().equals(piso)))
                 .toList();
+        reservaService.enriquecerHabitaciones(filtradas);
+        return filtradas;
     }
 
     /**
@@ -65,7 +68,9 @@ public class HabitacionController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "Habitación no encontrada con ID: " + id));
         }
-        return ResponseEntity.ok(habitacionOpt.get());
+        Habitacion h = habitacionOpt.get();
+        reservaService.enriquecerHabitacion(h);
+        return ResponseEntity.ok(h);
     }
 
     /**
@@ -101,13 +106,10 @@ public class HabitacionController {
         }
 
         // Regla de negocio (Pág. 5): El número de habitación no puede repetirse dentro del mismo hotel
-        boolean duplicada = habitacionRepository.findAll().stream()
-                .anyMatch(h -> h.getHotel() != null &&
-                               h.getHotel().getIdHotel().equals(dto.getIdHotel()) &&
-                               h.getNumero().trim().equalsIgnoreCase(dto.getNumero().trim()));
-        if (duplicada) {
-            return ResponseEntity.badRequest().body(Map.of("error", 
-                "No se permite registrar dos habitaciones con el mismo número (" + dto.getNumero().trim() + ") dentro del mismo hotel."));
+        String numeroLimpo = dto.getNumero().trim();
+        if (habitacionRepository.existsByHotelIdHotelAndNumeroIgnoreCase(dto.getIdHotel(), numeroLimpo)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error",
+                "Ya existe una habitación con ese número (" + numeroLimpo + ") en este hotel."));
         }
 
         Habitacion nueva = new Habitacion();
@@ -118,6 +120,7 @@ public class HabitacionController {
         nueva.setTipoHabitacion(tipoOpt.get());
 
         Habitacion guardada = habitacionRepository.save(nueva);
+        reservaService.enriquecerHabitacion(guardada);
         return ResponseEntity.status(HttpStatus.CREATED).body(guardada);
     }
 
@@ -139,14 +142,9 @@ public class HabitacionController {
 
         // Validar unicidad si cambia el número o el hotel
         if (hotelIdDestino != null && numeroDestino != null) {
-            boolean existeOtra = habitacionRepository.findAll().stream()
-                    .anyMatch(h -> !h.getIdHabitacion().equals(id) &&
-                                   h.getHotel() != null &&
-                                   h.getHotel().getIdHotel().equals(hotelIdDestino) &&
-                                   h.getNumero().trim().equalsIgnoreCase(numeroDestino));
-            if (existeOtra) {
-                return ResponseEntity.badRequest().body(Map.of("error", 
-                    "No se permite tener dos habitaciones con el mismo número (" + numeroDestino + ") dentro del mismo hotel."));
+            if (habitacionRepository.existsByHotelIdHotelAndNumeroIgnoreCaseAndIdHabitacionNot(hotelIdDestino, numeroDestino, id)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error",
+                    "Ya existe una habitación con ese número (" + numeroDestino + ") en este hotel."));
             }
         }
 
@@ -160,7 +158,11 @@ public class HabitacionController {
             habitacion.setPiso(dto.getPiso());
         }
         if (dto.getEstado() != null && !dto.getEstado().isBlank()) {
-            habitacion.setEstado(dto.getEstado());
+            String nuevoEstado = dto.getEstado().trim();
+            habitacion.setEstado(nuevoEstado);
+            if ("Disponible".equalsIgnoreCase(nuevoEstado) || "Mantenimiento".equalsIgnoreCase(nuevoEstado)) {
+                reservaService.cancelarPreReservasDeHabitacion(id, "Liberada por administración al modificar estado de habitación a " + nuevoEstado);
+            }
         }
 
         if (dto.getIdHotel() != null) {
@@ -181,6 +183,7 @@ public class HabitacionController {
         }
 
         Habitacion actualizada = habitacionRepository.save(habitacion);
+        reservaService.enriquecerHabitacion(actualizada);
         return ResponseEntity.ok(actualizada);
     }
 
@@ -202,8 +205,14 @@ public class HabitacionController {
         }
 
         Habitacion habitacion = habitacionOpt.get();
-        habitacion.setEstado(nuevoEstado.trim());
+        String estadoTrim = nuevoEstado.trim();
+        habitacion.setEstado(estadoTrim);
         Habitacion actualizada = habitacionRepository.save(habitacion);
+
+        if ("Disponible".equalsIgnoreCase(estadoTrim) || "Mantenimiento".equalsIgnoreCase(estadoTrim)) {
+            reservaService.cancelarPreReservasDeHabitacion(id, "Liberada por administración al modificar estado de habitación a " + estadoTrim);
+        }
+        reservaService.enriquecerHabitacion(actualizada);
 
         return ResponseEntity.ok(actualizada);
     }
@@ -253,5 +262,38 @@ public class HabitacionController {
         resumen.put("pendientes", pendientes);
 
         return ResponseEntity.ok(resumen);
+    }
+
+    /**
+     * 8. Notificaciones de desocupación próxima y liberación de habitaciones.
+     */
+    @GetMapping("/notificaciones-desocupacion")
+    public ResponseEntity<List<Map<String, Object>>> obtenerNotificacionesDesocupacion() {
+        return ResponseEntity.ok(
+                reservaService.obtenerNotificacionesDesocupacion(reservaService.obtenerUsuarioActual())
+        );
+    }
+
+    /**
+     * 9. Agregar +1 día extra a una habitación actualmente Ocupada (solo si el día siguiente está disponible).
+     */
+    @PatchMapping("/{id}/dia-extra")
+    public ResponseEntity<?> agregarDiaExtraHabitacion(
+            @PathVariable Integer id,
+            @RequestBody(required = false) Map<String, Object> body) {
+        try {
+            int dias = 1;
+            if (body != null && body.get("dias") != null) {
+                dias = Integer.parseInt(body.get("dias").toString());
+            }
+            Habitacion actualizada = reservaService.agregarDiaExtraHabitacionOcupada(id, dias);
+            return ResponseEntity.ok(actualizada);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "No se pudo agregar el día extra."));
+        }
     }
 }

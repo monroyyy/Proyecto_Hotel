@@ -60,18 +60,14 @@ public class HotelController {
         }
 
         // Validar unicidad de número telefónico
-        boolean telRepetido = hotelRepository.findAll().stream()
-                .anyMatch(h -> h.getTelefono() != null && h.getTelefono().trim().equals(tel));
-        if (telRepetido) {
-            return ResponseEntity.badRequest().body(Map.of("error",
+        if (hotelRepository.existsByTelefono(tel)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error",
                     "Ya existe un hotel registrado con este número telefónico. No se permite repetir teléfono."));
         }
 
         // Validar unicidad de correo electrónico
-        boolean emailRepetido = hotelRepository.findAll().stream()
-                .anyMatch(h -> h.getEmail() != null && h.getEmail().trim().equalsIgnoreCase(mail));
-        if (emailRepetido) {
-            return ResponseEntity.badRequest().body(Map.of("error",
+        if (hotelRepository.existsByEmailIgnoreCase(mail)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error",
                     "Ya existe un hotel registrado con este correo electrónico. No se permite repetir correo."));
         }
 
@@ -111,11 +107,8 @@ public class HotelController {
                         .body(Map.of("error", "El número telefónico forzosamente debe ser de 10 números."));
             }
             // Validar unicidad contra otros hoteles
-            boolean telRepetido = hotelRepository.findAll().stream()
-                    .anyMatch(h -> !h.getIdHotel().equals(id) && h.getTelefono() != null
-                            && h.getTelefono().trim().equals(tel));
-            if (telRepetido) {
-                return ResponseEntity.badRequest().body(Map.of("error",
+            if (hotelRepository.existsByTelefonoAndIdHotelNot(tel, id)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error",
                         "Ya existe otro hotel registrado con este número telefónico. No se permite repetir teléfono."));
             }
             hotel.setTelefono(tel);
@@ -128,11 +121,8 @@ public class HotelController {
                 return ResponseEntity.badRequest().body(Map.of("error",
                         "El correo electrónico debe tener un formato válido (ejemplo: contacto@hotel.com)."));
             }
-            boolean emailRepetido = hotelRepository.findAll().stream()
-                    .anyMatch(h -> !h.getIdHotel().equals(id) && h.getEmail() != null
-                            && h.getEmail().trim().equalsIgnoreCase(mail));
-            if (emailRepetido) {
-                return ResponseEntity.badRequest().body(Map.of("error",
+            if (hotelRepository.existsByEmailIgnoreCaseAndIdHotelNot(mail, id)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error",
                         "Ya existe otro hotel registrado con este correo electrónico. No se permite repetir correo."));
             }
             hotel.setEmail(mail);
