@@ -79,42 +79,82 @@ public class AuthService {
     public Map<String, Object> registrar(RegistroRequest req) {
         String email = req.getEmail().trim().toLowerCase();
         String nombre = req.getNombre().trim();
+        LocalDateTime ahora = LocalDateTime.now(clockActual());
 
-        if (usuarioRepository.existsByEmailIgnoreCase(email)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Ya existe una cuenta registrada con este correo electrónico."
-            );
+        Usuario existente = usuarioRepository.findByEmailIgnoreCase(email).orElse(null);
+        Usuario usuario;
+        boolean reemplazandoNoVerificada = false;
+
+        if (existente != null) {
+            if (Boolean.TRUE.equals(existente.getVerificado()) || existente.getRol() != Rol.HUESPED) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Ya existe una cuenta registrada con este correo electrónico."
+                );
+            }
+            List<TokenVerificacion> activos = tokenRepository.findByUsuarioAndUsadoFalse(existente);
+            boolean ventanaVigente = activos.stream()
+                    .anyMatch(t -> t.getFechaExpiracion() != null && t.getFechaExpiracion().isAfter(ahora));
+            if (activos.isEmpty() && existente.getFechaCreacion() != null) {
+                ventanaVigente = existente.getFechaCreacion()
+                        .plusMinutes(verificationExpirationMinutes)
+                        .isAfter(ahora);
+            }
+            if (ventanaVigente) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Existe un registro pendiente de verificación para este correo. Revise su bandeja o intente nuevamente tras expirar el código."
+                );
+            }
+            // P1.6: Si la cuenta no verificada ya expiró su ventana, permite reemplazarla con los datos del nuevo intento
+            if (!activos.isEmpty()) {
+                for (TokenVerificacion ant : activos) {
+                    ant.setUsado(true);
+                }
+                tokenRepository.saveAll(activos);
+            }
+            if (tokenRecuperacionRepository != null) {
+                tokenRecuperacionRepository.invalidarActivosPorUsuario(existente.getIdUsuario());
+            }
+            existente.setNombre(nombre);
+            existente.setPasswordHash(passwordEncoder.encode(req.getPassword()));
+            existente.setActivo(true);
+            existente.setTokenVersion(0);
+            existente.setFechaCreacion(ahora);
+            usuario = usuarioRepository.save(existente);
+            reemplazandoNoVerificada = true;
+            log.info("Cuenta no verificada expirada reemplazada en nuevo registro: {}", email);
+        } else {
+            // El registro público SIEMPRE crea un usuario con rol HUESPED y cuenta NO verificada
+            Usuario nuevo = new Usuario();
+            nuevo.setNombre(nombre);
+            nuevo.setEmail(email);
+            nuevo.setPasswordHash(passwordEncoder.encode(req.getPassword()));
+            nuevo.setRol(Rol.HUESPED);
+            nuevo.setVerificado(false);
+            nuevo.setActivo(true);
+            nuevo.setFechaCreacion(ahora);
+            usuario = usuarioRepository.save(nuevo);
         }
 
-        // El registro público SIEMPRE crea un usuario con rol HUESPED y cuenta NO verificada
-        Usuario nuevo = new Usuario();
-        nuevo.setNombre(nombre);
-        nuevo.setEmail(email);
-        nuevo.setPasswordHash(passwordEncoder.encode(req.getPassword()));
-        nuevo.setRol(Rol.HUESPED);
-        nuevo.setVerificado(false);
-        nuevo.setActivo(true);
-        nuevo.setFechaCreacion(LocalDateTime.now(clockActual()));
-        nuevo = usuarioRepository.save(nuevo);
-
-        // Sincronizar o vincular perfil básico en tabla huesped
+        // Sincronizar o vincular perfil básico en tabla huesped (sin sobrescribir un huésped presencial con teléfono)
         Huesped huesped = huespedRepository.findFirstByEmailIgnoreCase(email).orElseGet(Huesped::new);
-        if (huesped.getNombre() == null || huesped.getNombre().isBlank()) {
+        if (huesped.getNombre() == null || huesped.getNombre().isBlank()
+                || (reemplazandoNoVerificada && (huesped.getTelefono() == null || huesped.getTelefono().isBlank()))) {
             huesped.setNombre(nombre);
         }
         huesped.setEmail(email);
         huespedRepository.save(huesped);
 
-        TokenVerificacion tokenVerificacion = crearNuevoToken(nuevo);
+        TokenVerificacion tokenVerificacion = crearNuevoToken(usuario);
         boolean enviadoPorSmtp = emailService.enviarCorreoVerificacion(email, nombre, tokenVerificacion.getToken());
 
         log.info("Nuevo usuario registrado con rol HUESPED (pendiente de verificación, código={}): {}", tokenVerificacion.getCodigo(), email);
 
         Map<String, Object> respuesta = new LinkedHashMap<>();
         respuesta.put("mensaje", "Registro exitoso. Hemos enviado un código de 4 dígitos a su correo electrónico para verificar su cuenta.");
-        respuesta.put("email", nuevo.getEmail());
-        respuesta.put("rol", nuevo.getRol().name());
+        respuesta.put("email", usuario.getEmail());
+        respuesta.put("rol", usuario.getRol().name());
         respuesta.put("verificado", false);
         respuesta.put("enviadoPorSmtp", enviadoPorSmtp);
         respuesta.put("expiracionTokenMinutos", verificationExpirationMinutes);

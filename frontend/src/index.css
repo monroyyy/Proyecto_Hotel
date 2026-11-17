@@ -208,7 +208,7 @@ body {
     background: var(--admin-accent);
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1080px) {
     .admin-navbar {
         height: auto;
     }

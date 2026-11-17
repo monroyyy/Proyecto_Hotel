@@ -120,6 +120,7 @@ class Bloque4BRevocacionYRateLimiterTest extends AbstractMysqlTestcontainerTest 
         authRateLimiterService.setClock(hotelClock);
         authRateLimiterService.setMaxClaves(AuthRateLimiterService.MAX_CLAVES_BUCKET);
         authRateLimiterService.limpiar();
+        authService.setClock(hotelClock);
     }
 
     @AfterEach
@@ -130,6 +131,7 @@ class Bloque4BRevocacionYRateLimiterTest extends AbstractMysqlTestcontainerTest 
         authRateLimiterService.setClock(hotelClock);
         authRateLimiterService.setMaxClaves(AuthRateLimiterService.MAX_CLAVES_BUCKET);
         authRateLimiterService.limpiar();
+        authService.setClock(hotelClock);
 
         for (Integer idRes : reservasTempIds) {
             reservaRepository.findById(idRes).ifPresent(reservaRepository::delete);
@@ -437,6 +439,95 @@ class Bloque4BRevocacionYRateLimiterTest extends AbstractMysqlTestcontainerTest 
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].folio").value("HP-P22-MOSTRADOR"));
+    }
+
+    @Test
+    @DisplayName("P1.6 + CSP: cuenta no verificada bloquea dentro de vigencia (409) pero se reemplaza tras expirar (201), y API emite cabeceras CSP/Frame/Referrer")
+    void testP16ReemplazoCuentaNoVerificadaExpiradaYCspHeaders() throws Exception {
+        String email = "p16.propietario@test.com";
+        Instant t0 = Instant.parse("2026-11-17T16:00:00Z");
+        authService.setClock(Clock.fixed(t0, ClockConfig.ZONA_MEXICO));
+
+        // 1. Primer registro (tercero) + verificación de cabeceras CSP/seguridad en respuesta HTTP
+        mockMvc.perform(post("/api/auth/registro")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "nombre", "Tercero No Verificado",
+                                "email", email,
+                                "password", "ClaveInicial1"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("X-Frame-Options", "DENY"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Referrer-Policy", "no-referrer"));
+
+        Usuario uInicial = usuarioRepository.findByEmailIgnoreCase(email).orElseThrow();
+        usuariosTempIds.add(uInicial.getIdUsuario());
+        huespedRepository.findFirstByEmailIgnoreCase(email).ifPresent(h -> huespedesTempIds.add(h.getIdHuesped()));
+
+        // 2. Mientras el código de verificación siga vigente (+10 min < 30 min) -> 409 Conflict
+        authService.setClock(Clock.fixed(t0.plus(10, ChronoUnit.MINUTES), ClockConfig.ZONA_MEXICO));
+        mockMvc.perform(post("/api/auth/registro")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "nombre", "Propietario Legitimo",
+                                "email", email,
+                                "password", "ClavePropia1"
+                        ))))
+                .andExpect(status().isConflict());
+
+        // 3. Una vez expirada la ventana (+35 min > 30 min) -> 201 Created reemplazando cuenta sin verificar,
+        //    invalidando el token previo y actualizando nombre/clave
+        authService.setClock(Clock.fixed(t0.plus(35, ChronoUnit.MINUTES), ClockConfig.ZONA_MEXICO));
+        mockMvc.perform(post("/api/auth/registro")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "nombre", "Propietario Legitimo",
+                                "email", email,
+                                "password", "ClavePropia1"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.verificado").value(false));
+
+        Usuario uReemplazado = usuarioRepository.findByEmailIgnoreCase(email).orElseThrow();
+        assertThat(uReemplazado.getIdUsuario()).isEqualTo(uInicial.getIdUsuario());
+        assertThat(uReemplazado.getNombre()).isEqualTo("Propietario Legitimo");
+        assertThat(passwordEncoder.matches("ClavePropia1", uReemplazado.getPasswordHash())).isTrue();
+
+        List<TokenVerificacion> activos = tokenVerificacionRepository.findByUsuarioAndUsadoFalse(uReemplazado);
+        assertThat(activos).hasSize(1);
+
+        // El dueño verifica con el nuevo código y ya puede iniciar sesión con su propia contraseña
+        mockMvc.perform(post("/api/auth/verificar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", email,
+                                "codigo", activos.get(0).getCodigo()
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.verificado").value(true));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", email,
+                                "password", "ClavePropia1"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty());
+
+        // 4. Una vez verificada, volver a intentar registrar ese correo siempre devuelve 409
+        mockMvc.perform(post("/api/auth/registro")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "nombre", "Otro Intento",
+                                "email", email,
+                                "password", "ClaveOtra1"
+                        ))))
+                .andExpect(status().isConflict());
     }
 
     private Usuario crearUsuario(String nombre, String email, String password, boolean verificado) {

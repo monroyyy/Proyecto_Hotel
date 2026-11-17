@@ -270,8 +270,8 @@
 /* Toast emergente de aviso de desocupación */
 .hp-checkout-toast {
     position: fixed;
-    bottom: 24px;
-    left: 24px;
+    top: 66px;
+    right: 20px;
     width: 365px;
     max-width: calc(100vw - 32px);
     background: #ffffff;

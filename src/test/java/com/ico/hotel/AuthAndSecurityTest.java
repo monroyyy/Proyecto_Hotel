@@ -129,7 +129,13 @@ class AuthAndSecurityTest {
         req.setEmail("duplicado@ejemplo.com");
         req.setPassword("Segura123");
 
-        when(usuarioRepository.existsByEmailIgnoreCase("duplicado@ejemplo.com")).thenReturn(true);
+        Usuario verificadoExistente = new Usuario();
+        verificadoExistente.setIdUsuario(99);
+        verificadoExistente.setEmail("duplicado@ejemplo.com");
+        verificadoExistente.setRol(Rol.HUESPED);
+        verificadoExistente.setVerificado(true);
+        when(usuarioRepository.findByEmailIgnoreCase("duplicado@ejemplo.com"))
+                .thenReturn(Optional.of(verificadoExistente));
 
         assertThatThrownBy(() -> authService.registrar(req))
                 .isInstanceOf(ResponseStatusException.class)
