@@ -32,12 +32,12 @@ public class HotelSearchTool {
         if (ciudad == null || ciudad.isBlank()) {
             return hotelRepository.findByActivoTrue();
         }
-        return hotelRepository.findByCiudad(ciudad);
+        return hotelRepository.findByCiudadIgnoreCaseAndActivoTrue(ciudad);
     }
 
     @Tool(description = "Obtener el total de habitaciones que tiene cada hotel en la cadena. Útil para preguntas como: ¿Cuántas habitaciones hay por cada hotel?")
     public List<Map<String, Object>> countTotalHabitacionesPorHotel() {
         log.info("Tool invocada — countTotalHabitacionesPorHotel");
-        return hotelRepository.countTotalHabitacionesPorHotel();
+        return hotelRepository.countTotalHabitacionesPorHotelActivos();
     }
 }

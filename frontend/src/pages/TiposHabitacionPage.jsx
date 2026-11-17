@@ -22,7 +22,8 @@ export default function TiposHabitacionPage() {
         nombre: '',
         capacidad: 2,
         descripcion: '',
-        precioBase: 0
+        precioBase: 0,
+        imagenUrl: ''
     });
 
     const cargarTipos = async () => {
@@ -54,7 +55,8 @@ export default function TiposHabitacionPage() {
             nombre: '',
             capacidad: 2,
             descripcion: '',
-            precioBase: 0
+            precioBase: 0,
+            imagenUrl: ''
         });
         setModalAbierto(true);
     };
@@ -65,7 +67,8 @@ export default function TiposHabitacionPage() {
             nombre: tipo.nombre || '',
             capacidad: tipo.capacidad || 1,
             descripcion: tipo.descripcion || '',
-            precioBase: tipo.precioBase || 0
+            precioBase: tipo.precioBase || 0,
+            imagenUrl: tipo.imagenUrl || ''
         });
         setModalAbierto(true);
     };
@@ -360,6 +363,17 @@ export default function TiposHabitacionPage() {
                             className="form-input"
                             placeholder="Breve descripción de amenidades y características..."
                             style={{ resize: 'vertical' }}
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">URL de imagen HTTPS (opcional)</label>
+                        <input
+                            type="url"
+                            maxLength={500}
+                            value={formTipo.imagenUrl}
+                            onChange={e => setFormTipo({ ...formTipo, imagenUrl: e.target.value })}
+                            className="form-input"
+                            placeholder="https://images.unsplash.com/..."
                         />
                     </div>
                     <div className="modal-actions">

@@ -11,7 +11,7 @@ import {
 import {
     getHoteles,
     getHabitaciones,
-    getReservas,
+    getMisReservas,
     crearReserva,
     cancelarReserva,
     actualizarReserva,
@@ -53,8 +53,8 @@ function formatFechaItinerario(fechaStr) {
 
 const FALLBACK_ROOM_IMG = 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=900&q=80';
 
-// Escenas e imágenes oficiales con perfil arquitectónico de Hotel Paraíso
-function obtenerPerfilHotel(hotel) {
+// Resuelve metadata editorial desde la BD del hotel con fallback al preset visual local
+function obtenerPresetHotel(hotel) {
     const texto = `${hotel?.nombre || ''} ${hotel?.ciudad || ''}`.toLowerCase();
     if (texto.includes('canc')) {
         return {
@@ -123,14 +123,26 @@ function obtenerPerfilHotel(hotel) {
     }
     return {
         numero: '01',
-        slug: 'cancun',
+        slug: 'destino',
         imagen: IMAGENES_HOTEL.heroCosta.webp,
-        alt: 'Hotel Paraíso',
+        alt: hotel?.nombre || 'Hotel Paraíso',
         tag: 'Destino Paraíso',
-        vibe: 'Hospitalidad y calma costera',
+        vibe: 'Hospitalidad y calma mexicana',
         amenidades: ['Vistas Panorámicas', 'Concierge 24/7'],
         clima: { temp: '25°C', condicion: 'Despejado' },
         precioDesde: 1200
+    };
+}
+
+function obtenerPerfilHotel(hotel) {
+    const preset = obtenerPresetHotel(hotel);
+    return {
+        ...preset,
+        imagen: hotel?.imagenUrl || preset.imagen,
+        fallbackImagen: preset.imagen,
+        alt: hotel?.nombre ? `${hotel.nombre} en ${hotel.ciudad || 'México'}` : preset.alt,
+        tag: hotel?.tagEditorial || preset.tag,
+        vibe: hotel?.descripcion || preset.vibe
     };
 }
 
@@ -138,7 +150,7 @@ function obtenerImagenHotel(hotel) {
     return obtenerPerfilHotel(hotel).imagen;
 }
 
-function obtenerImagenHabitacion(hab) {
+function obtenerPresetHabitacion(hab) {
     const tipo = (hab?.tipoHabitacion?.nombre || '').toLowerCase();
     if (tipo.includes('suite')) return IMAGENES_HOTEL.suiteVistaMar.webp;
     if (tipo.includes('familiar')) return IMAGENES_HOTEL.habitacionFamiliar.webp;
@@ -146,6 +158,23 @@ function obtenerImagenHabitacion(hab) {
     if (tipo.includes('doble')) return IMAGENES_HOTEL.habitacionDoble.webp;
     if (tipo.includes('ejecutiv') || tipo.includes('individual') || tipo.includes('sencill')) return IMAGENES_HOTEL.habitacionEjecutiva.webp;
     return IMAGENES_HOTEL.suiteVistaMar.webp;
+}
+
+function obtenerImagenHabitacion(hab) {
+    return hab?.tipoHabitacion?.imagenUrl || obtenerPresetHabitacion(hab);
+}
+
+function aplicarFallbackImagen(e, presetUrl) {
+    const img = e.currentTarget;
+    if (!img.dataset.fallbackStage && presetUrl && img.getAttribute('src') !== presetUrl) {
+        img.dataset.fallbackStage = 'preset';
+        img.src = presetUrl;
+        return;
+    }
+    if (img.dataset.fallbackStage !== 'final') {
+        img.dataset.fallbackStage = 'final';
+        img.src = FALLBACK_ROOM_IMG;
+    }
 }
 
 function obtenerAltHabitacion(hab) {
@@ -350,7 +379,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                 return;
             }
             const [reservasData, habsData] = await Promise.all([
-                getReservas(),
+                getMisReservas(),
                 getHabitaciones()
             ]);
             setMisReservas(reservasData || []);
@@ -398,7 +427,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             const promesas = [
                 getHoteles(),
                 getHabitaciones(),
-                isAuthenticated ? getReservas() : Promise.resolve([])
+                isAuthenticated ? getMisReservas() : Promise.resolve([])
             ];
             const [hotelesData, habsData, reservasData] = await Promise.all(promesas);
             setHoteles(hotelesData || []);
@@ -1049,11 +1078,13 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                     }}
                                                 >
                                                     {/* Fondo Fotográfico Inmersivo - Clic directo envía a suites */}
-                                                    <div
+                                                    <img
                                                         className="hp-accordion-bg"
-                                                        style={{ backgroundImage: `url(${perfil.imagen})` }}
-                                                        role="img"
-                                                        aria-label={perfil.alt}
+                                                        src={perfil.imagen}
+                                                        alt={perfil.alt}
+                                                        loading="lazy"
+                                                        referrerPolicy="no-referrer"
+                                                        onError={(e) => aplicarFallbackImagen(e, perfil.fallbackImagen)}
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             irASuitesHotel(h.idHotel);
@@ -1097,15 +1128,11 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                                     <MexicoMicroMap
                                                                         activeHotel={h}
                                                                         hotels={hotelesUnicos}
-                                                                        onSelectHotel={(targetSlug) => {
-                                                                            const matchH = hotelesUnicos.find(item => {
-                                                                                const p = obtenerPerfilHotel(item);
-                                                                                return p.slug === targetSlug || item.ciudad.toLowerCase().includes(targetSlug);
-                                                                            });
+                                                                        onSelectHotel={(targetHotelId) => {
+                                                                            const matchH = hotelesUnicos.find(item => item.idHotel === targetHotelId);
                                                                             if (matchH) {
                                                                                 setHoverHotelId(matchH.idHotel);
                                                                                 setFiltroHotel(String(matchH.idHotel));
-                                                                                // Desplazar suavemente a la tarjeta del destino seleccionado
                                                                                 setTimeout(() => {
                                                                                     const panel = document.getElementById(`hp-hotel-panel-${matchH.idHotel}`);
                                                                                     if (panel) {
@@ -1269,7 +1296,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                 alt={obtenerAltHabitacion(suiteDestacada)}
                                                 className="hp-suite-featured-img"
                                                 loading="lazy"
-                                                onError={(e) => { e.currentTarget.src = FALLBACK_ROOM_IMG; }}
+                                                referrerPolicy="no-referrer"
+                                                onError={(e) => aplicarFallbackImagen(e, obtenerPresetHabitacion(suiteDestacada))}
                                             />
                                             <span className="hp-suite-featured-badge">
                                                 Suite Signature · {suiteDestacada.hotel?.ciudad || 'Costa del Pacífico'}
@@ -1392,7 +1420,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                             alt={obtenerAltHabitacion(hab)}
                                                             className="hp-room-img"
                                                             loading="lazy"
-                                                            onError={(e) => { e.currentTarget.src = FALLBACK_ROOM_IMG; }}
+                                                            referrerPolicy="no-referrer"
+                                                            onError={(e) => aplicarFallbackImagen(e, obtenerPresetHabitacion(hab))}
                                                         />
                                                         <div className="hp-room-location-tag">
                                                             <MapPin size={12} /> {hab.hotel?.ciudad || 'México'} {isAuthenticated ? `· Hab. ${hab.numero}` : ''}
@@ -1672,7 +1701,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                 alt={r.habitacion?.tipoHabitacion?.nombre || 'Suite de hotel'}
                                                 className="hp-boarding-img"
                                                 loading="lazy"
-                                                onError={(e) => { e.currentTarget.src = FALLBACK_ROOM_IMG; }}
+                                                referrerPolicy="no-referrer"
+                                                onError={(e) => aplicarFallbackImagen(e, obtenerPresetHabitacion(r.habitacion))}
                                             />
                                             <div className="hp-boarding-media-badge">
                                                 <MapPin size={12} />
@@ -2407,7 +2437,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 alt={obtenerAltHabitacion(habitacionDetalle)}
                                 className="hp-modal-ficha-img"
                                 loading="lazy"
-                                onError={(e) => { e.currentTarget.src = FALLBACK_ROOM_IMG; }}
+                                referrerPolicy="no-referrer"
+                                onError={(e) => aplicarFallbackImagen(e, obtenerPresetHabitacion(habitacionDetalle))}
                             />
                             <div className="hp-modal-ficha-badge-bar">
                                 <span className="hp-modal-pill-tag">
@@ -3080,7 +3111,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                     src={obtenerImagenHabitacion(modalRequiereSesion.habitacion)}
                                     alt={obtenerAltHabitacion(modalRequiereSesion.habitacion)}
                                     className="hp-auth-modal-suite-thumb"
-                                    onError={(e) => { e.currentTarget.src = FALLBACK_ROOM_IMG; }}
+                                    referrerPolicy="no-referrer"
+                                    onError={(e) => aplicarFallbackImagen(e, obtenerPresetHabitacion(modalRequiereSesion.habitacion))}
                                 />
                                 <div className="hp-auth-modal-suite-info">
                                     <div className="hp-auth-modal-suite-name">

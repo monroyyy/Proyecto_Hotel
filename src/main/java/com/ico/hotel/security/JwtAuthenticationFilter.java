@@ -46,8 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             Claims claims = jwtService.parseClaims(token);
-            String jti = claims.getId();
-            if (tokenBlacklistService.isRevoked(jti) || tokenBlacklistService.isRevoked(token)) {
+            if (tokenBlacklistService.isRevoked(token)) {
                 request.setAttribute("jwt_error", "La sesión ha sido cerrada. Por favor inicie sesión nuevamente.");
                 filterChain.doFilter(request, response);
                 return;

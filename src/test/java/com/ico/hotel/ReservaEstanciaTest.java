@@ -263,14 +263,14 @@ class ReservaEstanciaTest extends AbstractMysqlTestcontainerTest {
                 .isInstanceOf(ReglaEstanciaException.class)
                 .hasMessageContaining("método de pago");
 
-        // Salida anticipada al día siguiente con método Tarjeta -> saldo = 0 y Finalizada sin reembolso
+        // Salida anticipada al día siguiente con método TARJETA_CREDITO -> saldo = 0 y Finalizada sin reembolso
         Clock relojCheckOutAnticipado = Clock.fixed(hoy.plusDays(1).atTime(11, 30).atZone(ZONA).toInstant(), ZONA);
         reservaService.setClock(relojCheckOutAnticipado);
-        Reserva finalizada = reservaService.checkOut(r.getIdReserva(), "Tarjeta");
+        Reserva finalizada = reservaService.checkOut(r.getIdReserva(), "TARJETA_CREDITO");
 
         assertThat(finalizada.getEstado()).isEqualTo(Reserva.FINALIZADA);
         assertThat(finalizada.getSaldo()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(finalizada.getMetodoPagoSaldo()).isEqualTo("Tarjeta");
+        assertThat(finalizada.getMetodoPagoSaldo()).isEqualTo("TARJETA_CREDITO");
         assertThat(finalizada.getCheckOutAt()).isEqualTo(hoy.plusDays(1).atTime(11, 30));
         assertThat(finalizada.getObservaciones()).contains("Salida anticipada");
     }

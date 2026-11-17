@@ -3,6 +3,7 @@ package com.ico.hotel.config;
 import com.ico.hotel.exceptions.ConflictoEstanciaException;
 import com.ico.hotel.exceptions.ReglaEstanciaException;
 import com.ico.hotel.exceptions.TransicionEstadoInvalidaException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -76,6 +78,15 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String param = ex.getName() != null ? ex.getName() : "parámetro";
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "error", "Valor inválido para el parámetro '" + param + "'.",
+                "status", HttpStatus.BAD_REQUEST.value()
+        ));
+    }
+
     @ExceptionHandler({TransicionEstadoInvalidaException.class, ConflictoEstanciaException.class})
     public ResponseEntity<Map<String, Object>> handleEstanciaConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
@@ -117,6 +128,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                 "error", mensaje,
                 "status", HttpStatus.CONFLICT.value()
+        ));
+    }
+
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<Map<String, Object>> handleDataAccess(DataAccessException ex) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "error", "No fue posible persistir la operación en base de datos.",
+                "status", HttpStatus.INTERNAL_SERVER_ERROR.value()
         ));
     }
 }

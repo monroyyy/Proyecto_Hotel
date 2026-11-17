@@ -163,7 +163,7 @@ class ReservaTimezoneUtcTest extends AbstractMysqlTestcontainerTest {
         r.setTotal(new BigDecimal("3000.00"));
         r.setAnticipo(new BigDecimal("1500.00"));
         r.setSaldo(new BigDecimal("1500.00"));
-        r.setMetodoPago("Tarjeta");
+        r.setMetodoPago("TARJETA_CREDITO");
         r.setFechaCreacion(LocalDateTime.of(2019, 5, 9, 10, 0));
         r = reservaRepository.save(r);
         reservasTempIds.add(r.getIdReserva());

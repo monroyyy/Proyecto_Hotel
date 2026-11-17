@@ -9,6 +9,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * @deprecated Endpoint legado de solo lectura; la identidad del operador ahora se toma del JWT en {@code ReservaService}.
+ */
+@Deprecated(forRemoval = false)
 @RestController
 @RequestMapping("/api/recepcionistas")
 public class RecepcionistaController {

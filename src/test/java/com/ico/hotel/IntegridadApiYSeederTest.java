@@ -14,6 +14,7 @@ import com.ico.hotel.repository.HuespedRepository;
 import com.ico.hotel.repository.ReservaEventoRepository;
 import com.ico.hotel.repository.ReservaRepository;
 import com.ico.hotel.security.CustomUserDetails;
+import com.ico.hotel.services.ReservaExpiracionJob;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -285,8 +286,9 @@ class IntegridadApiYSeederTest extends AbstractMysqlTestcontainerTest {
         String jdbcUrl = environment.getProperty("spring.datasource.url", "");
         assertThat(jdbcUrl).contains("hotel_test_db").doesNotContain("/hotel_db");
         assertThat(environment.getProperty("app.jobs.expiracion-enabled")).isEqualTo("false");
-        assertThat(wac.getBeansOfType(SchedulingConfig.class)).isEmpty();
-        assertThat(wac.getBeansOfType(ScheduledAnnotationBeanPostProcessor.class)).isEmpty();
+        assertThat(wac.getBeansOfType(ReservaExpiracionJob.class)).isEmpty();
+        assertThat(wac.getBeansOfType(SchedulingConfig.class)).hasSize(1);
+        assertThat(wac.getBeansOfType(ScheduledAnnotationBeanPostProcessor.class)).isNotEmpty();
 
         LocalDate hoy = LocalDate.now(hotelClock);
         Integer invalidasFinalizadasFuturas = jdbcTemplate.queryForObject(

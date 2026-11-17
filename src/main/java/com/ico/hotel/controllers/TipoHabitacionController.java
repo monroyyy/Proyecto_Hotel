@@ -2,6 +2,7 @@ package com.ico.hotel.controllers;
 
 import com.ico.hotel.models.TipoHabitacion;
 import com.ico.hotel.repository.TipoHabitacionRepository;
+import com.ico.hotel.services.CatalogoMediaValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,9 @@ public class TipoHabitacionController {
     @Autowired
     private TipoHabitacionRepository tipoHabitacionRepository;
 
+    @Autowired
+    private CatalogoMediaValidator catalogoMediaValidator;
+
     @GetMapping
     public List<TipoHabitacion> listarTodos() {
         return tipoHabitacionRepository.findAll();
@@ -38,6 +42,8 @@ public class TipoHabitacionController {
         if (tipo.getPrecioBase() == null || tipo.getPrecioBase().compareTo(BigDecimal.ZERO) < 0) {
             return ResponseEntity.badRequest().body(Map.of("error", "El precio base no puede ser negativo."));
         }
+        tipo.setImagenUrl(catalogoMediaValidator.validarImagenUrl(tipo.getImagenUrl()));
+        tipo.setDescripcion(catalogoMediaValidator.validarTextoPlano(tipo.getDescripcion(), "descripcion", 500));
         TipoHabitacion guardado = tipoHabitacionRepository.save(tipo);
         return ResponseEntity.status(HttpStatus.CREATED).body(guardado);
     }
@@ -64,7 +70,10 @@ public class TipoHabitacionController {
                         tipo.setCapacidad(datos.getCapacidad());
                     }
                     if (datos.getDescripcion() != null) {
-                        tipo.setDescripcion(datos.getDescripcion().trim());
+                        tipo.setDescripcion(catalogoMediaValidator.validarTextoPlano(datos.getDescripcion(), "descripcion", 500));
+                    }
+                    if (datos.getImagenUrl() != null) {
+                        tipo.setImagenUrl(catalogoMediaValidator.validarImagenUrl(datos.getImagenUrl()));
                     }
                     if (datos.getPrecioBase() != null) {
                         if (datos.getPrecioBase().compareTo(BigDecimal.ZERO) < 0) {

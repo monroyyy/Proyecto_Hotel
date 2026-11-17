@@ -402,8 +402,31 @@ export async function buscarDisponibilidad(p) {
     return await apiRequest(`/reservas/disponibilidad?${params.toString()}`);
 }
 
-export async function getReservas(estado) {
-    return await apiRequest(`/reservas${estado ? `?estado=${encodeURIComponent(estado)}` : ''}`);
+export async function getReservas(opts = {}) {
+    if (typeof opts === 'string') {
+        const qStr = opts ? `?estado=${encodeURIComponent(opts)}` : '';
+        return await apiRequest(`/reservas${qStr}`);
+    }
+    const params = new URLSearchParams();
+    params.append('page', String(opts.page ?? 0));
+    params.append('size', String(opts.size ?? 20));
+    if (opts.sort) params.append('sort', opts.sort);
+    if (opts.estado) params.append('estado', opts.estado);
+    if (opts.hotelId) params.append('hotelId', String(opts.hotelId));
+    if (opts.entradaDesde) params.append('entradaDesde', opts.entradaDesde);
+    if (opts.entradaHasta) params.append('entradaHasta', opts.entradaHasta);
+    if (opts.salidaDesde) params.append('salidaDesde', opts.salidaDesde);
+    if (opts.salidaHasta) params.append('salidaHasta', opts.salidaHasta);
+    if (opts.q && opts.q.trim()) params.append('q', opts.q.trim());
+    return await apiRequest(`/reservas?${params.toString()}`);
+}
+
+export async function getMisReservas(estado) {
+    return await apiRequest(`/reservas/mias${estado ? `?estado=${encodeURIComponent(estado)}` : ''}`);
+}
+
+export async function getResumenEstadosReservas() {
+    return await apiRequest('/reservas/resumen-estados');
 }
 
 export async function crearReserva(datos) {
@@ -525,11 +548,13 @@ export async function getDashboardPorHotel(year, incluirInactivos = false) {
 // SERVICIOS DE INFORMES EJECUTIVOS (GERENCIA)
 // ==========================================
 
-export async function getInformeFinanciero(inicio, fin, hotelId) {
+export async function getInformeFinanciero(inicio, fin, hotelId, page = 0, size = 20) {
     const params = new URLSearchParams();
     if (inicio) params.append('inicio', inicio);
     if (fin) params.append('fin', fin);
     if (hotelId) params.append('hotelId', hotelId);
+    params.append('page', String(page));
+    params.append('size', String(size));
     return await apiRequest(`/informes/financiero?${params.toString()}`);
 }
 

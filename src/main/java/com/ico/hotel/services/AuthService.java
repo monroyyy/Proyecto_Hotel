@@ -279,12 +279,16 @@ public class AuthService {
     public Map<String, Object> logout(String authHeader) {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7).trim();
-            try {
-                Claims claims = jwtService.parseClaims(token);
-                tokenBlacklistService.revokeToken(claims.getId(), claims.getExpiration());
-                tokenBlacklistService.revokeToken(token, claims.getExpiration());
-            } catch (Exception ignored) {
-                // Si el token ya estaba expirado, igual confirmamos el cierre de sesión
+            if (!token.isEmpty()) {
+                Claims claims = null;
+                try {
+                    claims = jwtService.parseClaims(token);
+                } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ignored) {
+                    // Token expirado o inválido: no se inserta en token_revocado
+                }
+                if (claims != null && claims.getExpiration() != null) {
+                    tokenBlacklistService.revokeToken(token, claims.getExpiration());
+                }
             }
         }
         return Map.of("mensaje", "Sesión cerrada correctamente. El token ha sido invalidado.");

@@ -4,7 +4,11 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Recepcionista que registra reservaciones (ver docs/01_notas_entrevista.md). */
+/**
+ * @deprecated Catálogo legado conservado por compatibilidad sin borrar la tabla;
+ *             las reservaciones nuevas asignan {@code recepcionista} desde el JWT/origen en servidor.
+ */
+@Deprecated(forRemoval = false)
 @Data
 @NoArgsConstructor
 @Entity

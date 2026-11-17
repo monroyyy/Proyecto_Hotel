@@ -74,14 +74,53 @@ class FlywayYTimezoneTestcontainersTest extends AbstractMysqlTestcontainerTest {
     }
 
     @Test
-    @DisplayName("BD vacía en Testcontainers MySQL 8 ejecuta V1-V7, pasa ddl-auto=validate y seeder respeta P0.4")
+    @DisplayName("BD vacía en Testcontainers MySQL 8 ejecuta V1-V11, pasa ddl-auto=validate y seeder respeta P0.4")
     void testArranqueBdVaciaFlywayV1AV5YSeeder() throws Exception {
         List<Map<String, Object>> historial = jdbcTemplate.queryForList(
                 "SELECT version, script, success FROM flyway_schema_history WHERE version IS NOT NULL ORDER BY installed_rank"
         );
         assertThat(historial).extracting(m -> String.valueOf(m.get("version")))
-                .containsExactly("1", "2", "3", "4", "5", "6", "7");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11");
         assertThat(historial).allMatch(m -> Boolean.TRUE.equals(m.get("success")) || Integer.valueOf(1).equals(m.get("success")));
+
+        // Verificación V10: columnas en hotel y solo imagen_url en tipo_habitacion
+        List<String> colsHotelV10 = jdbcTemplate.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS " +
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'hotel' " +
+                "AND COLUMN_NAME IN ('imagen_url', 'descripcion', 'tag_editorial', 'latitud', 'longitud') " +
+                "ORDER BY COLUMN_NAME",
+                String.class
+        );
+        assertThat(colsHotelV10).containsExactly("descripcion", "imagen_url", "latitud", "longitud", "tag_editorial");
+        List<String> colsTipoV10 = jdbcTemplate.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS " +
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tipo_habitacion' AND COLUMN_NAME = 'imagen_url'",
+                String.class
+        );
+        assertThat(colsTipoV10).containsExactly("imagen_url");
+
+        // Verificación V11: CHECK constraints del catálogo de método de pago
+        List<String> checksReserva = jdbcTemplate.queryForList(
+                "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS " +
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reserva' AND CONSTRAINT_TYPE = 'CHECK' " +
+                "ORDER BY CONSTRAINT_NAME",
+                String.class
+        );
+        assertThat(checksReserva).contains("chk_reserva_metodo_pago", "chk_reserva_metodo_pago_saldo");
+
+        // Verificación V9: tabla token_revocado, columnas y clave/índice de expiración
+        List<String> columnasV9 = jdbcTemplate.queryForList(
+                "SELECT COLUMN_NAME FROM information_schema.COLUMNS " +
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'token_revocado' ORDER BY ORDINAL_POSITION",
+                String.class
+        );
+        assertThat(columnasV9).containsExactly("token_hash", "expira_en", "fecha_revocacion");
+        List<String> indicesV9 = jdbcTemplate.queryForList(
+                "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS " +
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'token_revocado'",
+                String.class
+        );
+        assertThat(indicesV9).contains("PRIMARY", "idx_token_revocado_expira");
 
         LocalDate hoy = LocalDate.now(hotelClock);
         long totalTrasArranque = reservaRepository.count();
@@ -161,7 +200,7 @@ class FlywayYTimezoneTestcontainersTest extends AbstractMysqlTestcontainerTest {
         r.setTotal(new BigDecimal("3000.00"));
         r.setAnticipo(new BigDecimal("1500.00"));
         r.setSaldo(new BigDecimal("1500.00"));
-        r.setMetodoPago("Tarjeta");
+        r.setMetodoPago("TARJETA_CREDITO");
         r.setFechaCreacion(LocalDateTime.of(2019, 5, 9, 10, 0));
         r = reservaRepository.save(r);
 
@@ -171,7 +210,7 @@ class FlywayYTimezoneTestcontainersTest extends AbstractMysqlTestcontainerTest {
 
         LocalDateTime horaCheckOutMx = LocalDateTime.of(2019, 5, 11, 11, 15, 20);
         reservaService.setClock(Clock.fixed(horaCheckOutMx.atZone(ZONA).toInstant(), ZONA));
-        reservaService.checkOut(r.getIdReserva(), "Efectivo");
+        reservaService.checkOut(r.getIdReserva(), "EFECTIVO");
 
         Map<String, Object> fila = jdbcTemplate.queryForMap(
                 "SELECT DATE_FORMAT(check_in_at, '%Y-%m-%d %H:%i:%s') AS ci, " +
@@ -281,6 +320,102 @@ class FlywayYTimezoneTestcontainersTest extends AbstractMysqlTestcontainerTest {
                 assertThat(ev.get("fh")).isEqualTo("2026-11-10 23:00:00");
                 assertThat(ev.get("detalle")).isEqualTo("Regularización de datos de prueba: saldo asumido liquidado");
             }
+        }
+    }
+
+    @Test
+    @DisplayName("Migración V10 siembra por nombre+ciudad y V11 normaliza las 6 filas 'Tarjeta' con evento y CHECK")
+    void testMigracionV10yV11EnBaseAislada() {
+        try (MySQLContainer tc = new MySQLContainer("mysql:8.0.40")
+                .withDatabaseName("hotel_v11_test")
+                .withUsername("test")
+                .withPassword("test")) {
+            tc.start();
+            String url = tc.getJdbcUrl() + (tc.getJdbcUrl().contains("?") ? "&" : "?")
+                    + "useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Mexico_City";
+            DriverManagerDataSource ds = new DriverManagerDataSource(url, tc.getUsername(), tc.getPassword());
+            JdbcTemplate jdbc = new JdbcTemplate(ds);
+
+            Flyway.configure()
+                    .dataSource(ds)
+                    .locations("classpath:db/migration")
+                    .target("9")
+                    .load()
+                    .migrate();
+
+            jdbc.update("INSERT INTO hotel (id_hotel, activo, ciudad, direccion, email, nombre, telefono) " +
+                    "VALUES (99, b'1', 'Cancún', 'Zona Hotelera', 'cancun.v11@test.com', 'Hotel Paraíso', '9981112299')");
+            jdbc.update("INSERT INTO tipo_habitacion (id_tipo, capacidad, descripcion, nombre, precio_base) " +
+                    "VALUES (99, 2, 'Desc original', 'Doble V11', 1200.00)");
+            jdbc.update("INSERT INTO habitacion (id_habitacion, estado, numero, piso, id_hotel, id_tipo) " +
+                    "VALUES (99, 'Disponible', '901', 9, 99, 99)");
+            jdbc.update("INSERT INTO huesped (id_huesped, email, nombre, telefono) " +
+                    "VALUES (99, 'hue.v11@test.com', 'Huésped V11', '5511112299')");
+
+            Object[][] filas = {
+                    {1, "HP-2026-00001", "Cancelada", "Tarjeta", null},
+                    {22, "HP-2026-00022", "Finalizada", "Tarjeta", "Efectivo"},
+                    {23, "HP-2026-00023", "Confirmada", "Tarjeta", null},
+                    {24, "HP-2026-00024", "Confirmada", "Tarjeta", null},
+                    {25, "HP-2026-00025", "Cancelada", "Tarjeta", null},
+                    {26, "HP-2026-00026", "Cancelada", "Tarjeta", null},
+                    {30, "HP-2026-00030", "Confirmada", "Efectivo", null},
+                    {31, "HP-2026-00031", "Pre-reserva", null, null}
+            };
+            for (Object[] f : filas) {
+                jdbc.update(
+                        "INSERT INTO reserva (id_reserva, folio, id_habitacion, id_huesped, fecha_entrada, fecha_salida, " +
+                        "noches, adultos, ninos, estado, total, anticipo, saldo, metodo_pago, metodo_pago_saldo) " +
+                        "VALUES (?, ?, 99, 99, '2026-11-04', '2026-11-06', 2, 2, 0, ?, 2000.00, 1000.00, 1000.00, ?, ?)",
+                        f[0], f[1], f[2], f[3], f[4]
+                );
+            }
+
+            Flyway.configure()
+                    .dataSource(ds)
+                    .locations("classpath:db/migration")
+                    .target("11")
+                    .load()
+                    .migrate();
+
+            // V10: hotel Paraíso Cancún recibe metadata y imagen_url queda NULL; descripcion de tipo_habitacion no cambia
+            Map<String, Object> hotelV10 = jdbc.queryForMap(
+                    "SELECT imagen_url, descripcion, tag_editorial, latitud, longitud FROM hotel WHERE id_hotel = 99"
+            );
+            assertThat(hotelV10.get("imagen_url")).isNull();
+            assertThat(hotelV10.get("tag_editorial")).isEqualTo("Resort Insignia");
+            assertThat((BigDecimal) hotelV10.get("latitud")).isEqualByComparingTo("21.161908");
+            assertThat(jdbc.queryForObject("SELECT descripcion FROM tipo_habitacion WHERE id_tipo = 99", String.class))
+                    .isEqualTo("Desc original");
+
+            // V11: las 6 filas 'Tarjeta' -> TARJETA_CREDITO y exactamente 6 eventos CORRECCION_DATOS
+            List<Map<String, Object>> tarjRes = jdbc.queryForList(
+                    "SELECT id_reserva, metodo_pago, metodo_pago_saldo FROM reserva WHERE id_reserva IN (1,22,23,24,25,26) ORDER BY id_reserva"
+            );
+            assertThat(tarjRes).hasSize(6).allSatisfy(m -> assertThat(m.get("metodo_pago")).isEqualTo("TARJETA_CREDITO"));
+            assertThat(tarjRes.get(1).get("metodo_pago_saldo")).isEqualTo("EFECTIVO");
+            assertThat(jdbc.queryForObject("SELECT metodo_pago FROM reserva WHERE id_reserva = 30", String.class))
+                    .isEqualTo("EFECTIVO");
+            assertThat(jdbc.queryForObject("SELECT metodo_pago FROM reserva WHERE id_reserva = 31", String.class))
+                    .isNull();
+
+            List<Map<String, Object>> eventosV11 = jdbc.queryForList(
+                    "SELECT id_reserva, tipo, usuario, DATE_FORMAT(fecha_hora, '%Y-%m-%d %H:%i:%s') AS fh " +
+                    "FROM reserva_evento WHERE tipo = 'CORRECCION_DATOS' ORDER BY id_reserva"
+            );
+            assertThat(eventosV11).extracting(e -> ((Number) e.get("id_reserva")).intValue())
+                    .containsExactly(1, 22, 23, 24, 25, 26);
+            assertThat(eventosV11).allSatisfy(e -> {
+                assertThat(e.get("usuario")).isEqualTo("MIGRACION");
+                assertThat(e.get("fh")).isEqualTo("2026-11-11 01:00:00");
+            });
+
+            // CHECK constraint rechaza valor fuera de catálogo ('Tarjeta')
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbc.update(
+                    "INSERT INTO reserva (id_reserva, folio, id_habitacion, id_huesped, fecha_entrada, fecha_salida, " +
+                    "noches, adultos, ninos, estado, total, anticipo, saldo, metodo_pago) " +
+                    "VALUES (99, 'HP-2026-00099', 99, 99, '2026-11-10', '2026-11-11', 1, 1, 0, 'Confirmada', 1000.00, 500.00, 500.00, 'Tarjeta')"
+            )).isInstanceOf(Exception.class);
         }
     }
 }

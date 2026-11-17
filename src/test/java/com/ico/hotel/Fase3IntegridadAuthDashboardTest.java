@@ -759,14 +759,14 @@ class Fase3IntegridadAuthDashboardTest extends AbstractMysqlTestcontainerTest {
     }
 
     @Test
-    @DisplayName("P1.3.2 Invariante: esquema migrado V1-V7, Finalizada sin saldo pendiente y conciliación contratado = cobrado + pendiente")
+    @DisplayName("P1.3.2 Invariante: esquema migrado V1-V8, Finalizada sin saldo pendiente y conciliación contratado = cobrado + pendiente")
     void testP13InvarianteFinalizadasYConciliacionDashboard() {
-        // 0. Verificación del esquema migrado por Flyway (V1-V7 aplicadas con éxito y objetos V6/V7 presentes)
+        // 0. Verificación del esquema migrado por Flyway (V1-V8 aplicadas con éxito y objetos V6/V7/V8 presentes)
         List<String> versionesMigradas = jdbcTemplate.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE version IS NOT NULL AND success = 1 ORDER BY installed_rank",
                 String.class
         );
-        assertThat(versionesMigradas).containsExactly("1", "2", "3", "4", "5", "6", "7");
+        assertThat(versionesMigradas).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11");
 
         Integer tablaRecuperacionExiste = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'token_recuperacion_password'",

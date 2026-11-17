@@ -30,6 +30,5 @@ public abstract class AbstractMysqlTestcontainerTest {
         registry.add("spring.datasource.password", MYSQL_CONTAINER::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
-        registry.add("app.jobs.expiracion-enabled", () -> "false");
     }
 }

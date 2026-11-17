@@ -28,10 +28,10 @@ public class ConsultasController {
 
     // --- CONSULTAS DE HOTEL ---
 
-    // 1. Mostrar todos los hoteles
+    // 1. Mostrar hoteles (solo activos por defecto; incluirInactivos=true para auditoría completa)
     @GetMapping("/hoteles")
-    public List<Hotel> getHoteles() {
-        return hotelRepository.findAll();
+    public List<Hotel> getHoteles(@RequestParam(defaultValue = "false") boolean incluirInactivos) {
+        return incluirInactivos ? hotelRepository.findAll() : hotelRepository.findByActivoTrue();
     }
 
     // 2. ¿Cuáles son los hoteles que están actualmente activos?
@@ -40,16 +40,19 @@ public class ConsultasController {
         return hotelRepository.findByActivoTrue();
     }
 
-    // 3. ¿Qué hoteles hay en una ciudad específica?
+    // 3. ¿Qué hoteles hay en una ciudad específica? (solo activos)
     @GetMapping("/hoteles/ciudad/{ciudad}")
     public List<Hotel> getHotelesPorCiudad(@PathVariable String ciudad) {
-        return hotelRepository.findByCiudad(ciudad);
+        return hotelRepository.findByCiudadIgnoreCaseAndActivoTrue(ciudad);
     }
 
-    // 4. ¿Cuántas habitaciones tiene cada hotel?
+    // 4. ¿Cuántas habitaciones tiene cada hotel? (solo activos por defecto)
     @GetMapping("/hoteles/total-habitaciones")
-    public List<Map<String, Object>> getTotalHabitacionesPorHotel() {
-        return hotelRepository.countTotalHabitacionesPorHotel();
+    public List<Map<String, Object>> getTotalHabitacionesPorHotel(
+            @RequestParam(defaultValue = "false") boolean incluirInactivos) {
+        return incluirInactivos
+                ? hotelRepository.countTotalHabitacionesPorHotel()
+                : hotelRepository.countTotalHabitacionesPorHotelActivos();
     }
 
     // --- CONSULTAS DE TIPO HABITACION ---
@@ -110,117 +113,117 @@ public class ConsultasController {
 
     // --- CONSULTAS DE HABITACION ---
 
-    // 14. Mostrar las habitaciones disponibles
+    // 14. Mostrar las habitaciones disponibles (solo sedes activas)
     @GetMapping("/habitaciones/disponibles")
     public List<Habitacion> getHabitacionesDisponibles() {
-        return habitacionRepository.findDisponibles();
+        return habitacionRepository.findDisponiblesActivos();
     }
 
-    // 15. Mostrar las habitaciones de cada hotel
+    // 15. Mostrar las habitaciones de cada hotel (solo sedes activas)
     @GetMapping("/habitaciones/por-hotel")
     public List<Map<String, Object>> getHabitacionesPorHotel() {
-        return habitacionRepository.findHabitacionesPorHotel();
+        return habitacionRepository.findHabitacionesPorHotelActivos();
     }
 
-    // 16. Mostrar habitaciones con su tipo y precio
+    // 16. Mostrar habitaciones con su tipo y precio (solo sedes activas)
     @GetMapping("/habitaciones/tipo-precio")
     public List<Map<String, Object>> getHabitacionesConTipoYPrecio() {
-        return habitacionRepository.findHabitacionesConTipoYPrecio();
+        return habitacionRepository.findHabitacionesConTipoYPrecioActivos();
     }
 
-    // 17. Contar las habitaciones disponibles por hotel
+    // 17. Contar las habitaciones disponibles por hotel (solo sedes activas)
     @GetMapping("/hoteles/habitaciones-disponibles-count")
     public List<Map<String, Object>> countDisponiblesPorHotel() {
-        return habitacionRepository.countDisponiblesPorHotel();
+        return habitacionRepository.countDisponiblesPorHotelActivos();
     }
 
-    // 18. ¿Qué habitaciones están disponibles en un hotel específico (por nombre)?
+    // 18. ¿Qué habitaciones están disponibles en un hotel específico (por nombre, solo si activo)?
     @GetMapping("/habitaciones/disponibles/{nombreHotel}")
     public List<Habitacion> getDisponiblesEnHotel(@PathVariable String nombreHotel) {
-        return habitacionRepository.findDisponiblesEnHotel(nombreHotel);
+        return habitacionRepository.findDisponiblesEnHotelActivos(nombreHotel);
     }
 
-    // 18b. Mostrar todas las habitaciones de un hotel específico
+    // 18b. Mostrar todas las habitaciones de un hotel específico (solo si activo)
     @GetMapping("/habitaciones/hotel/{nombreHotel}")
     public List<Habitacion> getHabitacionesPorHotelNombre(@PathVariable String nombreHotel) {
-        return habitacionRepository.findByHotelNombre(nombreHotel);
+        return habitacionRepository.findByHotelNombreActivos(nombreHotel);
     }
 
-    // 19. ¿Cuántas habitaciones están en mantenimiento?
+    // 19. ¿Cuántas habitaciones están en mantenimiento? (solo sedes activas)
     @GetMapping("/habitaciones/mantenimiento-count")
     public Long countMantenimiento() {
-        return habitacionRepository.countMantenimiento();
+        return habitacionRepository.countMantenimientoActivos();
     }
 
-    // 19b. Listar habitaciones en mantenimiento
+    // 19b. Listar habitaciones en mantenimiento (solo sedes activas)
     @GetMapping("/habitaciones/mantenimiento")
     public List<Habitacion> getHabitacionesMantenimiento() {
-        return habitacionRepository.findByEstado("Mantenimiento");
+        return habitacionRepository.findByEstadoActivos("Mantenimiento");
     }
 
-    // 20. ¿Qué habitaciones tienen capacidad para 4 huéspedes?
+    // 20. ¿Qué habitaciones tienen capacidad para 4 huéspedes? (solo sedes activas)
     @GetMapping("/habitaciones/capacidad-4")
     public List<Habitacion> getHabitacionesPara4() {
-        return habitacionRepository.findHabitacionesPara4Huespedes();
+        return habitacionRepository.findHabitacionesPara4HuespedesActivos();
     }
 
-    // 21. ¿Qué habitaciones están ocupadas actualmente?
+    // 21. ¿Qué habitaciones están ocupadas actualmente? (solo sedes activas)
     @GetMapping("/habitaciones/ocupadas")
     public List<Habitacion> getHabitacionesOcupadas() {
-        return habitacionRepository.findOcupadas();
+        return habitacionRepository.findOcupadasActivos();
     }
 
-    // 22. ¿Qué habitaciones hay en un piso específico?
+    // 22. ¿Qué habitaciones hay en un piso específico? (solo sedes activas)
     @GetMapping("/habitaciones/piso/{piso}")
     public List<Habitacion> getHabitacionesPorPiso(@PathVariable Integer piso) {
-        return habitacionRepository.findByPiso(piso);
+        return habitacionRepository.findByPisoActivos(piso);
     }
 
-    // 23. ¿Qué habitaciones hay en un piso de un hotel específico?
+    // 23. ¿Qué habitaciones hay en un piso de un hotel específico? (solo si activo)
     @GetMapping("/habitaciones/hotel/{nombreHotel}/piso/{piso}")
     public List<Habitacion> getHabitacionesPorHotelYPiso(@PathVariable String nombreHotel, @PathVariable Integer piso) {
-        return habitacionRepository.findByHotelNombreAndPiso(nombreHotel, piso);
+        return habitacionRepository.findByHotelNombreAndPisoActivos(nombreHotel, piso);
     }
 
-    // 24. ¿Cuántas habitaciones tenemos en total en toda la cadena?
+    // 24. ¿Cuántas habitaciones tenemos en total en sedes activas?
     @GetMapping("/habitaciones/total-count")
     public Long countTotalHabitaciones() {
-        return habitacionRepository.countTotalHabitaciones();
+        return habitacionRepository.countTotalHabitacionesActivos();
     }
 
-    // 25. ¿Cuál es el ingreso potencial máximo por noche si se rentan todas las habitaciones?
+    // 25. ¿Cuál es el ingreso potencial máximo por noche en sedes activas?
     @GetMapping("/habitaciones/ingreso-potencial")
     public BigDecimal getIngresoPotencial() {
-        return habitacionRepository.sumIngresoPotencial();
+        return habitacionRepository.sumIngresoPotencialActivos();
     }
 
-    // 26. Buscar una habitación por su número (ej. '101')
+    // 26. Buscar una habitación por su número (solo sedes activas)
     @GetMapping("/habitaciones/numero/{numero}")
     public List<Habitacion> getHabitacionPorNumero(@PathVariable String numero) {
-        return habitacionRepository.findByNumero(numero);
+        return habitacionRepository.findByNumeroActivos(numero);
     }
 
-    // 27. Mostrar todas las habitaciones de un tipo específico (ej. 'Suite Ejecutiva')
+    // 27. Mostrar todas las habitaciones de un tipo específico (solo sedes activas)
     @GetMapping("/habitaciones/tipo/{tipoNombre}")
     public List<Habitacion> getHabitacionesPorTipo(@PathVariable String tipoNombre) {
-        return habitacionRepository.findByTipoNombre(tipoNombre);
+        return habitacionRepository.findByTipoNombreActivos(tipoNombre);
     }
 
-    // 28. Resumen: ¿Cuántas habitaciones hay por cada estado (Disponible, Ocupada, Mantenimiento)?
+    // 28. Resumen: ¿Cuántas habitaciones hay por cada estado en sedes activas?
     @GetMapping("/habitaciones/resumen-estados")
     public List<Map<String, Object>> countHabitacionesPorEstado() {
-        return habitacionRepository.countHabitacionesPorEstado();
+        return habitacionRepository.countHabitacionesPorEstadoActivos();
     }
 
-    // 29. ¿Qué habitaciones están en una ciudad en específico?
+    // 29. ¿Qué habitaciones están en una ciudad en específico? (solo sedes activas)
     @GetMapping("/habitaciones/ciudad/{ciudad}")
     public List<Habitacion> getHabitacionesPorCiudad(@PathVariable String ciudad) {
-        return habitacionRepository.findByCiudad(ciudad);
+        return habitacionRepository.findByCiudadActivos(ciudad);
     }
 
-    // 30. Listar las habitaciones disponibles ordenadas de la más barata a la más cara
+    // 30. Listar las habitaciones disponibles ordenadas de la más barata a la más cara (solo sedes activas)
     @GetMapping("/habitaciones/disponibles/ordenadas-por-precio")
     public List<Habitacion> getDisponiblesOrdenadasPorPrecio() {
-        return habitacionRepository.findDisponiblesOrdenadasPorPrecio();
+        return habitacionRepository.findDisponiblesOrdenadasPorPrecioActivos();
     }
 }

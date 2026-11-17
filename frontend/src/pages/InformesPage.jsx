@@ -35,9 +35,13 @@ export default function InformesPage() {
     const [pestanaActiva, setPestanaActiva] = useState('financiero'); // 'financiero' | 'ocupacion' | 'cancelaciones'
     const [anoSeleccionado, setAnoSeleccionado] = useState(2026);
     const [idHotelFiltro, setIdHotelFiltro] = useState('');
+    const [paginaFinanciero, setPaginaFinanciero] = useState(0);
+    const [tamanoPagina, setTamanoPagina] = useState(20);
     const [hoteles, setHoteles] = useState([]);
 
     const [informeData, setInformeData] = useState(null);
+    const [filasImpresion, setFilasImpresion] = useState(null);
+    const [imprimiendo, setImprimiendo] = useState(false);
     const [cargando, setCargando] = useState(true);
     const [errorMsg, setErrorMsg] = useState('');
 
@@ -48,8 +52,12 @@ export default function InformesPage() {
     }, []);
 
     useEffect(() => {
+        setPaginaFinanciero(0);
+    }, [anoSeleccionado, idHotelFiltro, pestanaActiva]);
+
+    useEffect(() => {
         cargarInforme();
-    }, [pestanaActiva, anoSeleccionado, idHotelFiltro]);
+    }, [pestanaActiva, anoSeleccionado, idHotelFiltro, paginaFinanciero, tamanoPagina]);
 
     const cargarInforme = async () => {
         setCargando(true);
@@ -61,7 +69,7 @@ export default function InformesPage() {
             if (pestanaActiva === 'financiero') {
                 const inicio = `${anoSeleccionado}-01-01`;
                 const fin = `${anoSeleccionado}-12-31`;
-                res = await getInformeFinanciero(inicio, fin, hotelIdParam);
+                res = await getInformeFinanciero(inicio, fin, hotelIdParam, paginaFinanciero, tamanoPagina);
             } else if (pestanaActiva === 'ocupacion') {
                 res = await getInformeOcupacion(anoSeleccionado, hotelIdParam);
             } else {
@@ -77,7 +85,38 @@ export default function InformesPage() {
         }
     };
 
-    const handleImprimir = () => {
+    useEffect(() => {
+        const limpiarImpresion = () => setFilasImpresion(null);
+        window.addEventListener('afterprint', limpiarImpresion);
+        return () => window.removeEventListener('afterprint', limpiarImpresion);
+    }, []);
+
+    const handleImprimir = async () => {
+        if (pestanaActiva === 'financiero' && informeData && (informeData.totalPages ?? 1) > 1) {
+            setImprimiendo(true);
+            try {
+                const hotelIdParam = idHotelFiltro ? parseInt(idHotelFiltro, 10) : null;
+                const inicio = `${anoSeleccionado}-01-01`;
+                const fin = `${anoSeleccionado}-12-31`;
+                const primera = await getInformeFinanciero(inicio, fin, hotelIdParam, 0, 100);
+                const todas = [...(primera?.filas || [])];
+                const totalPaginas = primera?.totalPages ?? 1;
+                for (let p = 1; p < totalPaginas; p++) {
+                    const sig = await getInformeFinanciero(inicio, fin, hotelIdParam, p, 100);
+                    if (Array.isArray(sig?.filas)) {
+                        todas.push(...sig.filas);
+                    }
+                }
+                setFilasImpresion(todas);
+                setTimeout(() => window.print(), 80);
+            } catch (err) {
+                console.error('Error al preparar impresión completa:', err);
+                setErrorMsg(err.message || 'No fue posible cargar todas las filas para imprimir.');
+            } finally {
+                setImprimiendo(false);
+            }
+            return;
+        }
         window.print();
     };
 
@@ -207,10 +246,11 @@ export default function InformesPage() {
                         type="button"
                         className="btn btn-primary"
                         onClick={handleImprimir}
+                        disabled={cargando || imprimiendo}
                         style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38 }}
                     >
                         <Printer size={16} />
-                        <span>Imprimir Informe</span>
+                        <span>{imprimiendo ? 'Preparando todas las filas...' : 'Imprimir Informe'}</span>
                     </button>
                 </div>
             </div>
@@ -344,7 +384,7 @@ export default function InformesPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {(informeData.filas || []).map((f, i) => (
+                                {(filasImpresion ?? informeData.filas ?? []).map((f, i) => (
                                     <tr key={i} style={{ borderBottom: '1px solid var(--border-light)' }}>
                                         <td style={{ padding: '8px 12px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{f.folio}</td>
                                         <td style={{ padding: '8px 12px', color: 'var(--text-primary)' }}>{f.titular}</td>
@@ -387,6 +427,50 @@ export default function InformesPage() {
                             </tbody>
                         </table>
                     </div>
+
+                    {(informeData.totalPages ?? 0) > 0 && (
+                        <div className="informes-no-print" style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            flexWrap: 'wrap', gap: 12, marginTop: 14
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+                                <span>Filas por página:</span>
+                                <select
+                                    value={tamanoPagina}
+                                    onChange={(e) => { setTamanoPagina(Number(e.target.value)); setPaginaFinanciero(0); }}
+                                    style={{
+                                        background: 'var(--bg-surface)', color: 'var(--text-primary)',
+                                        border: '1px solid var(--border-color)', borderRadius: 8, padding: '4px 8px'
+                                    }}
+                                >
+                                    {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                                <span>Total en periodo: <strong>{informeData.totalElements ?? informeData.totalRegistros}</strong></span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    disabled={paginaFinanciero <= 0 || cargando}
+                                    onClick={() => setPaginaFinanciero(p => Math.max(0, p - 1))}
+                                >
+                                    Anterior
+                                </button>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                                    Página {(informeData.page ?? 0) + 1} de {informeData.totalPages}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    disabled={(informeData.page ?? 0) + 1 >= (informeData.totalPages ?? 1) || cargando}
+                                    onClick={() => setPaginaFinanciero(p => p + 1)}
+                                >
+                                    Siguiente
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -510,7 +594,7 @@ export default function InformesPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {(informeData.filas || []).map((f, i) => (
+                                {(filasImpresion ?? informeData.filas ?? []).map((f, i) => (
                                     <tr key={i} style={{ borderBottom: '1px solid var(--border-light)' }}>
                                         <td style={{ padding: '10px 12px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{f.folio}</td>
                                         <td style={{ padding: '10px 12px', color: 'var(--text-primary)' }}>{f.titular}</td>

@@ -72,7 +72,7 @@ public class HabitacionSearchTool {
     }
 
     public static String resolverNombreHotelExacto(String nombreHotel) {
-        List<Hotel> hotelesDisponibles = staticHotelRepository != null ? staticHotelRepository.findAll() : List.of();
+        List<Hotel> hotelesDisponibles = staticHotelRepository != null ? staticHotelRepository.findByActivoTrue() : List.of();
 
         if (nombreHotel != null && !nombreHotel.isBlank()) {
             String norm = java.text.Normalizer.normalize(nombreHotel.toLowerCase().trim(), java.text.Normalizer.Form.NFD)
@@ -136,9 +136,9 @@ public class HabitacionSearchTool {
         }
         String exactHotel = resolverNombreHotelExacto(hotel);
         if (exactHotel == null) {
-            return habitacionRepository.findDisponibles().stream().map(this::mapearHabitacionSimple).toList();
+            return habitacionRepository.findDisponiblesActivos().stream().map(this::mapearHabitacionSimple).toList();
         }
-        return habitacionRepository.findDisponiblesEnHotel(exactHotel).stream()
+        return habitacionRepository.findDisponiblesEnHotelActivos(exactHotel).stream()
                 .map(this::mapearHabitacionSimple)
                 .toList();
     }
@@ -153,8 +153,8 @@ public class HabitacionSearchTool {
         }
         String exactHotel = resolverNombreHotelExacto(hotel);
         List<Habitacion> base = (exactHotel == null)
-                ? habitacionRepository.findAll()
-                : habitacionRepository.findByHotelNombreExacto(exactHotel);
+                ? habitacionRepository.findAllActivos()
+                : habitacionRepository.findByHotelNombreActivos(exactHotel);
         return filtrarParaRolActual(base).stream()
                 .map(this::mapearHabitacionSimple)
                 .toList();
@@ -169,7 +169,7 @@ public class HabitacionSearchTool {
         if (checkLoop("findHabitacionesEnMantenimiento")) {
             return List.of(Map.of("aviso", "Información suficiente obtenida. Procede a redactar la respuesta final ahora."));
         }
-        return habitacionRepository.findByEstado("Mantenimiento").stream()
+        return habitacionRepository.findByEstadoActivos("Mantenimiento").stream()
                 .map(this::mapearHabitacionSimple)
                 .toList();
     }
@@ -189,7 +189,7 @@ public class HabitacionSearchTool {
         if (exactHotel == null) {
             return findHabitacionesEnMantenimiento();
         }
-        return habitacionRepository.findByEstadoAndHotelNombre("Mantenimiento", exactHotel).stream()
+        return habitacionRepository.findByEstadoAndHotelNombreActivos("Mantenimiento", exactHotel).stream()
                 .map(this::mapearHabitacionSimple)
                 .toList();
     }
@@ -206,8 +206,8 @@ public class HabitacionSearchTool {
         }
         String exactHotel = resolverNombreHotelExacto(hotel);
         List<Habitacion> lista = (exactHotel == null)
-                ? habitacionRepository.findByNumero(numero)
-                : habitacionRepository.findByNumeroAndHotelNombre(numero, exactHotel);
+                ? habitacionRepository.findByNumeroActivos(numero)
+                : habitacionRepository.findByNumeroAndHotelNombreActivos(numero, exactHotel);
         if (esHuespedActual()) {
             return lista.stream().map(h -> Map.<String, Object>of(
                     "hotel", h.getHotel() != null ? h.getHotel().getNombre() : "N/A",
@@ -236,7 +236,7 @@ public class HabitacionSearchTool {
     @Tool(description = "Obtener la habitación más cara o exclusiva de toda la cadena hotelera, incluyendo hotel, número, tipo y precio por noche.")
     public List<Map<String, Object>> findHabitacionMasCara() {
         log.info("Tool invocada — findHabitacionMasCara");
-        return soloLaPrimera(filtrarParaRolActual(habitacionRepository.findOrdenadasPorPrecioDesc()));
+        return soloLaPrimera(filtrarParaRolActual(habitacionRepository.findOrdenadasPorPrecioDescActivos()));
     }
 
     @Tool(description = "Obtener la habitación más cara o exclusiva de un hotel en específico, o de toda la cadena si no se menciona un hotel.")
@@ -246,9 +246,9 @@ public class HabitacionSearchTool {
         log.info("Tool invocada — findHabitacionMasCaraEnHotel: hotel={}", hotel);
         String exactHotel = resolverNombreHotelExacto(hotel);
         if (exactHotel == null) {
-            return soloLaPrimera(filtrarParaRolActual(habitacionRepository.findOrdenadasPorPrecioDesc()));
+            return soloLaPrimera(filtrarParaRolActual(habitacionRepository.findOrdenadasPorPrecioDescActivos()));
         }
-        return soloLaPrimera(filtrarParaRolActual(habitacionRepository.findOrdenadasPorPrecioDescEnHotel(exactHotel)));
+        return soloLaPrimera(filtrarParaRolActual(habitacionRepository.findOrdenadasPorPrecioDescEnHotelActivos(exactHotel)));
     }
 
     @Tool(description = "Listar todas las habitaciones ocupadas actualmente en la cadena hotelera. EXCLUSIVO PARA ADMINISTRADOR.")
@@ -257,7 +257,7 @@ public class HabitacionSearchTool {
         if (esHuespedActual()) {
             return respuestaRestringidaHuesped();
         }
-        return habitacionRepository.findOcupadas().stream().map(this::mapearHabitacionSimple).toList();
+        return habitacionRepository.findOcupadasActivos().stream().map(this::mapearHabitacionSimple).toList();
     }
 
     @Tool(description = "Listar todas las habitaciones disponibles en la cadena hotelera ÚNICAMENTE cuando el usuario NO mencione ningún presupuesto ni límite de precio.")
@@ -268,11 +268,11 @@ public class HabitacionSearchTool {
         }
         String exactHotel = resolverNombreHotelExacto(null);
         if (exactHotel != null) {
-            return habitacionRepository.findDisponiblesEnHotel(exactHotel).stream()
+            return habitacionRepository.findDisponiblesEnHotelActivos(exactHotel).stream()
                     .map(this::mapearHabitacionSimple)
                     .toList();
         }
-        return habitacionRepository.findDisponibles().stream().map(this::mapearHabitacionSimple).toList();
+        return habitacionRepository.findDisponiblesActivos().stream().map(this::mapearHabitacionSimple).toList();
     }
 
     @Tool(description = "Listar las habitaciones de un piso específico (ej. piso 1, 2 o 3) de un hotel.")
@@ -294,8 +294,8 @@ public class HabitacionSearchTool {
         if (piso == null) piso = 1;
         String exactHotel = resolverNombreHotelExacto(hotel);
         List<Habitacion> lista = (exactHotel == null)
-                ? habitacionRepository.findByPiso(piso)
-                : habitacionRepository.findByHotelNombreAndPiso(exactHotel, piso);
+                ? habitacionRepository.findByPisoActivos(piso)
+                : habitacionRepository.findByHotelNombreAndPisoActivos(exactHotel, piso);
         return filtrarParaRolActual(lista).stream().map(this::mapearHabitacionSimple).toList();
     }
 
@@ -304,7 +304,7 @@ public class HabitacionSearchTool {
             @ToolParam(description = "Nombre exacto o aproximado del tipo de habitación, por ejemplo: Suite Ejecutiva, Habitación Familiar")
             String tipoNombre) {
         log.info("Tool invocada — findHabitacionesPorTipo: tipo={}", tipoNombre);
-        return filtrarParaRolActual(habitacionRepository.findByTipoNombre(tipoNombre)).stream()
+        return filtrarParaRolActual(habitacionRepository.findByTipoNombreActivos(tipoNombre)).stream()
                 .map(this::mapearHabitacionSimple)
                 .toList();
     }
@@ -317,7 +317,7 @@ public class HabitacionSearchTool {
         if (ciudad != null && (ciudad.toLowerCase().contains("piso") || ciudad.toLowerCase().contains("paraiso") || ciudad.toLowerCase().contains("planta"))) {
             return findHabitacionesPorPiso(1, ciudad);
         }
-        return filtrarParaRolActual(habitacionRepository.findByCiudad(ciudad)).stream()
+        return filtrarParaRolActual(habitacionRepository.findByCiudadActivos(ciudad)).stream()
                 .map(this::mapearHabitacionSimple)
                 .toList();
     }
@@ -328,13 +328,13 @@ public class HabitacionSearchTool {
         if (esHuespedActual()) {
             return respuestaRestringidaHuesped();
         }
-        return habitacionRepository.countHabitacionesPorEstado();
+        return habitacionRepository.countHabitacionesPorEstadoActivos();
     }
 
     @Tool(description = "Contar el total de habitaciones que existen en toda la cadena hotelera (ambos hoteles juntos).")
     public Long countTotalHabitaciones() {
         log.info("Tool invocada — countTotalHabitaciones");
-        return habitacionRepository.countTotalHabitaciones();
+        return habitacionRepository.countTotalHabitacionesActivos();
     }
 
     @Tool(description = "Contar cuántas habitaciones están en mantenimiento en toda la cadena hotelera. EXCLUSIVO PARA ADMINISTRADOR.")
@@ -343,7 +343,7 @@ public class HabitacionSearchTool {
         if (esHuespedActual()) {
             return respuestaRestringidaHuesped();
         }
-        return habitacionRepository.countMantenimiento();
+        return habitacionRepository.countMantenimientoActivos();
     }
 
     @Tool(description = "Calcular el ingreso potencial máximo por noche si se rentan todas las habitaciones de la cadena. EXCLUSIVO PARA ADMINISTRADOR.")
@@ -352,22 +352,22 @@ public class HabitacionSearchTool {
         if (esHuespedActual()) {
             return respuestaRestringidaHuesped();
         }
-        return habitacionRepository.sumIngresoPotencial();
+        return habitacionRepository.sumIngresoPotencialActivos();
     }
 
     @Tool(description = "Listar las habitaciones disponibles ordenadas de la más barata a la más cara, con su tipo y precio por noche.")
     public List<Map<String, Object>> findDisponiblesOrdenadasPorPrecio() {
         log.info("Tool invocada — findDisponiblesOrdenadasPorPrecio");
-        return habitacionRepository.findDisponiblesOrdenadasPorPrecio().stream().map(this::mapearHabitacionSimple).toList();
+        return habitacionRepository.findDisponiblesOrdenadasPorPrecioActivos().stream().map(this::mapearHabitacionSimple).toList();
     }
 
     @Tool(description = "Obtener las habitaciones con su tipo y su precio por noche.")
     public List<Map<String, Object>> getHabitacionesConTipoYPrecio() {
         log.info("Tool invocada — getHabitacionesConTipoYPrecio");
         if (esHuespedActual()) {
-            return habitacionRepository.findDisponibles().stream().map(this::mapearHabitacionSimple).toList();
+            return habitacionRepository.findDisponiblesActivos().stream().map(this::mapearHabitacionSimple).toList();
         }
-        return habitacionRepository.findHabitacionesConTipoYPrecio();
+        return habitacionRepository.findHabitacionesConTipoYPrecioActivos();
     }
 
     @Tool(description = "Buscar habitaciones en Planta Baja (Piso 1), con prioridad para personas de la tercera edad o con movilidad reducida (sillas de ruedas).")
@@ -380,8 +380,8 @@ public class HabitacionSearchTool {
         }
         String exactHotel = resolverNombreHotelExacto(hotel);
         List<Habitacion> lista = (exactHotel == null)
-                ? habitacionRepository.findByPiso(1)
-                : habitacionRepository.findByHotelNombreAndPiso(exactHotel, 1);
+                ? habitacionRepository.findByPisoActivos(1)
+                : habitacionRepository.findByHotelNombreAndPisoActivos(exactHotel, 1);
         return filtrarParaRolActual(lista).stream().map(this::mapearHabitacionSimple).toList();
     }
 
@@ -394,10 +394,10 @@ public class HabitacionSearchTool {
             return List.of(Map.of("aviso", "Información suficiente obtenida. Procede a redactar la respuesta final ahora."));
         }
         if (presupuestoMaximo == null) {
-            return habitacionRepository.findDisponibles().stream().map(this::mapearHabitacionSimple).toList();
+            return habitacionRepository.findDisponiblesActivos().stream().map(this::mapearHabitacionSimple).toList();
         }
         BigDecimal max = BigDecimal.valueOf(presupuestoMaximo);
-        return habitacionRepository.findDisponibles().stream()
+        return habitacionRepository.findDisponiblesActivos().stream()
                 .filter(h -> h.getTipoHabitacion() != null &&
                              h.getTipoHabitacion().getPrecioBase() != null &&
                              h.getTipoHabitacion().getPrecioBase().compareTo(max) <= 0)
@@ -408,7 +408,7 @@ public class HabitacionSearchTool {
     @Tool(description = "Contar cuántas habitaciones disponibles hay desglosadas por cada hotel de la cadena.")
     public List<Map<String, Object>> countDisponiblesPorHotel() {
         log.info("Tool invocada — countDisponiblesPorHotel");
-        return habitacionRepository.countDisponiblesPorHotel();
+        return habitacionRepository.countDisponiblesPorHotelActivos();
     }
 
     @Tool(description = "Buscar habitaciones que estén DISPONIBLES en Planta Baja (Piso 1) en un hotel o en toda la cadena.")
@@ -418,8 +418,8 @@ public class HabitacionSearchTool {
         log.info("Tool invocada — findDisponiblesPlantaBaja: hotel={}", hotel);
         String exactHotel = resolverNombreHotelExacto(hotel);
         List<Habitacion> piso1 = (exactHotel == null)
-                ? habitacionRepository.findByPiso(1)
-                : habitacionRepository.findByHotelNombreAndPiso(exactHotel, 1);
+                ? habitacionRepository.findByPisoActivos(1)
+                : habitacionRepository.findByHotelNombreAndPisoActivos(exactHotel, 1);
         return piso1.stream()
                 .filter(h -> "Disponible".equalsIgnoreCase(h.getEstado()))
                 .map(this::mapearHabitacionSimple)
@@ -429,7 +429,7 @@ public class HabitacionSearchTool {
     @Tool(description = "Buscar habitaciones que tienen capacidad para 4 personas o huéspedes (Habitación Familiar).")
     public List<Map<String, Object>> findHabitacionesPara4Huespedes() {
         log.info("Tool invocada — findHabitacionesPara4Huespedes");
-        return filtrarParaRolActual(habitacionRepository.findHabitacionesPara4Huespedes()).stream()
+        return filtrarParaRolActual(habitacionRepository.findHabitacionesPara4HuespedesActivos()).stream()
                 .map(this::mapearHabitacionSimple)
                 .toList();
     }
@@ -448,9 +448,9 @@ public class HabitacionSearchTool {
         String exactHotel = resolverNombreHotelExacto(hotel);
         List<Habitacion> habitaciones;
         if (exactHotel == null || (hotel != null && hotel.toLowerCase().contains("toda"))) {
-            habitaciones = habitacionRepository.findAll();
+            habitaciones = habitacionRepository.findAllActivos();
         } else {
-            habitaciones = habitacionRepository.findByHotelNombreExacto(exactHotel);
+            habitaciones = habitacionRepository.findByHotelNombreActivos(exactHotel);
         }
 
         long total = habitaciones.size();

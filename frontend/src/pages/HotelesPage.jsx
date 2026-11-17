@@ -25,7 +25,12 @@ export default function HotelesPage() {
         ciudad: '',
         telefono: '',
         email: '',
-        activo: true
+        activo: true,
+        imagenUrl: '',
+        tagEditorial: '',
+        descripcion: '',
+        latitud: '',
+        longitud: ''
     });
 
     const cargarHoteles = async () => {
@@ -59,7 +64,12 @@ export default function HotelesPage() {
             ciudad: '',
             telefono: '',
             email: '',
-            activo: true
+            activo: true,
+            imagenUrl: '',
+            tagEditorial: '',
+            descripcion: '',
+            latitud: '',
+            longitud: ''
         });
         setModalAbierto(true);
     };
@@ -72,7 +82,12 @@ export default function HotelesPage() {
             ciudad: hotel.ciudad || '',
             telefono: hotel.telefono || '',
             email: hotel.email || '',
-            activo: hotel.activo !== undefined ? hotel.activo : true
+            activo: hotel.activo !== undefined ? hotel.activo : true,
+            imagenUrl: hotel.imagenUrl || '',
+            tagEditorial: hotel.tagEditorial || '',
+            descripcion: hotel.descripcion || '',
+            latitud: hotel.latitud ?? '',
+            longitud: hotel.longitud ?? ''
         });
         setModalAbierto(true);
     };
@@ -115,7 +130,12 @@ export default function HotelesPage() {
             const payload = {
                 ...formHotel,
                 telefono: telLimpio,
-                email: emailLimpio
+                email: emailLimpio,
+                imagenUrl: formHotel.imagenUrl?.trim() || '',
+                tagEditorial: formHotel.tagEditorial?.trim() || '',
+                descripcion: formHotel.descripcion?.trim() || '',
+                latitud: formHotel.latitud !== '' && formHotel.latitud != null ? Number(formHotel.latitud) : null,
+                longitud: formHotel.longitud !== '' && formHotel.longitud != null ? Number(formHotel.longitud) : null
             };
 
             if (hotelAEditar) {
@@ -424,6 +444,69 @@ export default function HotelesPage() {
                             <option value="true">🟢 Activo</option>
                             <option value="false">🔴 Inactivo</option>
                         </select>
+                    </div>
+                    <div className="form-grid">
+                        <div className="form-group">
+                            <label className="form-label">Etiqueta editorial (opcional)</label>
+                            <input
+                                type="text"
+                                maxLength={60}
+                                value={formHotel.tagEditorial}
+                                onChange={e => setFormHotel({ ...formHotel, tagEditorial: e.target.value })}
+                                className="form-input"
+                                placeholder="Ej. Resort Insignia"
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Imagen HTTPS (opcional)</label>
+                            <input
+                                type="url"
+                                maxLength={500}
+                                value={formHotel.imagenUrl}
+                                onChange={e => setFormHotel({ ...formHotel, imagenUrl: e.target.value })}
+                                className="form-input"
+                                placeholder="https://images.unsplash.com/..."
+                            />
+                        </div>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Descripción breve (solo texto plano, opcional)</label>
+                        <input
+                            type="text"
+                            maxLength={500}
+                            value={formHotel.descripcion}
+                            onChange={e => setFormHotel({ ...formHotel, descripcion: e.target.value })}
+                            className="form-input"
+                            placeholder="Ej. Alberca infinity y terraza frente al mar"
+                        />
+                    </div>
+                    <div className="form-grid">
+                        <div className="form-group">
+                            <label className="form-label">Latitud (-90 a 90)</label>
+                            <input
+                                type="number"
+                                step="0.000001"
+                                min="-90"
+                                max="90"
+                                value={formHotel.latitud}
+                                onChange={e => setFormHotel({ ...formHotel, latitud: e.target.value })}
+                                className="form-input num"
+                                placeholder="21.161908"
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Longitud (-180 a 180)</label>
+                            <input
+                                type="number"
+                                step="0.000001"
+                                min="-180"
+                                max="180"
+                                value={formHotel.longitud}
+                                onChange={e => setFormHotel({ ...formHotel, longitud: e.target.value })}
+                                className="form-input num"
+                                placeholder="-86.851528"
+                            />
+                        </div>
                     </div>
                     <div className="modal-actions">
                         <button type="button" onClick={() => setModalAbierto(false)} className="btn btn-secondary">Cancelar</button>

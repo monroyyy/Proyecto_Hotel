@@ -1,15 +1,21 @@
 package com.ico.hotel.services;
 
+import com.ico.hotel.config.ClockConfig;
 import com.ico.hotel.models.Habitacion;
 import com.ico.hotel.models.Reserva;
 import com.ico.hotel.repository.HabitacionRepository;
 import com.ico.hotel.repository.ReservaRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -25,31 +31,84 @@ public class InformeService {
     private final ReservaRepository reservaRepository;
     private final HabitacionRepository habitacionRepository;
 
+    @Autowired(required = false)
+    private Clock clock;
+
+    private Clock clockActual() {
+        return clock != null ? clock : Clock.system(ClockConfig.ZONA_MEXICO);
+    }
+
     /**
-     * Informe Financiero y Flujo de Caja detallado con auditoría de cobros y reembolsos.
+     * Informe Financiero y Flujo de Caja detallado con agregación SQL (GROUP BY) y filas paginadas.
      */
+    @Transactional(readOnly = true)
     public Map<String, Object> generarInformeFinanciero(LocalDate inicio, LocalDate fin, Integer idHotel) {
-        LocalDate fInicio = (inicio != null) ? inicio : LocalDate.now().withDayOfYear(1);
-        LocalDate fFin = (fin != null) ? fin : LocalDate.now().withDayOfYear(LocalDate.now().lengthOfYear());
+        return generarInformeFinanciero(inicio, fin, idHotel, 0, 20);
+    }
 
-        List<Reserva> reservas = reservaRepository.findByFechaEntradaBetweenOrderByFechaEntradaAsc(fInicio, fFin).stream()
-                .filter(r -> {
-                    if (idHotel == null) return true;
-                    return r.getHabitacion() != null
-                            && r.getHabitacion().getHotel() != null
-                            && Objects.equals(r.getHabitacion().getHotel().getIdHotel(), idHotel);
-                })
-                .toList();
+    @Transactional(readOnly = true)
+    public Map<String, Object> generarInformeFinanciero(LocalDate inicio, LocalDate fin, Integer idHotel, int page, int size) {
+        if (page < 0) {
+            throw new IllegalArgumentException("El número de página no puede ser negativo.");
+        }
+        if (size < 1 || size > 100) {
+            throw new IllegalArgumentException("El tamaño de página (size) debe estar entre 1 y 100.");
+        }
+        LocalDate hoy = LocalDate.now(clockActual());
+        LocalDate fInicio = (inicio != null) ? inicio : hoy.withDayOfYear(1);
+        LocalDate fFin = (fin != null) ? fin : hoy.withDayOfYear(hoy.lengthOfYear());
+        if (fInicio.isAfter(fFin)) {
+            throw new IllegalArgumentException("La fecha de inicio no puede ser posterior a la fecha fin.");
+        }
 
+        List<Object[]> agregados = (idHotel == null)
+                ? reservaRepository.agruparTotalesFinanciero(fInicio, fFin)
+                : reservaRepository.agruparTotalesFinancieroPorHotel(fInicio, fFin, idHotel);
+
+        long totalRegistros = 0L;
         BigDecimal granTotalContratado = BigDecimal.ZERO;
         BigDecimal totalAnticiposCobrados = BigDecimal.ZERO;
         BigDecimal totalSaldosLiquidados = BigDecimal.ZERO;
         BigDecimal totalPenalizaciones = BigDecimal.ZERO;
         BigDecimal totalReembolsos = BigDecimal.ZERO;
 
-        List<Map<String, Object>> filas = new ArrayList<>();
+        for (Object[] row : agregados) {
+            String est = row[0] != null ? row[0].toString() : "";
+            long countEstado = row[1] != null ? ((Number) row[1]).longValue() : 0L;
+            BigDecimal sumTotal = toBigDecimal(row[2]);
+            BigDecimal sumAnticipo = toBigDecimal(row[3]);
+            BigDecimal sumSaldo = toBigDecimal(row[4]);
+            BigDecimal sumReembolso = toBigDecimal(row[5]);
+            BigDecimal sumLiquidado = toBigDecimal(row[6]);
 
-        for (Reserva r : reservas) {
+            totalRegistros += countEstado;
+
+            if (Reserva.FINALIZADA.equals(est)) {
+                granTotalContratado = granTotalContratado.add(sumTotal);
+                totalAnticiposCobrados = totalAnticiposCobrados.add(sumAnticipo);
+                totalSaldosLiquidados = totalSaldosLiquidados.add(sumLiquidado);
+            } else if (Reserva.CONFIRMADA.equals(est) || Reserva.OCUPADA.equals(est)) {
+                granTotalContratado = granTotalContratado.add(sumTotal);
+                totalAnticiposCobrados = totalAnticiposCobrados.add(sumAnticipo);
+            } else if (Reserva.CANCELADA.equals(est)) {
+                totalPenalizaciones = totalPenalizaciones.add(sumSaldo);
+                totalReembolsos = totalReembolsos.add(sumReembolso);
+            } else if (Reserva.NO_SHOW.equals(est)) {
+                totalPenalizaciones = totalPenalizaciones.add(sumAnticipo);
+            }
+        }
+
+        PageRequest pageRequest = PageRequest.of(page, size);
+        Page<Integer> idsPage = (idHotel == null)
+                ? reservaRepository.findIdsFinanciero(fInicio, fFin, pageRequest)
+                : reservaRepository.findIdsFinancieroPorHotel(fInicio, fFin, idHotel, pageRequest);
+
+        List<Reserva> reservasPagina = idsPage.isEmpty()
+                ? List.of()
+                : reordenarPorIds(idsPage.getContent(), reservaRepository.findAllByIdInWithDetails(idsPage.getContent()));
+
+        List<Map<String, Object>> filas = new ArrayList<>(reservasPagina.size());
+        for (Reserva r : reservasPagina) {
             BigDecimal total = r.getTotal() != null ? r.getTotal() : BigDecimal.ZERO;
             BigDecimal anticipo = r.getAnticipo() != null ? r.getAnticipo() : BigDecimal.ZERO;
             BigDecimal reembolso = r.getMontoReembolso() != null ? r.getMontoReembolso() : BigDecimal.ZERO;
@@ -57,22 +116,12 @@ public class InformeService {
             BigDecimal liquidado = BigDecimal.ZERO;
 
             String est = r.getEstado() != null ? r.getEstado() : "";
-
             if (Reserva.FINALIZADA.equals(est)) {
                 liquidado = total.subtract(anticipo);
-                granTotalContratado = granTotalContratado.add(total);
-                totalAnticiposCobrados = totalAnticiposCobrados.add(anticipo);
-                totalSaldosLiquidados = totalSaldosLiquidados.add(liquidado);
-            } else if (Reserva.CONFIRMADA.equals(est) || Reserva.OCUPADA.equals(est)) {
-                granTotalContratado = granTotalContratado.add(total);
-                totalAnticiposCobrados = totalAnticiposCobrados.add(anticipo);
             } else if (Reserva.CANCELADA.equals(est)) {
                 penalizacion = r.getSaldo() != null ? r.getSaldo() : BigDecimal.ZERO;
-                totalPenalizaciones = totalPenalizaciones.add(penalizacion);
-                totalReembolsos = totalReembolsos.add(reembolso);
             } else if (Reserva.NO_SHOW.equals(est)) {
                 penalizacion = anticipo;
-                totalPenalizaciones = totalPenalizaciones.add(penalizacion);
             }
 
             Map<String, Object> fila = new LinkedHashMap<>();
@@ -100,20 +149,46 @@ public class InformeService {
 
         Map<String, Object> informe = new LinkedHashMap<>();
         informe.put("titulo", "Informe Financiero y Flujo de Caja");
-        informe.put("fechaGeneracion", LocalDate.now());
+        informe.put("fechaGeneracion", hoy);
         informe.put("periodoInicio", fInicio);
         informe.put("periodoFin", fFin);
         informe.put("idHotel", idHotel);
-        informe.put("totalRegistros", filas.size());
+        informe.put("totalRegistros", totalRegistros);
         informe.put("granTotalContratado", granTotalContratado.setScale(2, RoundingMode.HALF_UP));
         informe.put("totalAnticiposCobrados", totalAnticiposCobrados.setScale(2, RoundingMode.HALF_UP));
         informe.put("totalSaldosLiquidados", totalSaldosLiquidados.setScale(2, RoundingMode.HALF_UP));
         informe.put("totalPenalizaciones", totalPenalizaciones.setScale(2, RoundingMode.HALF_UP));
         informe.put("totalReembolsos", totalReembolsos.setScale(2, RoundingMode.HALF_UP));
         informe.put("ingresosNetosCaja", ingresosNetosCaja.setScale(2, RoundingMode.HALF_UP));
+        informe.put("page", idsPage.getNumber());
+        informe.put("size", idsPage.getSize());
+        informe.put("totalElements", idsPage.getTotalElements());
+        informe.put("totalPages", idsPage.getTotalPages());
         informe.put("filas", filas);
 
         return informe;
+    }
+
+    private BigDecimal toBigDecimal(Object val) {
+        if (val == null) return BigDecimal.ZERO;
+        if (val instanceof BigDecimal bd) return bd;
+        if (val instanceof Number n) return BigDecimal.valueOf(n.doubleValue());
+        return new BigDecimal(val.toString());
+    }
+
+    private List<Reserva> reordenarPorIds(List<Integer> idsOrdenados, List<Reserva> desordenadas) {
+        Map<Integer, Reserva> porId = new HashMap<>(desordenadas.size());
+        for (Reserva r : desordenadas) {
+            porId.put(r.getIdReserva(), r);
+        }
+        List<Reserva> ordenadas = new ArrayList<>(idsOrdenados.size());
+        for (Integer id : idsOrdenados) {
+            Reserva r = porId.get(id);
+            if (r != null) {
+                ordenadas.add(r);
+            }
+        }
+        return ordenadas;
     }
 
     /**

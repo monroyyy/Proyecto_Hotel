@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 @Data
 @NoArgsConstructor
 @Entity
@@ -32,4 +34,19 @@ public class Hotel {
 
     @Column(nullable = false)
     private Boolean activo;
+
+    @Column(name = "imagen_url", length = 500)
+    private String imagenUrl;
+
+    @Column(name = "descripcion", length = 500)
+    private String descripcion;
+
+    @Column(name = "tag_editorial", length = 60)
+    private String tagEditorial;
+
+    @Column(precision = 9, scale = 6)
+    private BigDecimal latitud;
+
+    @Column(precision = 9, scale = 6)
+    private BigDecimal longitud;
 }

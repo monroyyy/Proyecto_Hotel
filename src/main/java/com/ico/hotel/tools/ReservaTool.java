@@ -69,7 +69,7 @@ public class ReservaTool {
             String modalidad,
             @ToolParam(description = "Monto del anticipo pagado en pesos (obligatorio si modalidad es CONFIRMADA)", required = false)
             Double anticipo,
-            @ToolParam(description = "Método de pago del anticipo: 'Efectivo', 'Tarjeta de Crédito', 'Tarjeta de Débito', 'Transferencia'", required = false)
+            @ToolParam(description = "Método de pago del anticipo: 'EFECTIVO', 'TARJETA_CREDITO', 'TARJETA_DEBITO', 'TRANSFERENCIA'", required = false)
             String metodoPago,
             @ToolParam(description = "¿Requiere cuna? (true/false)", required = false)
             Boolean cuna,
@@ -127,8 +127,8 @@ public class ReservaTool {
 
             String exactHotel = HabitacionSearchTool.resolverNombreHotelExacto(hotel);
             List<Habitacion> habitaciones = (exactHotel != null)
-                    ? habitacionRepository.findByNumeroAndHotelNombre(numeroHabitacion.trim(), exactHotel)
-                    : habitacionRepository.findByNumero(numeroHabitacion.trim());
+                    ? habitacionRepository.findByNumeroAndHotelNombreActivos(numeroHabitacion.trim(), exactHotel)
+                    : habitacionRepository.findByNumeroActivos(numeroHabitacion.trim());
 
             if (habitaciones.isEmpty()) {
                 return Map.of("error", "No se encontró la habitación " + numeroHabitacion +
@@ -187,7 +187,6 @@ public class ReservaTool {
             req.setObservaciones(observaciones != null && !observaciones.isBlank()
                     ? observaciones
                     : "Reservación creada por Asistente Virtual");
-            req.setRecepcionista("Javier");
 
             if (esConfirmada) {
                 req.setModalidad("CONFIRMADA");
@@ -196,7 +195,7 @@ public class ReservaTool {
                     montoAnticipo = anticipoMinimo;
                 }
                 req.setAnticipo(montoAnticipo);
-                req.setMetodoPago(metodoPago != null && !metodoPago.isBlank() ? metodoPago : "Efectivo");
+                req.setMetodoPago(metodoPago != null && !metodoPago.isBlank() ? metodoPago : "EFECTIVO");
             } else {
                 req.setModalidad("PRE_RESERVA");
                 req.setHorasVigencia(24);
@@ -205,7 +204,13 @@ public class ReservaTool {
                 }
             }
 
-            Reserva creada = reservaService.crear(req);
+            Reserva creada;
+            ReservaService.marcarOrigenChat(true);
+            try {
+                creada = reservaService.crear(req);
+            } finally {
+                ReservaService.marcarOrigenChat(false);
+            }
 
             respuesta.put("exito", true);
             respuesta.put("mensaje", "¡Reservación creada con éxito en el sistema!");

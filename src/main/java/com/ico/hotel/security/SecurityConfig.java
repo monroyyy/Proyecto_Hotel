@@ -136,6 +136,9 @@ public class SecurityConfig {
                         // - Eliminación física: Administrador
                         .requestMatchers(HttpMethod.DELETE, "/api/reservas", "/api/reservas/**")
                         .hasRole("ADMINISTRADOR")
+                        // - Resumen operativo por estado: exclusivo de personal del hotel
+                        .requestMatchers(HttpMethod.GET, "/api/reservas/resumen-estados")
+                        .hasAnyRole("RECEPCIONISTA", "GERENTE", "ADMINISTRADOR")
                         // - Consultar y operar reservaciones: Todos los roles autenticados (validación de propiedad en servicio)
                         .requestMatchers("/api/reservas", "/api/reservas/**")
                         .hasAnyRole("HUESPED", "RECEPCIONISTA", "GERENTE", "ADMINISTRADOR")

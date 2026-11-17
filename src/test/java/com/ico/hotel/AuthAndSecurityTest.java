@@ -42,6 +42,7 @@ class AuthAndSecurityTest {
     private UsuarioRepository usuarioRepository;
     private TokenVerificacionRepository tokenRepository;
     private HuespedRepository huespedRepository;
+    private TokenRevocadoRepository tokenRevocadoRepository;
     private PasswordEncoder passwordEncoder;
     private JwtService jwtService;
     private TokenBlacklistService tokenBlacklistService;
@@ -53,12 +54,15 @@ class AuthAndSecurityTest {
         usuarioRepository = mock(UsuarioRepository.class);
         tokenRepository = mock(TokenVerificacionRepository.class);
         huespedRepository = mock(HuespedRepository.class);
+        tokenRevocadoRepository = mock(TokenRevocadoRepository.class);
+        when(tokenRevocadoRepository.saveAndFlush(any(TokenRevocado.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
         passwordEncoder = new BCryptPasswordEncoder();
         jwtService = new JwtService(
                 "ClaveSecretaDePruebasUnitariasConMasDe32BytesDeLongitud2026!",
                 3600000L
         );
-        tokenBlacklistService = new TokenBlacklistService();
+        tokenBlacklistService = new TokenBlacklistService(tokenRevocadoRepository);
         emailService = mock(EmailService.class);
 
         authService = new AuthService(
@@ -250,12 +254,14 @@ class AuthAndSecurityTest {
         assertThat(jwtService.extractUserId(auth.getToken())).isEqualTo(25);
         assertThat(jwtService.extractRole(auth.getToken())).isEqualTo("HUESPED");
 
-        String jti = jwtService.extractJti(auth.getToken());
-        assertThat(tokenBlacklistService.isRevoked(jti)).isFalse();
+        assertThat(tokenBlacklistService.isRevoked(auth.getToken())).isFalse();
 
         // Ejecutar logout enviando cabecera Bearer
         authService.logout("Bearer " + auth.getToken());
-        assertThat(tokenBlacklistService.isRevoked(jti)).isTrue();
+        assertThat(tokenBlacklistService.isRevoked(auth.getToken())).isTrue();
+        verify(tokenRevocadoRepository).saveAndFlush(argThat(tr ->
+                TokenBlacklistService.hashToken(auth.getToken()).equals(tr.getTokenHash())
+        ));
     }
 
     @Test

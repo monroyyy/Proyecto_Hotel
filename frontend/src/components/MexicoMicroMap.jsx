@@ -1,67 +1,58 @@
 import React from 'react';
 import { ESTADOS_MEXICO } from '../data/mexicoGeoData';
 
+// Proyección lineal calibrada respecto a los 5 pines originales sobre el viewBox 793x498
+const proyectarCoordenadas = (latitud, longitud) => {
+    const lat = Number(latitud);
+    const lng = Number(longitud);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    const x = Math.max(12, Math.min(781, Math.round((23.7984 * lng + 2838.2348) * 10) / 10));
+    const y = Math.max(12, Math.min(486, Math.round((-25.0843 * lat + 856.3847) * 10) / 10));
+    return { x, y };
+};
+
+const obtenerClimaReferencia = (hotel) => {
+    const txt = `${hotel?.ciudad || ''} ${hotel?.nombre || ''}`.toLowerCase();
+    if (txt.includes('canc')) return '28°C · Soleado';
+    if (txt.includes('ciudad de m') || txt.includes('cdmx') || txt.includes('ejecutivo')) return '22°C · Templado';
+    if (txt.includes('acapulco') || txt.includes('costa')) return '30°C · Cálido';
+    if (txt.includes('guadalajara') || txt.includes('arcos')) return '26°C · Despejado';
+    if (txt.includes('atlacomulco') || txt.includes('uaem')) return '19°C · Fresco';
+    return hotel?.ciudad || 'México';
+};
+
 /**
  * MexicoMicroMap.jsx
- * Micro-radar cartográfico de lujo para geolocalización de las propiedades de Hotel Paraíso.
- * Cartografía vectorial auténtica de la República Mexicana (32 entidades federativas),
- * tarjeta frosted glass con chip de clima integrado y halo de radar para el destino activo.
+ * Micro-radar cartográfico para geolocalización de las propiedades de Hotel Paraíso.
+ * Proyecta cada hotel desde sus coordenadas reales (latitud, longitud); si un hotel
+ * carece de coordenadas, no dibuja su pin.
  */
 export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel }) {
-    const ciudadActiva = (activeHotel?.ciudad || '').toLowerCase();
-    const nombreActivo = (activeHotel?.nombre || '').toLowerCase();
+    const puntosDestinos = (Array.isArray(hotels) ? hotels : [])
+        .map((h) => {
+            if (h?.latitud == null || h?.longitud == null || h.latitud === '' || h.longitud === '') {
+                return null;
+            }
+            const pos = proyectarCoordenadas(h.latitud, h.longitud);
+            if (!pos) return null;
+            return {
+                idHotel: h.idHotel,
+                nombre: h.ciudad || h.nombre || 'Sede',
+                hotelNombre: h.nombre,
+                x: pos.x,
+                y: pos.y,
+                clima: obtenerClimaReferencia(h)
+            };
+        })
+        .filter(Boolean);
 
-    // Coordenadas geográficas exactas en la proyección oficial (viewBox 0 0 793 498)
-    const puntosDestinos = [
-        {
-            id: 'cancun',
-            nombre: 'Cancún',
-            match: ['canc', 'paraiso cancun', 'resort insignia', 'quintana'],
-            x: 772,
-            y: 326,
-            clima: '28°C · Soleado'
-        },
-        {
-            id: 'cdmx',
-            nombre: 'Ciudad de México',
-            match: ['ciudad de m', 'ejecutivo', 'cdmx', 'reforma', 'valle'],
-            x: 483,
-            y: 374,
-            clima: '22°C · Templado'
-        },
-        {
-            id: 'acapulco',
-            nombre: 'Acapulco',
-            match: ['acapulco', 'costa azul', 'bahia', 'guerrero'],
-            x: 454,
-            y: 432,
-            clima: '30°C · Cálido'
-        },
-        {
-            id: 'guadalajara',
-            nombre: 'Guadalajara',
-            match: ['guadalajara', 'arcos', 'jalisco'],
-            x: 382,
-            y: 334,
-            clima: '26°C · Despejado'
-        },
-        {
-            id: 'atlacomulco',
-            nombre: 'Atlacomulco',
-            match: ['atlacomulco', 'uaem', 'valle', 'méxico'],
-            x: 462,
-            y: 360,
-            clima: '19°C · Fresco'
-        }
-    ];
-
-    const puntoActivo = puntosDestinos.find(p =>
-        p.match.some(m => ciudadActiva.includes(m) || nombreActivo.includes(m))
-    ) || puntosDestinos[0];
+    const activeId = activeHotel?.idHotel;
+    const puntoActivo = puntosDestinos.find((p) => p.idHotel === activeId) || null;
+    const etiquetaAria = activeHotel?.ciudad || activeHotel?.nombre || 'República Mexicana';
 
     return (
-        <div className="hp-micromap-card" role="region" aria-label={`Ubicación geográfica: ${puntoActivo.nombre}`}>
-            {/* Chip de Clima integrado en la esquina superior derecha (flota libre sobre el Golfo de México) */}
+        <div className="hp-micromap-card" role="region" aria-label={`Ubicación geográfica: ${etiquetaAria}`}>
+            {/* Chip de ubicación / referencia */}
             <div className="hp-micromap-weather-pill">
                 <svg
                     className="hp-micromap-sun-icon"
@@ -83,10 +74,9 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                     <path d="m6.34 17.66-1.41 1.41" />
                     <path d="m19.07 4.93-1.41 1.41" />
                 </svg>
-                <span>{puntoActivo.clima}</span>
+                <span>{puntoActivo ? puntoActivo.clima : obtenerClimaReferencia(activeHotel)}</span>
             </div>
 
-            {/* Mapa vectorial geográfico de México con preservación estricta de proporciones */}
             <svg
                 viewBox="0 0 793 498"
                 className="hp-micromap-svg"
@@ -94,14 +84,12 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                 aria-hidden="true"
             >
                 <defs>
-                    {/* Gradiente cálido de piedra arenisca para el territorio nacional */}
                     <linearGradient id="mexicoSandstoneGrad" x1="10%" y1="10%" x2="90%" y2="90%">
                         <stop offset="0%" stopColor="#eedecf" />
                         <stop offset="50%" stopColor="#e3cca9" />
                         <stop offset="100%" stopColor="#d5bc96" />
                     </linearGradient>
 
-                    {/* Aura radial suave en terracota translúcido para el destino activo */}
                     <radialGradient id="mexicoAuraGlow" cx="50%" cy="50%" r="50%">
                         <stop offset="0%" stopColor="rgba(215, 85, 50, 0.78)" />
                         <stop offset="45%" stopColor="rgba(215, 85, 50, 0.35)" />
@@ -114,7 +102,6 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                     </filter>
                 </defs>
 
-                {/* Las 32 Entidades Federativas con trazo geográfico real y divisiones sutiles */}
                 <g className="hp-micromap-states-group">
                     {ESTADOS_MEXICO.map((estado) => (
                         <path
@@ -126,18 +113,18 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                     ))}
                 </g>
 
-                {/* Pines de geolocalización de hoteles (visibles, táctiles y con aura concéntrica) */}
                 <g className="hp-micromap-pins-layer">
                     {puntosDestinos.map((pto) => {
-                        const esActivo = pto.id === puntoActivo.id;
+                        const esActivo = pto.idHotel === activeId;
                         return (
                             <g
-                                key={pto.id}
+                                key={pto.idHotel}
+                                data-hotel-id={pto.idHotel}
                                 className={`hp-micromap-pin-group ${esActivo ? 'is-active' : ''}`}
                                 transform={`translate(${pto.x}, ${pto.y})`}
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    if (onSelectHotel) onSelectHotel(pto.id);
+                                    if (onSelectHotel) onSelectHotel(pto.idHotel);
                                 }}
                                 style={{ cursor: 'pointer' }}
                                 role="button"
@@ -146,21 +133,14 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') {
                                         e.preventDefault();
-                                        if (onSelectHotel) onSelectHotel(pto.id);
+                                        if (onSelectHotel) onSelectHotel(pto.idHotel);
                                     }
                                 }}
                             >
                                 <title>{pto.nombre} · {pto.clima}</title>
 
-                                {/* Hit-area transparente amplia para facilitar el clic en cualquier pantalla */}
-                                <circle
-                                    cx="0"
-                                    cy="0"
-                                    r="40"
-                                    fill="transparent"
-                                />
+                                <circle cx="0" cy="0" r="40" fill="transparent" />
 
-                                {/* Halo radial difuso con pulsación concéntrica nativa SVG (siempre perfectamente centrado) */}
                                 {esActivo && (
                                     <circle
                                         cx="0"
@@ -184,7 +164,6 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                                     </circle>
                                 )}
 
-                                {/* Pin circular blanco nítido y grande con relieve */}
                                 <circle
                                     className="hp-micromap-pin-dot"
                                     cx="0"
@@ -196,7 +175,6 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                                     filter="url(#mexicoPinShadow)"
                                 />
 
-                                {/* Núcleo terracota en el pin activo */}
                                 {esActivo && (
                                     <circle
                                         cx="0"

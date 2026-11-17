@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     CalendarPlus, ClipboardList, Search, BedDouble, User, CheckCircle2, Clock,
     AlertTriangle, Accessibility, Baby, XCircle, Banknote,
     UserCheck, Edit2, Trash2, Eye, ArrowLeft, RotateCcw, LogIn, LogOut, UserX
 } from 'lucide-react';
 import {
-    getHoteles, buscarDisponibilidad, crearReserva, getReservas,
+    getHoteles, buscarDisponibilidad, crearReserva, getReservas, getResumenEstadosReservas,
     confirmarReserva, cancelarReserva, getReembolsoReserva,
-    getRecepcionistas, buscarHuespedes, actualizarReserva, eliminarReserva,
+    buscarHuespedes, actualizarReserva, eliminarReserva,
     extenderDiaExtraReserva, checkInReserva, checkOutReserva,
     marcarNoShowReserva, revertirNoShowReserva
 } from '../api/hotelApi';
@@ -335,7 +335,7 @@ function NuevaReserva({ irALista }) {
 // ------------------------------------------------------------------
 function FormularioHuesped({ busq, seleccion, onCreada, onCancelar }) {
     const { habitacion: h, tarifa: t } = seleccion;
-    const [recepcionistas, setRecepcionistas] = useState([]);
+    const { user } = useAuth();
     const [huespedes, setHuespedes] = useState([]);
     const [huespedIdSeleccionado, setHuespedIdSeleccionado] = useState('');
     const [f, setF] = useState({
@@ -347,8 +347,7 @@ function FormularioHuesped({ busq, seleccion, onCreada, onCancelar }) {
         modalidad: 'PRE_RESERVA',
         horasVigencia: 24,
         anticipo: t.anticipoRequerido,
-        metodoPago: 'Efectivo',
-        recepcionista: 'Javier'
+        metodoPago: 'EFECTIVO'
     });
     const [error, setError] = useState('');
     const [guardando, setGuardando] = useState(false);
@@ -356,13 +355,6 @@ function FormularioHuesped({ busq, seleccion, onCreada, onCancelar }) {
     useEffect(() => { setF((x) => ({ ...x, anticipo: t.anticipoRequerido })); }, [t.anticipoRequerido]);
 
     useEffect(() => {
-        getRecepcionistas().then((data) => {
-            if (Array.isArray(data) && data.length > 0) {
-                setRecepcionistas(data);
-                setF((prev) => ({ ...prev, recepcionista: prev.recepcionista || data[0].nombre }));
-            }
-        }).catch(() => {});
-
         buscarHuespedes('').then((data) => {
             if (Array.isArray(data)) setHuespedes(data);
         }).catch(() => {});
@@ -398,8 +390,7 @@ function FormularioHuesped({ busq, seleccion, onCreada, onCancelar }) {
             modalidad: 'PRE_RESERVA',
             horasVigencia: 24,
             anticipo: t.anticipoRequerido,
-            metodoPago: 'Efectivo',
-            recepcionista: recepcionistas[0]?.nombre || 'Javier'
+            metodoPago: 'EFECTIVO'
         });
         setError('');
     };
@@ -427,8 +418,7 @@ function FormularioHuesped({ busq, seleccion, onCreada, onCancelar }) {
                 nombre: f.nombre, telefono: f.telefono.replace(/\D/g, ''), email: f.email,
                 modalidad: f.modalidad, horasVigencia: f.horasVigencia,
                 anticipo: confirmada ? anticipoNum : null,
-                metodoPago: confirmada ? f.metodoPago : null,
-                recepcionista: f.recepcionista || 'Javier'
+                metodoPago: confirmada ? f.metodoPago : null
             });
             onCreada(reserva);
         } catch (err) { setError(err.message); }
@@ -502,18 +492,14 @@ function FormularioHuesped({ busq, seleccion, onCreada, onCancelar }) {
                         value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
                 </div>
                 <div className="form-group">
-                    <label className="form-label">Recepcionista *</label>
-                    <select className="form-select" required value={f.recepcionista} onChange={(e) => setF({ ...f, recepcionista: e.target.value })}>
-                        {recepcionistas.length === 0 ? (
-                            <option value="Javier">Javier (Recepcionista)</option>
-                        ) : (
-                            recepcionistas.map((rec) => (
-                                <option key={rec.idRecepcionista} value={rec.nombre}>
-                                    {rec.nombre}
-                                </option>
-                            ))
-                        )}
-                    </select>
+                    <label className="form-label">Registrada por (sesión)</label>
+                    <input
+                        className="form-input"
+                        type="text"
+                        readOnly
+                        value={user?.nombre || user?.email || 'Personal autenticado'}
+                        style={{ opacity: 0.85, cursor: 'default' }}
+                    />
                 </div>
             </div>
 
@@ -556,7 +542,10 @@ function FormularioHuesped({ busq, seleccion, onCreada, onCancelar }) {
                             <div className="form-group">
                                 <label className="form-label">Método</label>
                                 <select className="form-select" value={f.metodoPago} onChange={(e) => setF({ ...f, metodoPago: e.target.value })}>
-                                    <option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option>
+                                    <option value="EFECTIVO">Efectivo</option>
+                                    <option value="TARJETA_CREDITO">Tarjeta de Crédito</option>
+                                    <option value="TARJETA_DEBITO">Tarjeta de Débito</option>
+                                    <option value="TRANSFERENCIA">Transferencia</option>
                                 </select>
                             </div>
                         </div>
@@ -651,56 +640,92 @@ function ListaReservas({ onNueva }) {
     const { isAdmin, isGerente, isStaff } = useAuth();
     const puedeRevertirNoShow = isGerente || isAdmin;
     const [reservas, setReservas] = useState([]);
+    const [hoteles, setHoteles] = useState([]);
     const [filtro, setFiltro] = useState('');
+    const [hotelFiltro, setHotelFiltro] = useState('');
+    const [entradaDesde, setEntradaDesde] = useState('');
+    const [entradaHasta, setEntradaHasta] = useState('');
+    const [sort, setSort] = useState('fechaCreacion,desc');
+    const [page, setPage] = useState(0);
+    const [size, setSize] = useState(20);
+    const [totalElements, setTotalElements] = useState(0);
+    const [totalPages, setTotalPages] = useState(0);
+    const [kpis, setKpis] = useState({ total: 0, confirmadas: 0, prereservas: 0, canceladas: 0 });
     const [error, setError] = useState('');
     const [cargando, setCargando] = useState(true);
     const [modal, setModal] = useState(null);
     const [reservaAEliminar, setReservaAEliminar] = useState(null);
     const [accionEstancia, setAccionEstancia] = useState(null);
     const [busqueda, setBusqueda] = useState('');
+    const [busquedaDebounced, setBusquedaDebounced] = useState('');
     const [mensajeExito, setMensajeExito] = useState('');
 
-    const cargar = async () => {
-        setCargando(true);
+    useEffect(() => {
+        getHoteles()
+            .then(data => setHoteles(Array.isArray(data) ? data : []))
+            .catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setBusquedaDebounced(busqueda);
+            setPage(0);
+        }, 350);
+        return () => clearTimeout(timer);
+    }, [busqueda]);
+
+    const cargar = useCallback(async ({ silencioso = false } = {}) => {
+        if (!silencioso) {
+            setCargando(true);
+        }
         try {
-            setReservas(await getReservas());
+            const [paginaData, resumenData] = await Promise.all([
+                getReservas({
+                    page,
+                    size,
+                    sort,
+                    estado: filtro || undefined,
+                    hotelId: hotelFiltro ? Number(hotelFiltro) : undefined,
+                    entradaDesde: entradaDesde || undefined,
+                    entradaHasta: entradaHasta || undefined,
+                    q: busquedaDebounced || undefined,
+                }),
+                getResumenEstadosReservas()
+            ]);
+            setReservas(Array.isArray(paginaData?.content) ? paginaData.content : []);
+            setTotalElements(paginaData?.totalElements ?? 0);
+            setTotalPages(paginaData?.totalPages ?? 0);
+            if (resumenData) {
+                setKpis({
+                    total: resumenData.total ?? 0,
+                    confirmadas: resumenData.confirmadas ?? 0,
+                    prereservas: resumenData.prereservas ?? 0,
+                    canceladas: resumenData.canceladas ?? 0,
+                });
+            }
             setError('');
         } catch (e) {
             setError(e.message);
         } finally {
-            setCargando(false);
+            if (!silencioso) {
+                setCargando(false);
+            }
         }
-    };
+    }, [page, size, sort, filtro, hotelFiltro, entradaDesde, entradaHasta, busquedaDebounced]);
 
     useEffect(() => {
         cargar();
-        const t = setInterval(cargar, 60000);
+    }, [cargar]);
+
+    // Polling de 60s refresca SOLO la página visible con sus filtros actuales, sin perder página ni scroll
+    useEffect(() => {
+        const t = setInterval(() => {
+            cargar({ silencioso: true });
+        }, 60000);
         return () => clearInterval(t);
-    }, []);
+    }, [cargar]);
 
-    // KPIs interactivos de estado (sin 'Ocupadas', enfocado en ciclo de reservaciones)
-    const kpis = useMemo(() => {
-        return {
-            total: reservas.length,
-            confirmadas: reservas.filter(r => r.estado === 'Confirmada').length,
-            prereservas: reservas.filter(r => r.estado === 'Pre-reserva').length,
-            canceladas: reservas.filter(r => r.estado === 'Cancelada').length
-        };
-    }, [reservas]);
-
-    const visibles = useMemo(() => {
-        return reservas.filter((r) => {
-            const coincideFiltro = !filtro || r.estado === filtro;
-            const b = busqueda.trim().toLowerCase();
-            const coincideBusqueda = !b || 
-                r.folio?.toLowerCase().includes(b) ||
-                r.huesped?.nombre?.toLowerCase().includes(b) ||
-                r.huesped?.telefono?.includes(b) ||
-                r.habitacion?.numero?.includes(b) ||
-                r.habitacion?.hotel?.nombre?.toLowerCase().includes(b);
-            return coincideFiltro && coincideBusqueda;
-        });
-    }, [reservas, filtro, busqueda]);
+    const visibles = reservas;
 
     const horasRestantes = (r) => (r.fechaExpiracion ? (new Date(r.fechaExpiracion) - new Date()) / 3600000 : null);
 
@@ -754,7 +779,7 @@ function ListaReservas({ onNueva }) {
                     colorClass="kpi-blue"
                     subtitle="Registros en sistema"
                     isActive={filtro === ''}
-                    onClick={() => setFiltro('')}
+                    onClick={() => { setFiltro(''); setPage(0); }}
                 />
                 <KpiCard
                     title="Confirmadas"
@@ -763,7 +788,7 @@ function ListaReservas({ onNueva }) {
                     colorClass="kpi-green"
                     subtitle="Anticipo registrado"
                     isActive={filtro === 'Confirmada'}
-                    onClick={() => setFiltro('Confirmada')}
+                    onClick={() => { setFiltro('Confirmada'); setPage(0); }}
                 />
                 <KpiCard
                     title="Pre-reservas"
@@ -772,7 +797,7 @@ function ListaReservas({ onNueva }) {
                     colorClass="kpi-amber"
                     subtitle="Vigencia temporal"
                     isActive={filtro === 'Pre-reserva'}
-                    onClick={() => setFiltro('Pre-reserva')}
+                    onClick={() => { setFiltro('Pre-reserva'); setPage(0); }}
                 />
                 <KpiCard
                     title="Canceladas"
@@ -781,19 +806,19 @@ function ListaReservas({ onNueva }) {
                     colorClass="kpi-red"
                     subtitle="Estancias anuladas"
                     isActive={filtro === 'Cancelada'}
-                    onClick={() => setFiltro('Cancelada')}
+                    onClick={() => { setFiltro('Cancelada'); setPage(0); }}
                 />
             </div>
 
-            {/* Buscador y Contador */}
+            {/* Buscador, Filtros Servidor y Contador */}
             <div className="filters-card">
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1, flexWrap: 'wrap' }}>
-                        <div className="search-input-wrapper" style={{ flex: 1, minWidth: 240, maxWidth: 380 }}>
+                        <div className="search-input-wrapper" style={{ flex: 1, minWidth: 220, maxWidth: 320 }}>
                             <Search size={16} className="search-icon" />
                             <input
                                 type="text"
-                                placeholder="Buscar por folio, cliente, habitación o hotel..."
+                                placeholder="Buscar por folio, cliente, email o tel..."
                                 className="search-input"
                                 value={busqueda}
                                 onChange={(e) => setBusqueda(e.target.value)}
@@ -801,9 +826,9 @@ function ListaReservas({ onNueva }) {
                         </div>
                         <select
                             className="form-select"
-                            style={{ width: 'auto', minWidth: 200 }}
+                            style={{ width: 'auto', minWidth: 180 }}
                             value={filtro}
-                            onChange={(e) => setFiltro(e.target.value)}
+                            onChange={(e) => { setFiltro(e.target.value); setPage(0); }}
                             aria-label="Filtrar por estado"
                         >
                             <option value="">Todos los estados</option>
@@ -814,9 +839,52 @@ function ListaReservas({ onNueva }) {
                             <option value="No-Show">No-Show</option>
                             <option value="Cancelada">Cancelada</option>
                         </select>
+                        <select
+                            className="form-select"
+                            style={{ width: 'auto', minWidth: 180 }}
+                            value={hotelFiltro}
+                            onChange={(e) => { setHotelFiltro(e.target.value); setPage(0); }}
+                            aria-label="Filtrar por hotel"
+                        >
+                            <option value="">Todas las sedes</option>
+                            {hoteles.map(h => (
+                                <option key={h.idHotel} value={h.idHotel}>{h.nombre}</option>
+                            ))}
+                        </select>
+                        <input
+                            type="date"
+                            className="form-input"
+                            style={{ width: 'auto' }}
+                            value={entradaDesde}
+                            onChange={(e) => { setEntradaDesde(e.target.value); setPage(0); }}
+                            title="Entrada desde"
+                            aria-label="Entrada desde"
+                        />
+                        <input
+                            type="date"
+                            className="form-input"
+                            style={{ width: 'auto' }}
+                            value={entradaHasta}
+                            onChange={(e) => { setEntradaHasta(e.target.value); setPage(0); }}
+                            title="Entrada hasta"
+                            aria-label="Entrada hasta"
+                        />
+                        <select
+                            className="form-select"
+                            style={{ width: 'auto', minWidth: 165 }}
+                            value={sort}
+                            onChange={(e) => { setSort(e.target.value); setPage(0); }}
+                            aria-label="Ordenar por"
+                        >
+                            <option value="fechaCreacion,desc">Más recientes</option>
+                            <option value="fechaEntrada,desc">Entrada (desc)</option>
+                            <option value="fechaEntrada,asc">Entrada (asc)</option>
+                            <option value="total,desc">Mayor total</option>
+                            <option value="total,asc">Menor total</option>
+                        </select>
                     </div>
                     <div className="table-counter">
-                        Mostrando <strong>{visibles.length}</strong> de {reservas.length} reservaciones
+                        Mostrando <strong>{visibles.length}</strong> de <strong>{totalElements}</strong> (Pág. {totalPages === 0 ? 0 : page + 1}/{totalPages})
                     </div>
                 </div>
             </div>
@@ -833,7 +901,19 @@ function ListaReservas({ onNueva }) {
                         <ClipboardList size={40} className="empty-icon" />
                         <h3>No hay reservaciones</h3>
                         <p>No se encontraron registros con los filtros o búsqueda actuales.</p>
-                        <button type="button" className="btn btn-secondary" onClick={() => { setFiltro(''); setBusqueda(''); }}>
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => {
+                                setFiltro('');
+                                setHotelFiltro('');
+                                setEntradaDesde('');
+                                setEntradaHasta('');
+                                setBusqueda('');
+                                setBusquedaDebounced('');
+                                setPage(0);
+                            }}
+                        >
                             Limpiar filtros
                         </button>
                     </div>
@@ -1054,6 +1134,51 @@ function ListaReservas({ onNueva }) {
                 )}
             </div>
 
+            {totalPages > 0 && (
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    flexWrap: 'wrap', gap: 12, padding: '8px 4px'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+                        <span>Por página:</span>
+                        <select
+                            className="form-select"
+                            style={{ width: 'auto', minWidth: 74, height: 34 }}
+                            value={size}
+                            onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }}
+                            aria-label="Tamaño de página"
+                        >
+                            {[10, 20, 50, 100].map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                        <span>Total: <strong>{totalElements}</strong></span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={page <= 0 || cargando}
+                            onClick={() => setPage(p => Math.max(0, p - 1))}
+                        >
+                            Anterior
+                        </button>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                            Página {page + 1} de {totalPages}
+                        </span>
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={page + 1 >= totalPages || cargando}
+                            onClick={() => setPage(p => p + 1)}
+                        >
+                            Siguiente
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Modales de Gestión de Reserva */}
             {modal?.tipo === 'pagar' && <ModalPago reserva={modal.reserva} onClose={() => setModal(null)} onDone={() => { setModal(null); cargar(); }} />}
             {modal?.tipo === 'check-out' && <ModalCheckOut reserva={modal.reserva} onClose={() => setModal(null)} onDone={() => { setModal(null); setMensajeExito(`Check-Out completado y saldo liquidado para ${modal.reserva.folio}.`); cargar(); window.dispatchEvent(new CustomEvent('hotel:reserva-actualizada')); }} />}
@@ -1129,7 +1254,7 @@ function ListaReservas({ onNueva }) {
 function ModalPago({ reserva: r, onClose, onDone }) {
     const minimo = Math.round(r.total * 50) / 100;
     const [anticipo, setAnticipo] = useState(minimo);
-    const [metodo, setMetodo] = useState('Efectivo');
+    const [metodo, setMetodo] = useState('EFECTIVO');
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
 
@@ -1152,7 +1277,10 @@ function ModalPago({ reserva: r, onClose, onDone }) {
                 <div className="form-group">
                     <label className="form-label">Método de pago</label>
                     <select className="form-select" value={metodo} onChange={(e) => setMetodo(e.target.value)}>
-                        <option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option>
+                        <option value="EFECTIVO">Efectivo</option>
+                        <option value="TARJETA_CREDITO">Tarjeta de Crédito</option>
+                        <option value="TARJETA_DEBITO">Tarjeta de Débito</option>
+                        <option value="TRANSFERENCIA">Transferencia</option>
                     </select>
                 </div>
                 <div className="modal-actions">
@@ -1165,7 +1293,7 @@ function ModalPago({ reserva: r, onClose, onDone }) {
 }
 
 function ModalCheckOut({ reserva: r, onClose, onDone }) {
-    const [metodoPagoSaldo, setMetodoPagoSaldo] = useState('Efectivo');
+    const [metodoPagoSaldo, setMetodoPagoSaldo] = useState('EFECTIVO');
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
     const esSalidaAnticipada = r.fechaSalida && hoy() < r.fechaSalida;
@@ -1200,9 +1328,10 @@ function ModalCheckOut({ reserva: r, onClose, onDone }) {
                 <div className="form-group">
                     <label className="form-label">Método de pago del saldo *</label>
                     <select className="form-select" value={metodoPagoSaldo} onChange={(e) => setMetodoPagoSaldo(e.target.value)} required>
-                        <option value="Efectivo">Efectivo</option>
-                        <option value="Tarjeta">Tarjeta</option>
-                        <option value="Transferencia">Transferencia</option>
+                        <option value="EFECTIVO">Efectivo</option>
+                        <option value="TARJETA_CREDITO">Tarjeta de Crédito</option>
+                        <option value="TARJETA_DEBITO">Tarjeta de Débito</option>
+                        <option value="TRANSFERENCIA">Transferencia</option>
                     </select>
                 </div>
                 <div className="modal-actions">
@@ -1399,8 +1528,7 @@ function ModalEditarReserva({ reserva: r, onClose, onDone }) {
                 observaciones,
                 nombre,
                 telefono,
-                email,
-                recepcionista: r.recepcionista
+                email
             };
 
             await actualizarReserva(r.idReserva, reqData);

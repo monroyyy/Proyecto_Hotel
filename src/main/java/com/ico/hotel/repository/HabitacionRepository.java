@@ -115,4 +115,80 @@ public interface HabitacionRepository extends JpaRepository<Habitacion, Integer>
     boolean existsByHotelIdHotelAndNumeroIgnoreCase(Integer idHotel, String numero);
 
     boolean existsByHotelIdHotelAndNumeroIgnoreCaseAndIdHabitacionNot(Integer idHotel, String numero, Integer idHabitacion);
+
+    // ------------------------------------------------------------------
+    // Consultas exclusivas para sedes activas (ConsultasController y chat IA)
+    // ------------------------------------------------------------------
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true")
+    List<Habitacion> findAllActivos();
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true AND h.estado = 'Disponible'")
+    List<Habitacion> findDisponiblesActivos();
+
+    @Query("SELECT new map(hot.nombre as hotel, hab.numero as habitacion, hab.piso as piso, hab.estado as estado) FROM Habitacion hab JOIN hab.hotel hot WHERE hot.activo = true")
+    List<Map<String, Object>> findHabitacionesPorHotelActivos();
+
+    @Query("SELECT new map(hot.nombre as hotel, hab.numero as habitacion, t.nombre as tipo, t.capacidad as capacidad, t.precioBase as precioBase) FROM Habitacion hab JOIN hab.hotel hot JOIN hab.tipoHabitacion t WHERE hot.activo = true")
+    List<Map<String, Object>> findHabitacionesConTipoYPrecioActivos();
+
+    @Query("SELECT new map(hot.nombre as hotel, COUNT(hab) as habitaciones_disponibles) FROM Habitacion hab JOIN hab.hotel hot WHERE hot.activo = true AND hab.estado = 'Disponible' GROUP BY hot.idHotel, hot.nombre")
+    List<Map<String, Object>> countDisponiblesPorHotelActivos();
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true AND h.estado = 'Disponible' AND LOWER(h.hotel.nombre) = LOWER(:hotelNombre)")
+    List<Habitacion> findDisponiblesEnHotelActivos(@Param("hotelNombre") String hotelNombre);
+
+    @Query("SELECT COUNT(h) FROM Habitacion h WHERE h.hotel.activo = true AND h.estado = 'Mantenimiento'")
+    Long countMantenimientoActivos();
+
+    @Query("SELECT h FROM Habitacion h JOIN h.tipoHabitacion t WHERE h.hotel.activo = true AND t.capacidad = 4")
+    List<Habitacion> findHabitacionesPara4HuespedesActivos();
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true AND h.estado = 'Ocupada'")
+    List<Habitacion> findOcupadasActivos();
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true AND h.piso = :piso")
+    List<Habitacion> findByPisoActivos(@Param("piso") Integer piso);
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true AND LOWER(h.hotel.nombre) = LOWER(:hotelNombre) AND h.piso = :piso ORDER BY h.numero ASC")
+    List<Habitacion> findByHotelNombreAndPisoActivos(@Param("hotelNombre") String hotelNombre, @Param("piso") Integer piso);
+
+    @Query("SELECT COUNT(h) FROM Habitacion h WHERE h.hotel.activo = true")
+    Long countTotalHabitacionesActivos();
+
+    @Query("SELECT SUM(t.precioBase) FROM Habitacion h JOIN h.tipoHabitacion t WHERE h.hotel.activo = true")
+    BigDecimal sumIngresoPotencialActivos();
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true AND h.numero = :numero")
+    List<Habitacion> findByNumeroActivos(@Param("numero") String numero);
+
+    @Query("SELECT h FROM Habitacion h JOIN h.tipoHabitacion t WHERE h.hotel.activo = true AND t.nombre = :tipoNombre")
+    List<Habitacion> findByTipoNombreActivos(@Param("tipoNombre") String tipoNombre);
+
+    @Query("SELECT new map(h.estado as estado, COUNT(h) as cantidad) FROM Habitacion h WHERE h.hotel.activo = true GROUP BY h.estado")
+    List<Map<String, Object>> countHabitacionesPorEstadoActivos();
+
+    @Query("SELECT h FROM Habitacion h JOIN h.hotel hot WHERE hot.activo = true AND hot.ciudad = :ciudad")
+    List<Habitacion> findByCiudadActivos(@Param("ciudad") String ciudad);
+
+    @Query("SELECT h FROM Habitacion h JOIN h.tipoHabitacion t WHERE h.hotel.activo = true AND h.estado = 'Disponible' ORDER BY t.precioBase ASC")
+    List<Habitacion> findDisponiblesOrdenadasPorPrecioActivos();
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true AND LOWER(h.hotel.nombre) = LOWER(:hotelNombre) ORDER BY h.piso ASC, h.numero ASC")
+    List<Habitacion> findByHotelNombreActivos(@Param("hotelNombre") String hotelNombre);
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true AND LOWER(h.estado) = LOWER(:estado) ORDER BY h.hotel.nombre ASC, h.piso ASC, h.numero ASC")
+    List<Habitacion> findByEstadoActivos(@Param("estado") String estado);
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true AND LOWER(h.estado) = LOWER(:estado) AND LOWER(h.hotel.nombre) = LOWER(:hotelNombre) ORDER BY h.piso ASC, h.numero ASC")
+    List<Habitacion> findByEstadoAndHotelNombreActivos(@Param("estado") String estado, @Param("hotelNombre") String hotelNombre);
+
+    @Query("SELECT h FROM Habitacion h WHERE h.hotel.activo = true AND h.numero = :numero AND LOWER(h.hotel.nombre) = LOWER(:hotelNombre)")
+    List<Habitacion> findByNumeroAndHotelNombreActivos(@Param("numero") String numero, @Param("hotelNombre") String hotelNombre);
+
+    @Query("SELECT h FROM Habitacion h JOIN h.tipoHabitacion t WHERE h.hotel.activo = true ORDER BY t.precioBase DESC")
+    List<Habitacion> findOrdenadasPorPrecioDescActivos();
+
+    @Query("SELECT h FROM Habitacion h JOIN h.tipoHabitacion t WHERE h.hotel.activo = true AND LOWER(h.hotel.nombre) = LOWER(:hotelNombre) ORDER BY t.precioBase DESC")
+    List<Habitacion> findOrdenadasPorPrecioDescEnHotelActivos(@Param("hotelNombre") String hotelNombre);
 }

@@ -1,5 +1,6 @@
 package com.ico.hotel.controllers;
 
+import com.ico.hotel.dto.PaginaResponse;
 import com.ico.hotel.dto.ReservaRequest;
 import com.ico.hotel.exceptions.ConflictoEstanciaException;
 import com.ico.hotel.exceptions.ReglaEstanciaException;
@@ -10,6 +11,7 @@ import com.ico.hotel.repository.ReservaRepository;
 import com.ico.hotel.security.CustomUserDetails;
 import com.ico.hotel.services.ReservaService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -54,34 +56,49 @@ public class ReservaController {
     }
 
     @GetMapping
-    public List<Reserva> listar(
+    public PaginaResponse<Reserva> listar(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "fechaCreacion,desc") String sort,
+            @RequestParam(required = false) String estado,
+            @RequestParam(required = false) Integer hotelId,
+            @RequestParam(required = false) Integer idHotel,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate entradaDesde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate entradaHasta,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate salidaDesde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate salidaHasta,
+            @RequestParam(required = false) String q,
+            @AuthenticationPrincipal CustomUserDetails principal) {
+        Integer filtroHotel = hotelId != null ? hotelId : idHotel;
+        return service.listarPaginado(
+                page, size, sort, estado, filtroHotel,
+                entradaDesde, entradaHasta, salidaDesde, salidaHasta, q, principal
+        );
+    }
+
+    @GetMapping("/resumen-estados")
+    @PreAuthorize("hasAnyRole('RECEPCIONISTA', 'GERENTE', 'ADMINISTRADOR')")
+    public Map<String, Long> resumenEstados(@AuthenticationPrincipal CustomUserDetails principal) {
+        return service.obtenerResumenEstados(principal);
+    }
+
+    @GetMapping("/mias")
+    public List<Reserva> listarMias(
             @RequestParam(required = false) String estado,
             @AuthenticationPrincipal CustomUserDetails principal) {
-        List<Reserva> base;
-        if (principal != null && principal.isStaff()) {
-            base = reservaRepository.findAllByOrderByFechaCreacionDesc();
-        } else if (principal != null) {
-            base = reservaRepository.findByUsuarioOrHuespedEmail(principal.getIdUsuario(), principal.getEmail());
-        } else {
-            return List.of();
-        }
-        List<Reserva> filtradas = base.stream()
-                .filter(r -> estado == null || estado.isBlank() || r.getEstado().equalsIgnoreCase(estado))
-                .toList();
-        service.enriquecerReservas(filtradas);
-        return filtradas;
+        return service.listarMisReservas(estado, principal);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<?> obtener(
             @PathVariable Integer id,
             @AuthenticationPrincipal CustomUserDetails principal) {
-        Optional<Reserva> opt = reservaRepository.findById(id);
-        if (opt.isEmpty()) {
+        List<Reserva> encontrada = reservaRepository.findAllByIdInWithDetails(List.of(id));
+        if (encontrada.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Reservación no encontrada."));
         }
         try {
-            Reserva r = opt.get();
+            Reserva r = encontrada.get(0);
             service.validarAccesoReserva(r, principal);
             service.enriquecerReserva(r);
             return ResponseEntity.ok(r);

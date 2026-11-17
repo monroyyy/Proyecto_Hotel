@@ -4,6 +4,7 @@ import com.ico.hotel.models.Habitacion;
 import com.ico.hotel.models.Hotel;
 import com.ico.hotel.repository.HabitacionRepository;
 import com.ico.hotel.repository.HotelRepository;
+import com.ico.hotel.services.CatalogoMediaValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +27,9 @@ public class HotelController {
 
     @Autowired
     private HabitacionRepository habitacionRepository;
+
+    @Autowired
+    private CatalogoMediaValidator catalogoMediaValidator;
 
     @GetMapping
     public List<Hotel> listarTodos() {
@@ -73,6 +77,10 @@ public class HotelController {
 
         hotel.setTelefono(tel);
         hotel.setEmail(mail);
+        catalogoMediaValidator.validarCoordenadas(hotel.getLatitud(), hotel.getLongitud());
+        hotel.setImagenUrl(catalogoMediaValidator.validarImagenUrl(hotel.getImagenUrl()));
+        hotel.setDescripcion(catalogoMediaValidator.validarTextoPlano(hotel.getDescripcion(), "descripcion", 500));
+        hotel.setTagEditorial(catalogoMediaValidator.validarTextoPlano(hotel.getTagEditorial(), "tagEditorial", 60));
 
         if (hotel.getActivo() == null) {
             hotel.setActivo(true);
@@ -139,6 +147,20 @@ public class HotelController {
         }
         if (datos.getActivo() != null) {
             hotel.setActivo(datos.getActivo());
+        }
+        if (datos.getImagenUrl() != null) {
+            hotel.setImagenUrl(catalogoMediaValidator.validarImagenUrl(datos.getImagenUrl()));
+        }
+        if (datos.getDescripcion() != null) {
+            hotel.setDescripcion(catalogoMediaValidator.validarTextoPlano(datos.getDescripcion(), "descripcion", 500));
+        }
+        if (datos.getTagEditorial() != null) {
+            hotel.setTagEditorial(catalogoMediaValidator.validarTextoPlano(datos.getTagEditorial(), "tagEditorial", 60));
+        }
+        if (datos.getLatitud() != null || datos.getLongitud() != null) {
+            catalogoMediaValidator.validarCoordenadas(datos.getLatitud(), datos.getLongitud());
+            hotel.setLatitud(datos.getLatitud());
+            hotel.setLongitud(datos.getLongitud());
         }
 
         Hotel actualizado = hotelRepository.save(hotel);

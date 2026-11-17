@@ -1,6 +1,7 @@
 package com.ico.hotel.services;
 
 import com.ico.hotel.config.ClockConfig;
+import com.ico.hotel.dto.PaginaResponse;
 import com.ico.hotel.dto.ReservaRequest;
 import com.ico.hotel.exceptions.ConflictoEstanciaException;
 import com.ico.hotel.exceptions.ReglaEstanciaException;
@@ -8,6 +9,7 @@ import com.ico.hotel.exceptions.TransicionEstadoInvalidaException;
 import com.ico.hotel.models.EstadoReserva;
 import com.ico.hotel.models.Habitacion;
 import com.ico.hotel.models.Huesped;
+import com.ico.hotel.models.MetodoPago;
 import com.ico.hotel.models.Reserva;
 import com.ico.hotel.models.ReservaEvento;
 import com.ico.hotel.models.Rol;
@@ -18,10 +20,12 @@ import com.ico.hotel.repository.ReservaEventoRepository;
 import com.ico.hotel.repository.ReservaRepository;
 import com.ico.hotel.repository.UsuarioRepository;
 import com.ico.hotel.security.CustomUserDetails;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.criteria.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -67,6 +71,9 @@ public class ReservaService {
     private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
     @Autowired(required = false)
     private Clock clock;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Value("${app.jobs.expiracion-dry-run:true}")
     private boolean expiracionDryRun = true;
@@ -309,19 +316,37 @@ public class ReservaService {
     }
 
     /**
-     * Enriquecer una lista de reservaciones con disponibilidad de día extra, costo de día extra y avisos de desocupación.
+     * Enriquecer una lista de reservaciones en lote (sin N+1), consultando únicamente
+     * las reservas activas de las habitaciones presentes en la lista recibida.
      */
     @Transactional(readOnly = true)
     public void enriquecerReservas(List<Reserva> reservas) {
         if (reservas == null || reservas.isEmpty()) return;
         LocalDateTime ahora = LocalDateTime.now(clockActual());
         LocalDate hoy = ahora.toLocalDate();
-        List<Reserva> activas = reservaRepository.findAllActivasOrdenadas();
+
+        Set<Integer> idsHabitacion = new HashSet<>();
+        for (Reserva r : reservas) {
+            if (r.getHabitacion() != null && r.getHabitacion().getIdHabitacion() != null) {
+                idsHabitacion.add(r.getHabitacion().getIdHabitacion());
+            }
+        }
+
         Map<Integer, List<Reserva>> porHabitacion = new HashMap<>();
-        for (Reserva act : activas) {
-            if (act.getHabitacion() == null || act.getHabitacion().getIdHabitacion() == null) continue;
-            if (act.getFechaSalida() != null && act.getFechaSalida().isBefore(hoy)) continue;
-            porHabitacion.computeIfAbsent(act.getHabitacion().getIdHabitacion(), k -> new ArrayList<>()).add(act);
+        if (!idsHabitacion.isEmpty()) {
+            for (Object[] row : reservaRepository.findActivasResumenPorHabitaciones(idsHabitacion, hoy)) {
+                Integer idHab = (Integer) row[1];
+                if (idHab == null) continue;
+                Reserva stub = new Reserva();
+                stub.setIdReserva((Integer) row[0]);
+                stub.setEstado((String) row[2]);
+                stub.setFechaEntrada((LocalDate) row[3]);
+                stub.setFechaSalida((LocalDate) row[4]);
+                stub.setFolio((String) row[5]);
+                stub.setCuna((Boolean) row[6]);
+                stub.setCamaExtra((Boolean) row[7]);
+                porHabitacion.computeIfAbsent(idHab, k -> new ArrayList<>()).add(stub);
+            }
         }
 
         for (Reserva r : reservas) {
@@ -334,6 +359,269 @@ public class ReservaService {
             }
             aplicarEnriquecimientoReserva(r, reservasHab, ahora);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public PaginaResponse<Reserva> listarPaginado(
+            int page,
+            int size,
+            String sortParam,
+            String estado,
+            Integer hotelId,
+            LocalDate entradaDesde,
+            LocalDate entradaHasta,
+            LocalDate salidaDesde,
+            LocalDate salidaHasta,
+            String q,
+            CustomUserDetails principal) {
+        if (page < 0) {
+            throw new IllegalArgumentException("El número de página (page) no puede ser negativo.");
+        }
+        if (size < 1 || size > 100) {
+            throw new IllegalArgumentException("El tamaño de página (size) debe estar entre 1 y 100.");
+        }
+        if (entradaDesde != null && entradaHasta != null && entradaDesde.isAfter(entradaHasta)) {
+            throw new IllegalArgumentException("entradaDesde no puede ser posterior a entradaHasta.");
+        }
+        if (salidaDesde != null && salidaHasta != null && salidaDesde.isAfter(salidaHasta)) {
+            throw new IllegalArgumentException("salidaDesde no puede ser posterior a salidaHasta.");
+        }
+        if (principal == null) {
+            return PaginaResponse.<Reserva>builder()
+                    .content(List.of())
+                    .page(page)
+                    .size(size)
+                    .totalElements(0)
+                    .totalPages(0)
+                    .build();
+        }
+
+        String[] sortSpec = parseSort(sortParam);
+        String sortField = sortSpec[0];
+        boolean asc = "asc".equals(sortSpec[1]);
+
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+
+        // 1. Consulta COUNT(r) usando solo predicados activos
+        CriteriaQuery<Long> countCq = cb.createQuery(Long.class);
+        Root<Reserva> countRoot = countCq.from(Reserva.class);
+        List<Predicate> countPreds = construirPredicados(
+                cb, countRoot, estado, hotelId, entradaDesde, entradaHasta, salidaDesde, salidaHasta, q, principal);
+        countCq.select(cb.count(countRoot));
+        if (!countPreds.isEmpty()) {
+            countCq.where(countPreds.toArray(new Predicate[0]));
+        }
+        long totalElements = entityManager.createQuery(countCq).getSingleResult();
+        int totalPages = (int) Math.ceil((double) totalElements / size);
+
+        if (totalElements == 0 || (long) page * size >= totalElements) {
+            return PaginaResponse.<Reserva>builder()
+                    .content(List.of())
+                    .page(page)
+                    .size(size)
+                    .totalElements(totalElements)
+                    .totalPages(totalPages)
+                    .build();
+        }
+
+        // 2. Consulta paginada de IDs ordenados
+        CriteriaQuery<Integer> idCq = cb.createQuery(Integer.class);
+        Root<Reserva> idRoot = idCq.from(Reserva.class);
+        List<Predicate> idPreds = construirPredicados(
+                cb, idRoot, estado, hotelId, entradaDesde, entradaHasta, salidaDesde, salidaHasta, q, principal);
+        idCq.select(idRoot.get("idReserva"));
+        if (!idPreds.isEmpty()) {
+            idCq.where(idPreds.toArray(new Predicate[0]));
+        }
+        Expression<?> sortExpr = idRoot.get(sortField);
+        Order principalOrder = asc ? cb.asc(sortExpr) : cb.desc(sortExpr);
+        if ("idReserva".equals(sortField)) {
+            idCq.orderBy(principalOrder);
+        } else if ("fechaCreacion".equals(sortField)) {
+            // InnoDB añade la PK id_reserva ASC al índice (fecha_creacion DESC)
+            Order tieBreaker = asc ? cb.desc(idRoot.get("idReserva")) : cb.asc(idRoot.get("idReserva"));
+            idCq.orderBy(principalOrder, tieBreaker);
+        } else {
+            Order tieBreaker = asc ? cb.asc(idRoot.get("idReserva")) : cb.desc(idRoot.get("idReserva"));
+            idCq.orderBy(principalOrder, tieBreaker);
+        }
+
+        List<Integer> idsPagina = entityManager.createQuery(idCq)
+                .setFirstResult(page * size)
+                .setMaxResults(size)
+                .getResultList();
+
+        if (idsPagina.isEmpty()) {
+            return PaginaResponse.<Reserva>builder()
+                    .content(List.of())
+                    .page(page)
+                    .size(size)
+                    .totalElements(totalElements)
+                    .totalPages(totalPages)
+                    .build();
+        }
+
+        // 3. Carga en lote con JOIN FETCH + preservación del orden + enriquecimiento en lote
+        List<Reserva> cargadas = reservaRepository.findAllByIdInWithDetails(idsPagina);
+        Map<Integer, Reserva> porId = new HashMap<>(cargadas.size());
+        for (Reserva r : cargadas) {
+            porId.put(r.getIdReserva(), r);
+        }
+        List<Reserva> ordenadas = new ArrayList<>(idsPagina.size());
+        for (Integer id : idsPagina) {
+            Reserva r = porId.get(id);
+            if (r != null) {
+                ordenadas.add(r);
+            }
+        }
+        enriquecerReservas(ordenadas);
+
+        return PaginaResponse.<Reserva>builder()
+                .content(ordenadas)
+                .page(page)
+                .size(size)
+                .totalElements(totalElements)
+                .totalPages(totalPages)
+                .build();
+    }
+
+    private List<Predicate> construirPredicados(
+            CriteriaBuilder cb,
+            Root<Reserva> root,
+            String estado,
+            Integer hotelId,
+            LocalDate entradaDesde,
+            LocalDate entradaHasta,
+            LocalDate salidaDesde,
+            LocalDate salidaHasta,
+            String q,
+            CustomUserDetails principal) {
+        List<Predicate> preds = new ArrayList<>();
+        Join<Object, Object> hueJoin = null;
+
+        if (!principal.isStaff()) {
+            hueJoin = root.join("huesped", JoinType.LEFT);
+            Join<Object, Object> usrJoin = root.join("usuario", JoinType.LEFT);
+            Predicate porUsuario = cb.equal(usrJoin.get("idUsuario"), principal.getIdUsuario());
+            Predicate porEmail = (principal.getEmail() != null && !principal.getEmail().isBlank())
+                    ? cb.equal(cb.lower(hueJoin.get("email")), principal.getEmail().trim().toLowerCase())
+                    : cb.disjunction();
+            preds.add(cb.or(porUsuario, porEmail));
+        }
+
+        if (estado != null && !estado.isBlank()) {
+            preds.add(cb.equal(root.get("estado"), estado.trim()));
+        }
+        if (hotelId != null) {
+            Join<Object, Object> habJoin = root.join("habitacion", JoinType.INNER);
+            preds.add(cb.equal(habJoin.get("hotel").get("idHotel"), hotelId));
+        }
+        if (entradaDesde != null) {
+            preds.add(cb.greaterThanOrEqualTo(root.get("fechaEntrada"), entradaDesde));
+        }
+        if (entradaHasta != null) {
+            preds.add(cb.lessThanOrEqualTo(root.get("fechaEntrada"), entradaHasta));
+        }
+        if (salidaDesde != null) {
+            preds.add(cb.greaterThanOrEqualTo(root.get("fechaSalida"), salidaDesde));
+        }
+        if (salidaHasta != null) {
+            preds.add(cb.lessThanOrEqualTo(root.get("fechaSalida"), salidaHasta));
+        }
+        if (q != null && !q.isBlank()) {
+            if (hueJoin == null) {
+                hueJoin = root.join("huesped", JoinType.INNER);
+            }
+            String trimmed = q.trim();
+            String likeLower = "%" + escaparLike(trimmed.toLowerCase()) + "%";
+            String likeTel = "%" + escaparLike(trimmed) + "%";
+            preds.add(cb.or(
+                    cb.like(cb.lower(root.get("folio")), likeLower, '!'),
+                    cb.like(cb.lower(hueJoin.get("nombre")), likeLower, '!'),
+                    cb.like(cb.lower(hueJoin.get("email")), likeLower, '!'),
+                    cb.like(hueJoin.get("telefono"), likeTel, '!')
+            ));
+        }
+        return preds;
+    }
+
+    private static String escaparLike(String raw) {
+        return raw.replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
+    }
+
+    private String[] parseSort(String sortParam) {
+        if (sortParam == null || sortParam.isBlank()) {
+            return new String[]{"fechaCreacion", "desc"};
+        }
+        String[] parts = sortParam.split(",");
+        String campo = parts[0].trim();
+        String dir = (parts.length > 1 && !parts[1].isBlank()) ? parts[1].trim().toLowerCase() : "desc";
+        if (!"asc".equals(dir) && !"desc".equals(dir)) {
+            throw new IllegalArgumentException("Dirección de ordenamiento inválida: use 'asc' o 'desc'.");
+        }
+        Set<String> permitidos = Set.of(
+                "fechaCreacion", "fechaEntrada", "fechaSalida", "total", "saldo", "estado", "folio", "idReserva"
+        );
+        if (!permitidos.contains(campo)) {
+            throw new IllegalArgumentException("Campo de ordenamiento no permitido: " + campo);
+        }
+        return new String[]{campo, dir};
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Long> obtenerResumenEstados(CustomUserDetails principal) {
+        Map<String, Long> resumen = new LinkedHashMap<>();
+        long total = 0L;
+        long confirmadas = 0L;
+        long preReservas = 0L;
+        long ocupadas = 0L;
+        long finalizadas = 0L;
+        long canceladas = 0L;
+        long noShow = 0L;
+
+        if (principal != null) {
+            List<Object[]> conteos = principal.isStaff()
+                    ? reservaRepository.countPorEstado()
+                    : reservaRepository.countPorEstadoParaHuesped(principal.getIdUsuario(), principal.getEmail());
+            for (Object[] row : conteos) {
+                String est = row[0] != null ? row[0].toString() : "";
+                long c = row[1] != null ? ((Number) row[1]).longValue() : 0L;
+                total += c;
+                switch (est) {
+                    case Reserva.CONFIRMADA -> confirmadas += c;
+                    case Reserva.PRE_RESERVA -> preReservas += c;
+                    case Reserva.OCUPADA -> ocupadas += c;
+                    case Reserva.FINALIZADA -> finalizadas += c;
+                    case Reserva.CANCELADA -> canceladas += c;
+                    case Reserva.NO_SHOW -> noShow += c;
+                    default -> { }
+                }
+            }
+        }
+        resumen.put("total", total);
+        resumen.put("confirmadas", confirmadas);
+        resumen.put("prereservas", preReservas);
+        resumen.put("ocupadas", ocupadas);
+        resumen.put("finalizadas", finalizadas);
+        resumen.put("canceladas", canceladas);
+        resumen.put("noShow", noShow);
+        return resumen;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Reserva> listarMisReservas(String estado, CustomUserDetails principal) {
+        if (principal == null) {
+            return List.of();
+        }
+        List<Reserva> base = reservaRepository.findByUsuarioOrHuespedEmailWithDetails(
+                principal.getIdUsuario(), principal.getEmail());
+        List<Reserva> filtradas = (estado == null || estado.isBlank())
+                ? base
+                : base.stream().filter(r -> estado.equalsIgnoreCase(r.getEstado())).toList();
+        enriquecerReservas(filtradas);
+        return filtradas;
     }
 
     @Transactional(readOnly = true)
@@ -494,6 +782,16 @@ public class ReservaService {
     // Crear reservación (HU-05, HU-06)
     // ------------------------------------------------------------------
 
+    private static final ThreadLocal<Boolean> ORIGEN_CHAT = ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    public static void marcarOrigenChat(boolean activo) {
+        if (activo) {
+            ORIGEN_CHAT.set(Boolean.TRUE);
+        } else {
+            ORIGEN_CHAT.remove();
+        }
+    }
+
     @Transactional
     public Reserva crear(ReservaRequest req) {
         CustomUserDetails actual = obtenerUsuarioActual();
@@ -502,9 +800,6 @@ public class ReservaService {
             req.setEmail(actual.getEmail());
             if (req.getNombre() == null || req.getNombre().isBlank()) {
                 req.setNombre(actual.getNombre());
-            }
-            if (req.getRecepcionista() == null || req.getRecepcionista().isBlank()) {
-                req.setRecepcionista("Javier");
             }
         }
 
@@ -532,17 +827,7 @@ public class ReservaService {
             throw new IllegalArgumentException("Debe seleccionar una habitación.");
         }
 
-        String recepcionistaNombre;
-        if (req.getRecepcionista() == null || req.getRecepcionista().isBlank()) {
-            recepcionistaNombre = "Javier";
-        } else {
-            recepcionistaNombre = recepcionistaRepository.findByNombreIgnoreCase(req.getRecepcionista().trim())
-                    .filter(x -> !Boolean.FALSE.equals(x.getActivo()))
-                    .map(com.ico.hotel.models.Recepcionista::getNombre)
-                    .orElseGet(() -> actual != null && actual.getRol() == Rol.HUESPED
-                            ? "Autoservicio Web"
-                            : req.getRecepcionista().trim());
-        }
+        String recepcionistaNombre = resolverRecepcionistaServidor(actual);
 
         Habitacion hab = habitacionRepository.findByIdForUpdate(req.getIdHabitacion())
                 .orElseThrow(() -> new IllegalArgumentException("La habitación seleccionada no existe."));
@@ -597,11 +882,12 @@ public class ReservaService {
         r.setRecepcionista(recepcionistaNombre);
 
         if (confirmada) {
-            BigDecimal anticipo = validarAnticipo(req.getAnticipo(), minimo, total, req.getMetodoPago());
+            String metodoNormalizado = MetodoPago.desdeTexto(req.getMetodoPago()).name();
+            BigDecimal anticipo = validarAnticipo(req.getAnticipo(), minimo, total, metodoNormalizado);
             r.setEstado(Reserva.CONFIRMADA);
             r.setAnticipo(anticipo);
             r.setSaldo(total.subtract(anticipo));
-            r.setMetodoPago(req.getMetodoPago());
+            r.setMetodoPago(metodoNormalizado);
         } else {
             int horas = (req.getHorasVigencia() != null && req.getHorasVigencia() == 48) ? 48 : 24;
             r.setEstado(Reserva.PRE_RESERVA);
@@ -620,13 +906,30 @@ public class ReservaService {
         } else {
             r.setFolio("TMP-" + UUID.randomUUID());
             r = reservaRepository.save(r);
-            r.setFolio(String.format("HP-%d-%05d", LocalDate.now(clockActual()).getYear(), r.getIdReserva()));
+            int anio = LocalDate.now(clockActual()).getYear();
+            long seq = r.getIdReserva();
+            String folioGenerado;
+            do {
+                folioGenerado = String.format("HP-%d-%05d", anio, seq++);
+            } while (reservaRepository.existsByFolioIgnoreCase(folioGenerado));
+            r.setFolio(folioGenerado);
             r = reservaRepository.save(r);
         }
         registrarEvento(r.getIdReserva(), "CREACION", null, r.getEstado(),
                 confirmada ? "Reservación confirmada al crear." : "Pre-reserva creada.");
         sincronizarEstadoHabitacion(hab);
         return r;
+    }
+
+    private String resolverRecepcionistaServidor(CustomUserDetails actual) {
+        if (Boolean.TRUE.equals(ORIGEN_CHAT.get())) {
+            return "Asistente Virtual";
+        }
+        if (actual != null && actual.isStaff()) {
+            String nombre = actual.getNombre();
+            return (nombre != null && !nombre.isBlank()) ? nombre.trim() : actual.getEmail();
+        }
+        return "Portal Web";
     }
 
     private Huesped obtenerHuesped(ReservaRequest req, String tel) {
@@ -684,15 +987,16 @@ public class ReservaService {
             throw new ConflictoEstanciaException("La pre-reserva ya venció y la habitación fue liberada.");
         }
         BigDecimal minimo = r.getTotal().multiply(new BigDecimal("0.50")).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal pagado = validarAnticipo(anticipo, minimo, r.getTotal(), metodoPago);
+        String metodoNormalizado = MetodoPago.desdeTexto(metodoPago).name();
+        BigDecimal pagado = validarAnticipo(anticipo, minimo, r.getTotal(), metodoNormalizado);
         r.setEstado(Reserva.CONFIRMADA);
         r.setAnticipo(pagado);
         r.setSaldo(r.getTotal().subtract(pagado));
-        r.setMetodoPago(metodoPago);
+        r.setMetodoPago(metodoNormalizado);
         r.setFechaExpiracion(null);
         r = reservaRepository.save(r);
         registrarEvento(r.getIdReserva(), "CONFIRMACION", estadoActual.getValor(), Reserva.CONFIRMADA,
-                "Anticipo registrado (" + metodoPago + "): $" + pagado);
+                "Anticipo registrado (" + metodoNormalizado + "): $" + pagado);
         sincronizarEstadoHabitacion(r.getHabitacion());
         return r;
     }
@@ -750,13 +1054,14 @@ public class ReservaService {
         if (metodoPagoSaldo == null || metodoPagoSaldo.isBlank()) {
             throw new ReglaEstanciaException("Debe indicar el método de pago del saldo restante para finalizar la estancia.");
         }
+        String metodoSaldoNormalizado = MetodoPago.desdeTexto(metodoPagoSaldo).name();
 
         LocalDateTime ahora = LocalDateTime.now(clockActual());
         LocalDate hoy = ahora.toLocalDate();
         BigDecimal saldoPrevio = r.getSaldo() != null ? r.getSaldo() : BigDecimal.ZERO;
         boolean salidaAnticipada = r.getFechaSalida() != null && hoy.isBefore(r.getFechaSalida());
 
-        r.setMetodoPagoSaldo(metodoPagoSaldo.trim());
+        r.setMetodoPagoSaldo(metodoSaldoNormalizado);
         r.setSaldo(BigDecimal.ZERO);
         r.setCheckOutAt(ahora);
         r.setEstado(Reserva.FINALIZADA);
@@ -1008,11 +1313,6 @@ public class ReservaService {
         r.setPlantaBajaSolicitada(Boolean.TRUE.equals(req.getPlantaBajaSolicitada()));
         r.setObservaciones(req.getObservaciones());
         r.setTotal(nuevoTotal);
-
-        if (req.getRecepcionista() != null && !req.getRecepcionista().isBlank()
-                && (actual == null || actual.isStaff())) {
-            r.setRecepcionista(req.getRecepcionista().trim());
-        }
 
         BigDecimal anticipoActual = r.getAnticipo() != null ? r.getAnticipo() : BigDecimal.ZERO;
         r.setSaldo(nuevoTotal.subtract(anticipoActual));
@@ -1267,7 +1567,6 @@ public class ReservaService {
         return resumen;
     }
 
-    @Scheduled(fixedRate = 5 * 60 * 1000)
     public int expirarPreReservas() {
         LocalDateTime ahora = LocalDateTime.now(clockActual());
         LocalDate hoy = ahora.toLocalDate();

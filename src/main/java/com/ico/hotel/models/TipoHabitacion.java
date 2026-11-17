@@ -27,4 +27,7 @@ public class TipoHabitacion {
 
     @Column(name = "precio_base", nullable = false)
     private BigDecimal precioBase;
+
+    @Column(name = "imagen_url", length = 500)
+    private String imagenUrl;
 }

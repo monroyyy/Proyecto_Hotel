@@ -23,8 +23,10 @@ public class InformeController {
     public ResponseEntity<Map<String, Object>> getInformeFinanciero(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fin,
-            @RequestParam(required = false) Integer hotelId) {
-        return ResponseEntity.ok(informeService.generarInformeFinanciero(inicio, fin, hotelId));
+            @RequestParam(required = false) Integer hotelId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(informeService.generarInformeFinanciero(inicio, fin, hotelId, page, size));
     }
 
     @GetMapping("/ocupacion")
