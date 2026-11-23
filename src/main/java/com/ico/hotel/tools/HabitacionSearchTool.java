@@ -78,6 +78,14 @@ public class HabitacionSearchTool {
             String norm = java.text.Normalizer.normalize(nombreHotel.toLowerCase().trim(), java.text.Normalizer.Form.NFD)
                     .replaceAll("\\p{M}", "");
 
+            // 0. Coincidencia exacta primero ("Hotel Paraíso" no debe resolverse como "Hotel Paraíso Ejecutivo")
+            for (Hotel h : hotelesDisponibles) {
+                if (h.getNombre() == null) continue;
+                String normH = java.text.Normalizer.normalize(h.getNombre().toLowerCase().trim(), java.text.Normalizer.Form.NFD)
+                        .replaceAll("\\p{M}", "");
+                if (norm.equals(normH)) return h.getNombre();
+            }
+
             // 1. Coincidencia exacta o por contención ordenada de mayor a menor longitud
             List<Hotel> ordenados = hotelesDisponibles.stream()
                     .filter(h -> h.getNombre() != null)

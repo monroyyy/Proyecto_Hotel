@@ -230,6 +230,57 @@ public class HotelChatServiceImpl implements HotelChatService {
         return sb.append("\n¿Desea cotizar o apartar una de estas habitaciones? Indíqueme fechas de entrada y salida.").toString();
     }
 
+    private Map<String, Object> habitacionMencionada(String texto, List<Map<String, Object>> rooms) {
+        String norm = normalizarTexto(texto);
+        for (Map<String, Object> r : rooms) {
+            String num = normalizarTexto(String.valueOf(r.get("numero")));
+            if (!num.isBlank() && Pattern.compile("(^| )" + Pattern.quote(num) + "( |$)").matcher(norm).find()) return r;
+        }
+        return null;
+    }
+
+    private Map<String, Object> habitacionEnContexto(String prompt, String convId, List<Map<String, Object>> rooms) {
+        Map<String, Object> m = habitacionMencionada(prompt, rooms);
+        if (m != null) return m;
+        try {
+            List<Message> hist = chatMemory.get(convId);
+            for (int i = hist.size() - 1; i >= 0; i--) {
+                if (hist.get(i).getMessageType() != MessageType.USER) continue;
+                m = habitacionMencionada(hist.get(i).getText(), rooms);
+                if (m != null) return m;
+            }
+        } catch (Exception ignored) {}
+        return rooms.size() == 1 ? rooms.get(0) : null;
+    }
+
+    /** Calendario real de ocupación/disponibilidad de una habitación a partir de hoy (desde la BD, nunca inventado). */
+    private String calendarioHabitacion(String hotel, Map<String, Object> room) {
+        java.time.format.DateTimeFormatter f = java.time.format.DateTimeFormatter.ofPattern("d 'de' MMMM yyyy", Locale.forLanguageTag("es-MX"));
+        LocalDate hoy = LocalDate.now();
+        String num = String.valueOf(room.get("numero"));
+        List<Reserva> rs = reservaRepository.findActivasPorHabitacionYHotel(num, hotel).stream()
+                .filter(r -> r.getFechaEntrada() != null && r.getFechaSalida() != null && r.getFechaSalida().isAfter(hoy))
+                .filter(r -> r.getHabitacion() != null && r.getHabitacion().getHotel() != null
+                        && hotel.equalsIgnoreCase(r.getHabitacion().getHotel().getNombre()))
+                .sorted(Comparator.comparing(Reserva::getFechaEntrada)).toList();
+        StringBuilder sb = new StringBuilder();
+        sb.append("### Habitación #").append(num).append(" · ").append(room.get("tipo")).append(" · ").append(hotel).append("\n\n");
+        boolean mant = "Mantenimiento".equalsIgnoreCase(String.valueOf(room.get("estado")));
+        if (mant) sb.append("*Actualmente en mantenimiento: no se puede reservar hasta que Recepción la libere.*\n\n");
+        sb.append("| Periodo | Estado |\n| :--- | :---: |\n");
+        LocalDate cursor = hoy;
+        for (Reserva r : rs) {
+            if (r.getFechaEntrada().isAfter(cursor)) {
+                sb.append("| ").append(cursor.format(f)).append(" → ").append(r.getFechaEntrada().format(f)).append(" | **Disponible** |\n");
+            }
+            sb.append("| ").append(r.getFechaEntrada().format(f)).append(" → ").append(r.getFechaSalida().format(f)).append(" | Ocupada / Reservada |\n");
+            if (r.getFechaSalida().isAfter(cursor)) cursor = r.getFechaSalida();
+        }
+        sb.append("| ").append(cursor.format(f)).append(" en adelante | **Disponible** |\n");
+        sb.append("\nEl día de salida de una reservación queda libre para una nueva entrada. ¿Desea reservar? Indíqueme fecha de entrada y salida.");
+        return sb.toString();
+    }
+
     private String aislarConversationIdPorUsuario(CustomUserDetails user, String conversationId) {
         String baseId = (conversationId != null && !conversationId.isBlank()) ? conversationId : DEFAULT_CONVERSATION_ID;
         if (user == null) {
@@ -875,6 +926,19 @@ public class HotelChatServiceImpl implements HotelChatService {
         String ctxHotel = (sinFechas && !ambitoCadena) ? resolverHotelEnContexto(prompt, scopedConvId) : null;
         if (ctxHotel != null && !norm.contains("mantenimiento") && !norm.contains("ocupada")
                 && !norm.contains("cancel") && !norm.contains("politic")) {
+            // Disponibilidad por fechas de una habitación (calendario real)
+            boolean pideFechas = (norm.contains("fecha") || norm.contains("cuando") || norm.contains("que dias") || norm.contains("hasta cuando"))
+                    && (norm.contains("disponib") || norm.contains("libre") || norm.contains("ocupad") || norm.contains("desocup"));
+            if (pideFechas) {
+                List<Map<String, Object>> rooms = habitacionesDeHotel(ctxHotel);
+                Map<String, Object> hab = habitacionEnContexto(prompt, scopedConvId, rooms);
+                if (hab != null) return calendarioHabitacion(ctxHotel, hab);
+                if (!rooms.isEmpty()) {
+                    StringBuilder sb = new StringBuilder("¿De cuál habitación de **" + ctxHotel + "** desea conocer las fechas? Disponibles:\n\n");
+                    for (Map<String, Object> r : rooms) sb.append("- **#").append(r.get("numero")).append("** · ").append(r.get("tipo")).append("\n");
+                    return sb.toString();
+                }
+            }
             // Pregunta por una categoría concreta dentro del hotel en contexto
             String[] claves = {"individual", "doble", "matrimonial", "familiar", "suite", "master", "estudiante", "villa"};
             String clave = null;
