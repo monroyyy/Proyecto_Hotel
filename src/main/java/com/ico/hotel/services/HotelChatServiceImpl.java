@@ -141,6 +141,7 @@ public class HotelChatServiceImpl implements HotelChatService {
                    ". INVENTARIO REAL (cada hotel solo ofrece lo listado, NUNCA cruces hoteles con categorías): " + resumenCats +
                    ". Check-in: 15:00 hrs, Check-out: 12:00 hrs. Anticipo obligatorio: 50%. Vigencia pre-reserva: 24-48 hrs. " +
                    "Cancelación: >72h = 100% reembolso, 48-72h = 50% reembolso, <48h = 0% reembolso. No-Show: 22:00 hrs. " +
+                   "REGLA CRÍTICA: NUNCA cobres, proceses pagos ni pidas datos de tarjeta o cuenta bancaria; el asistente solo registra Pre-reservas. " +
                    "Responde directo al usuario en español sin usar encabezados como 'Respuesta al usuario:'.]";
         } catch (Exception e) {
             return "";
@@ -525,6 +526,18 @@ public class HotelChatServiceImpl implements HotelChatService {
 
         if (norm.equals("consultar reservacion") || norm.equals("buscar reservacion")) {
             return "Para consultar una reservación en tiempo real, por favor indíqueme el **folio oficial** (ej. `HP-2026-00786`), el **nombre del titular** o el **correo electrónico** registrado.";
+        }
+
+        // 0A. Bloqueo de cobro / solicitud de pago en el chat (la IA solo registra Pre-reservas)
+        boolean pidePagar = (norm.contains("realizar el pago") || norm.contains("hacer el pago")
+                || norm.contains("quiero pagar") || norm.contains("como pago") || norm.contains("pagar mi")
+                || norm.contains("pagar la") || norm.contains("pagar el") || norm.contains("efectuar el pago")
+                || norm.contains("pagar anticipo") || norm.contains("cobrame") || norm.contains("cobrarme")
+                || norm.equals("pagar") || norm.equals("pago"))
+                && !norm.contains("recaudacion") && !norm.contains("grafica") && !norm.contains("desglose");
+        if (pidePagar) {
+            return "Por seguridad, este asistente virtual **no procesa pagos ni solicita datos de tarjeta o cuentas bancarias**.\n\n" +
+                   "A través del chat únicamente se registra la **Pre-reserva** (apartado temporal con vigencia de 24 a 48 horas). Para confirmar su estancia con el **50% de anticipo**, realice el pago directamente en **Recepción** o consulte las instrucciones de depósito desde **Mis Reservaciones** usando su folio oficial.";
         }
 
         // 0B. Consulta de Usuarios Registrados / Cuentas del Sistema / Roles
