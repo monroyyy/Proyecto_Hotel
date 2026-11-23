@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
-    Users, ShieldCheck, CheckCircle2, XCircle, RefreshCw, AlertCircle,
-    UserCheck, Lock, Unlock, Search, Edit2, Trash2, UserPlus, Mail,
-    MoreHorizontal, ShieldAlert, Key
+    Users, ShieldCheck, CheckCircle2, RefreshCw, AlertCircle,
+    UserCheck, Lock, Unlock, Search, Edit2, Trash2, UserPlus,
+    MoreHorizontal, Key, ChevronDown, ArrowUpDown, FileSpreadsheet
 } from 'lucide-react';
 import {
     getUsuarios,
@@ -14,8 +14,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
-import KpiCard from '../components/KpiCard';
-import EstadoBadge from '../components/EstadoBadge';
+import './UsuariosPage.css';
 
 function limpiarNombre(nombre) {
     if (!nombre) return 'Usuario';
@@ -28,6 +27,13 @@ function limpiarNombre(nombre) {
         .replace(/Ã±/g, 'ñ');
 }
 
+const PRIORIDAD_ROL = {
+    GERENTE: 1,
+    ADMINISTRADOR: 2,
+    RECEPCIONISTA: 3,
+    HUESPED: 4
+};
+
 function obtenerEtiquetaRol(rol) {
     switch (rol) {
         case 'ADMINISTRADOR': return 'Administrador';
@@ -36,6 +42,13 @@ function obtenerEtiquetaRol(rol) {
         case 'HUESPED':
         default: return 'Huésped';
     }
+}
+
+function claseBadgeRol(rol) {
+    if (rol === 'GERENTE') return 'usr-badge usr-badge-terra';
+    if (rol === 'ADMINISTRADOR') return 'usr-badge usr-badge-palm';
+    if (rol === 'RECEPCIONISTA') return 'usr-badge usr-badge-ocean';
+    return 'usr-badge usr-badge-muted';
 }
 
 function obtenerIniciales(nombre) {
@@ -55,15 +68,18 @@ export default function UsuariosPage() {
     const [error, setError] = useState('');
     const [notificacion, setNotificacion] = useState(null);
 
-    // Filtro unificado vía KPIs
-    const [filtroKpi, setFiltroKpi] = useState('TODOS'); // 'TODOS' | 'HUESPED' | 'ADMINISTRADOR' | 'PENDIENTES'
+    // Filtros y ordenamiento (por jerarquía de rol: Gerente -> Administrador -> Recepción -> Huésped)
+    const [filtroKpi, setFiltroKpi] = useState('TODOS');
+    const [filtroRol, setFiltroRol] = useState('TODOS');
+    const [filtroVerif, setFiltroVerif] = useState('TODOS');
+    const [filtroActivo, setFiltroActivo] = useState('TODOS');
     const [busqueda, setBusqueda] = useState('');
+    const [orden, setOrden] = useState({ campo: 'rol', dir: 'asc' });
 
-    // Menú contextual activo (ID de usuario)
+    // Menú contextual
     const [menuActivoId, setMenuActivoId] = useState(null);
     const menuRef = useRef(null);
 
-    // Cerrar menú contextual al hacer click fuera
     useEffect(() => {
         function handleClickAfuera(e) {
             if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -74,7 +90,7 @@ export default function UsuariosPage() {
         return () => document.removeEventListener('mousedown', handleClickAfuera);
     }, []);
 
-    // Modal de Crear / Editar Usuario
+    // Modal Crear / Editar
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modoEdicion, setModoEdicion] = useState(false);
     const [formUser, setFormUser] = useState({
@@ -87,7 +103,6 @@ export default function UsuariosPage() {
         activo: true
     });
 
-    // Diálogo de Confirmación
     const [confirmacion, setConfirmacion] = useState({
         abierto: false,
         tipo: 'info',
@@ -120,40 +135,107 @@ export default function UsuariosPage() {
         setTimeout(() => setNotificacion(null), 4000);
     };
 
-    // KPIs interactivos
+    const toggleOrden = (campo) => {
+        setOrden(prev =>
+            prev.campo === campo
+                ? { campo, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+                : { campo, dir: campo === 'idUsuario' ? 'desc' : 'asc' }
+        );
+    };
+
     const kpis = useMemo(() => {
         const total = usuarios.length;
+        const direccion = usuarios.filter(u => u.rol === 'GERENTE' || u.rol === 'ADMINISTRADOR').length;
+        const recepcion = usuarios.filter(u => u.rol === 'RECEPCIONISTA').length;
         const huespedes = usuarios.filter(u => u.rol === 'HUESPED').length;
-        const personal = usuarios.filter(u => u.rol === 'GERENTE' || u.rol === 'RECEPCIONISTA').length;
-        const admins = usuarios.filter(u => u.rol === 'ADMINISTRADOR').length;
-        const pendientes = usuarios.filter(u => !u.verificado).length;
-        return { total, huespedes, personal, admins, pendientes };
+        return { total, direccion, recepcion, huespedes };
     }, [usuarios]);
 
-    // Filtrado de usuarios
     const usuariosFiltrados = useMemo(() => {
-        return usuarios.filter(u => {
-            let coincideFiltro = true;
-            if (filtroKpi === 'HUESPED') coincideFiltro = u.rol === 'HUESPED';
-            else if (filtroKpi === 'PERSONAL') coincideFiltro = (u.rol === 'GERENTE' || u.rol === 'RECEPCIONISTA');
-            else if (filtroKpi === 'GERENTE') coincideFiltro = u.rol === 'GERENTE';
-            else if (filtroKpi === 'RECEPCIONISTA') coincideFiltro = u.rol === 'RECEPCIONISTA';
-            else if (filtroKpi === 'ADMINISTRADOR') coincideFiltro = u.rol === 'ADMINISTRADOR';
-            else if (filtroKpi === 'PENDIENTES') coincideFiltro = !u.verificado;
+        const filtrados = usuarios.filter(u => {
+            if (filtroKpi === 'DIRECCION' && u.rol !== 'GERENTE' && u.rol !== 'ADMINISTRADOR') return false;
+            if (filtroKpi === 'RECEPCIONISTA' && u.rol !== 'RECEPCIONISTA') return false;
+            if (filtroKpi === 'HUESPED' && u.rol !== 'HUESPED') return false;
 
-            const nombreLimpio = limpiarNombre(u.nombre).toLowerCase();
-            const emailLower = (u.email || '').toLowerCase();
-            const rolLower = obtenerEtiquetaRol(u.rol).toLowerCase();
+            if (filtroRol !== 'TODOS' && u.rol !== filtroRol) return false;
+
+            if (filtroVerif === 'VERIFICADO' && !u.verificado) return false;
+            if (filtroVerif === 'PENDIENTE' && u.verificado) return false;
+
+            if (filtroActivo === 'ACTIVA' && !u.activo) return false;
+            if (filtroActivo === 'SUSPENDIDA' && u.activo) return false;
+
             const q = busqueda.trim().toLowerCase();
-            const coincideBusqueda = !q ||
-                nombreLimpio.includes(q) ||
-                emailLower.includes(q) ||
-                rolLower.includes(q) ||
-                String(u.idUsuario).includes(q);
-
-            return coincideFiltro && coincideBusqueda;
+            if (q) {
+                const nombreLimpio = limpiarNombre(u.nombre).toLowerCase();
+                const emailLower = (u.email || '').toLowerCase();
+                const rolLower = obtenerEtiquetaRol(u.rol).toLowerCase();
+                if (
+                    !nombreLimpio.includes(q) &&
+                    !emailLower.includes(q) &&
+                    !rolLower.includes(q) &&
+                    !String(u.idUsuario).includes(q)
+                ) {
+                    return false;
+                }
+            }
+            return true;
         });
-    }, [usuarios, filtroKpi, busqueda]);
+
+        const mult = orden.dir === 'asc' ? 1 : -1;
+        return [...filtrados].sort((a, b) => {
+            if (orden.campo === 'nombre') {
+                return limpiarNombre(a.nombre).localeCompare(limpiarNombre(b.nombre), 'es') * mult;
+            }
+            if (orden.campo === 'rol') {
+                const pa = PRIORIDAD_ROL[a.rol] ?? 99;
+                const pb = PRIORIDAD_ROL[b.rol] ?? 99;
+                if (pa !== pb) return (pa - pb) * mult;
+                return Number(b.idUsuario || 0) - Number(a.idUsuario || 0);
+            }
+            return (Number(a.idUsuario || 0) - Number(b.idUsuario || 0)) * mult;
+        });
+    }, [usuarios, filtroKpi, filtroRol, filtroVerif, filtroActivo, busqueda, orden]);
+
+    const hayFiltros = Boolean(
+        filtroKpi !== 'TODOS' || filtroRol !== 'TODOS' || filtroVerif !== 'TODOS' || filtroActivo !== 'TODOS' || busqueda.trim()
+    );
+
+    const limpiarFiltros = () => {
+        setFiltroKpi('TODOS');
+        setFiltroRol('TODOS');
+        setFiltroVerif('TODOS');
+        setFiltroActivo('TODOS');
+        setBusqueda('');
+    };
+
+    const exportarUsuariosCsv = () => {
+        if (usuariosFiltrados.length === 0) return;
+        const rows = [
+            ['ID', 'NOMBRE', 'CORREO', 'ROL', 'VERIFICACION', 'ESTADO', 'FECHA_ALTA'],
+            ...usuariosFiltrados.map(u => [
+                u.idUsuario,
+                limpiarNombre(u.nombre),
+                u.email || '',
+                obtenerEtiquetaRol(u.rol),
+                u.verificado ? 'Verificado' : 'Pendiente',
+                u.activo ? 'Activa' : 'Suspendida',
+                u.fechaCreacion ? String(u.fechaCreacion).split('T')[0] : ''
+            ])
+        ];
+        const csv = '\uFEFF' + rows
+            .map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
+            .join('\r\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `HotelParaiso_Usuarios_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     const abrirModalNuevo = () => {
         setModoEdicion(false);
@@ -195,15 +277,15 @@ export default function UsuariosPage() {
             return;
         }
         if (modoEdicion && formUser.password && formUser.password.length < 8) {
-            mostrarNotificacion('error', 'Si deseas cambiar la contraseña, debe tener al menos 8 caracteres.');
+            mostrarNotificacion('error', 'La nueva contraseña debe tener al menos 8 caracteres.');
             return;
         }
 
         setConfirmacion({
             abierto: true,
             tipo: 'info',
-            titulo: modoEdicion ? '¿Confirmar cambios en el usuario?' : '¿Crear nueva cuenta de usuario?',
-            subtitulo: modoEdicion ? `Cuenta #${formUser.idUsuario}` : 'Alta directa por administrador',
+            titulo: modoEdicion ? '¿Confirmar cambios en el usuario?' : '¿Crear nueva cuenta?',
+            subtitulo: modoEdicion ? `Cuenta #${formUser.idUsuario}` : 'Alta por Dirección General',
             mensaje: modoEdicion
                 ? `Se actualizarán los datos de "${formUser.nombre}" (${formUser.email}) con rol ${obtenerEtiquetaRol(formUser.rol)}.`
                 : `Se registrará a "${formUser.nombre}" (${formUser.email}) con rol ${obtenerEtiquetaRol(formUser.rol)}.`,
@@ -219,11 +301,9 @@ export default function UsuariosPage() {
                             verificado: formUser.verificado,
                             activo: formUser.activo
                         };
-                        if (formUser.password.trim()) {
-                            payload.password = formUser.password;
-                        }
+                        if (formUser.password.trim()) payload.password = formUser.password;
                         await actualizarUsuarioAdmin(formUser.idUsuario, payload);
-                        mostrarNotificacion('exito', `Datos de ${formUser.nombre} actualizados correctamente.`);
+                        mostrarNotificacion('exito', `Datos de ${formUser.nombre} actualizados.`);
                     } else {
                         await crearUsuarioAdmin({
                             nombre: formUser.nombre.trim(),
@@ -233,7 +313,7 @@ export default function UsuariosPage() {
                             verificado: formUser.verificado,
                             activo: formUser.activo
                         });
-                        mostrarNotificacion('exito', `Usuario ${formUser.nombre} creado exitosamente.`);
+                        mostrarNotificacion('exito', `Usuario ${formUser.nombre} creado.`);
                     }
                     setConfirmacion(prev => ({ ...prev, abierto: false }));
                     setModalAbierto(false);
@@ -255,12 +335,12 @@ export default function UsuariosPage() {
         setConfirmacion({
             abierto: true,
             tipo: nuevoEstado ? 'info' : 'warning',
-            titulo: nuevoEstado ? '¿Reactivar cuenta de usuario?' : '¿Suspender cuenta de usuario?',
+            titulo: nuevoEstado ? '¿Reactivar cuenta?' : '¿Suspender cuenta?',
             subtitulo: `${nombreLimpio} (${u.email})`,
             mensaje: nuevoEstado
-                ? `El usuario "${nombreLimpio}" podrá volver a iniciar sesión en la plataforma.`
-                : `El usuario "${nombreLimpio}" no podrá iniciar sesión mientras su cuenta permanezca suspendida.`,
-            textoConfirmar: nuevoEstado ? 'Sí, reactivar cuenta' : 'Sí, suspender cuenta',
+                ? `El usuario "${nombreLimpio}" podrá volver a iniciar sesión.`
+                : `El usuario "${nombreLimpio}" no podrá iniciar sesión mientras esté suspendido.`,
+            textoConfirmar: nuevoEstado ? 'Reactivar cuenta' : 'Suspender cuenta',
             accion: async () => {
                 setProcesando(true);
                 try {
@@ -284,15 +364,15 @@ export default function UsuariosPage() {
         setConfirmacion({
             abierto: true,
             tipo: 'info',
-            titulo: '¿Aprobar verificación de correo?',
+            titulo: '¿Verificar correo manualmente?',
             subtitulo: `${nombreLimpio} (${u.email})`,
-            mensaje: `Se marcará manualmente el correo "${u.email}" como verificado para permitirle iniciar sesión de inmediato.`,
-            textoConfirmar: 'Confirmar verificación',
+            mensaje: `Se marcará el correo "${u.email}" como verificado para permitir el acceso inmediato.`,
+            textoConfirmar: 'Verificar correo',
             accion: async () => {
                 setProcesando(true);
                 try {
                     await cambiarEstadoUsuario(u.idUsuario, { verificado: true });
-                    mostrarNotificacion('exito', `Correo de ${nombreLimpio} verificado correctamente.`);
+                    mostrarNotificacion('exito', `Correo de ${nombreLimpio} verificado.`);
                     setConfirmacion(prev => ({ ...prev, abierto: false }));
                     await cargar();
                 } catch (err) {
@@ -312,14 +392,14 @@ export default function UsuariosPage() {
             abierto: true,
             tipo: 'danger',
             titulo: '¿Eliminar cuenta de usuario?',
-            subtitulo: 'Esta acción eliminará el registro de forma permanente',
-            mensaje: `¿Estás seguro de que deseas eliminar la cuenta de "${nombreLimpio}" (${u.email})? Se cancelarán los accesos vinculados.`,
+            subtitulo: 'Acción permanente',
+            mensaje: `¿Seguro que deseas eliminar la cuenta de "${nombreLimpio}" (${u.email})? Se revocarán todos sus accesos.`,
             textoConfirmar: 'Eliminar usuario',
             accion: async () => {
                 setProcesando(true);
                 try {
                     await eliminarUsuarioAdmin(u.idUsuario);
-                    mostrarNotificacion('exito', `El usuario ${nombreLimpio} fue eliminado del sistema.`);
+                    mostrarNotificacion('exito', `Usuario ${nombreLimpio} eliminado.`);
                     setConfirmacion(prev => ({ ...prev, abierto: false }));
                     await cargar();
                 } catch (err) {
@@ -333,8 +413,7 @@ export default function UsuariosPage() {
     };
 
     return (
-        <div className="page-container">
-            {/* Notificaciones */}
+        <div className="usr-view">
             {notificacion && (
                 <div className={`toast-notification toast-${notificacion.tipo}`}>
                     {notificacion.tipo === 'exito' && <CheckCircle2 size={18} />}
@@ -343,288 +422,353 @@ export default function UsuariosPage() {
                 </div>
             )}
 
-            {/* Encabezado Principal */}
-            <div className="page-header">
+            {/* CABECERA EDITORIAL */}
+            <header className="usr-header usr-anim-up">
                 <div>
-                    <h1 className="page-title">Gestión de Usuarios</h1>
-                    <p className="page-description">
-                        Supervisa cuentas registradas, administra roles y gestiona el estado de acceso.
-                    </p>
+                    <div className="usr-eyebrow">
+                        <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
+                            <circle cx="4" cy="4" r="4" fill="#2d5a43" />
+                        </svg>
+                        <span>Control de Acceso</span>
+                        <span className="usr-eyebrow-meta">
+                            &middot; {currentUser?.nombre || 'Don Roberto'}
+                        </span>
+                    </div>
+                    <h1 className="usr-title">Usuarios</h1>
                 </div>
-                <div className="page-header-actions">
-                    <button type="button" className="btn btn-secondary btn-icon" onClick={cargar} disabled={cargando} title="Actualizar datos">
-                        <RefreshCw size={17} className={cargando ? 'spin-animation' : ''} />
-                        <span>Actualizar</span>
-                    </button>
-                    <button type="button" className="btn btn-primary" onClick={abrirModalNuevo}>
-                        <UserPlus size={18} />
-                        <span>Nuevo Usuario</span>
-                    </button>
-                </div>
-            </div>
+
+                <button type="button" className="usr-cta-btn" onClick={abrirModalNuevo}>
+                    <UserPlus size={16} />
+                    <span>Nuevo usuario</span>
+                </button>
+            </header>
 
             {error && (
-                <div className="alert alert-error">
-                    <AlertCircle size={20} />
-                    <div><strong>Error de Comunicación:</strong> {error}</div>
+                <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+                    <AlertCircle size={18} />
+                    <span><strong>Error:</strong> {error}</span>
                 </div>
             )}
 
-            {/* Tarjetas KPI como Filtro Único */}
-            <div className="kpi-grid">
-                <KpiCard
-                    title="Total Cuentas"
-                    value={kpis.total}
-                    icon={Users}
-                    colorClass="kpi-blue"
-                    subtitle="Registradas en plataforma"
-                    isActive={filtroKpi === 'TODOS'}
-                    onClick={() => setFiltroKpi('TODOS')}
-                />
-                <KpiCard
-                    title="Huéspedes"
-                    value={kpis.huespedes}
-                    icon={Users}
-                    colorClass="kpi-green"
-                    subtitle="Clientes de la cadena"
-                    isActive={filtroKpi === 'HUESPED'}
-                    onClick={() => setFiltroKpi('HUESPED')}
-                />
-                <KpiCard
-                    title="Gerencia y Recepción"
-                    value={kpis.personal}
-                    icon={UserCheck}
-                    colorClass="kpi-amber"
-                    subtitle="Personal operativo y directivo"
-                    isActive={filtroKpi === 'PERSONAL'}
-                    onClick={() => setFiltroKpi('PERSONAL')}
-                />
-                <KpiCard
-                    title="Administradores TI"
-                    value={kpis.admins}
-                    icon={ShieldCheck}
-                    colorClass="kpi-red"
-                    subtitle="Control y gestión total"
-                    isActive={filtroKpi === 'ADMINISTRADOR'}
-                    onClick={() => setFiltroKpi('ADMINISTRADOR')}
-                />
-            </div>
+            {/* 4 KPIs COMPACTOS CLICABLES (Orden jerárquico: Gerencia/Admin -> Recepción -> Huéspedes) */}
+            <section className="usr-kpi-grid usr-anim-up usr-delay-1" aria-label="Resumen de cuentas">
+                <button
+                    type="button"
+                    className={`usr-kpi-card ${filtroKpi === 'TODOS' && filtroRol === 'TODOS' ? 'is-active' : ''}`}
+                    onClick={() => { setFiltroKpi('TODOS'); setFiltroRol('TODOS'); }}
+                >
+                    <div className="usr-kpi-label">Total Cuentas</div>
+                    <div className="usr-kpi-val">{kpis.total}</div>
+                    <div className="usr-kpi-sub">Registradas en sistema</div>
+                </button>
 
-            {/* Buscador y Contador */}
-            <div className="filters-card">
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                    <div className="search-input-wrapper" style={{ flex: 1, minWidth: '260px', maxWidth: '420px' }}>
-                        <Search size={16} className="search-icon" />
+                <button
+                    type="button"
+                    className={`usr-kpi-card is-terra ${filtroKpi === 'DIRECCION' ? 'is-active' : ''}`}
+                    onClick={() => { setFiltroKpi('DIRECCION'); setFiltroRol('TODOS'); }}
+                >
+                    <div className="usr-kpi-label">Gerencia y Admin</div>
+                    <div className="usr-kpi-val">{kpis.direccion}</div>
+                    <div className="usr-kpi-sub">Dirección y operación</div>
+                </button>
+
+                <button
+                    type="button"
+                    className={`usr-kpi-card is-ocean ${filtroKpi === 'RECEPCIONISTA' ? 'is-active' : ''}`}
+                    onClick={() => { setFiltroKpi('RECEPCIONISTA'); setFiltroRol('TODOS'); }}
+                >
+                    <div className="usr-kpi-label">Recepción</div>
+                    <div className="usr-kpi-val">{kpis.recepcion}</div>
+                    <div className="usr-kpi-sub">Atención en mostrador</div>
+                </button>
+
+                <button
+                    type="button"
+                    className={`usr-kpi-card is-palm ${filtroKpi === 'HUESPED' ? 'is-active' : ''}`}
+                    onClick={() => { setFiltroKpi('HUESPED'); setFiltroRol('TODOS'); }}
+                >
+                    <div className="usr-kpi-label">Huéspedes</div>
+                    <div className="usr-kpi-val">{kpis.huespedes}</div>
+                    <div className="usr-kpi-sub">Clientes registrados</div>
+                </button>
+            </section>
+
+            {/* BARRA UNIFICADA DE FILTROS EN 1 SOLA LÍNEA */}
+            <div className="usr-filter-bar usr-anim-up usr-delay-1">
+                <div className="usr-filter-left">
+                    <div className="usr-search-box">
+                        <Search size={14} />
                         <input
                             type="text"
-                            className="search-input"
-                            placeholder="Buscar por nombre, correo o ID..."
+                            className="usr-search-input"
+                            placeholder="Nombre, correo o ID..."
                             value={busqueda}
                             onChange={(e) => setBusqueda(e.target.value)}
+                            aria-label="Buscar usuarios"
                         />
                     </div>
-                    <div className="table-counter">
-                        Mostrando <strong>{usuariosFiltrados.length}</strong> de {usuarios.length} cuentas
+
+                    <div className="usr-select-wrap">
+                        <select
+                            className="usr-select"
+                            value={filtroRol}
+                            onChange={(e) => { setFiltroRol(e.target.value); setFiltroKpi('TODOS'); }}
+                            aria-label="Filtrar por rol"
+                        >
+                            <option value="TODOS">Rol: Todos</option>
+                            <option value="GERENTE">Gerente General</option>
+                            <option value="ADMINISTRADOR">Administrador</option>
+                            <option value="RECEPCIONISTA">Recepcionista</option>
+                            <option value="HUESPED">Huésped</option>
+                        </select>
+                        <ChevronDown size={13} className="usr-select-chevron" />
                     </div>
+
+                    <div className="usr-select-wrap">
+                        <select
+                            className="usr-select"
+                            value={filtroVerif}
+                            onChange={(e) => setFiltroVerif(e.target.value)}
+                            aria-label="Filtrar por verificación"
+                        >
+                            <option value="TODOS">Verificación: Todas</option>
+                            <option value="VERIFICADO">Verificados</option>
+                            <option value="PENDIENTE">Pendientes</option>
+                        </select>
+                        <ChevronDown size={13} className="usr-select-chevron" />
+                    </div>
+
+                    <div className="usr-select-wrap">
+                        <select
+                            className="usr-select"
+                            value={filtroActivo}
+                            onChange={(e) => setFiltroActivo(e.target.value)}
+                            aria-label="Filtrar por estado"
+                        >
+                            <option value="TODOS">Estado: Todos</option>
+                            <option value="ACTIVA">Activas</option>
+                            <option value="SUSPENDIDA">Suspendidas</option>
+                        </select>
+                        <ChevronDown size={13} className="usr-select-chevron" />
+                    </div>
+
+                    {hayFiltros && (
+                        <button type="button" className="usr-clear-btn" onClick={limpiarFiltros}>
+                            Limpiar
+                        </button>
+                    )}
+                </div>
+
+                <div className="usr-filter-right">
+                    <button
+                        type="button"
+                        className="usr-btn-csv"
+                        onClick={exportarUsuariosCsv}
+                        disabled={cargando || usuariosFiltrados.length === 0}
+                        title="Descargar directorio filtrado en CSV para Excel"
+                    >
+                        <FileSpreadsheet size={13} style={{ color: '#2d5a43' }} />
+                        <span>CSV</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        className="usr-icon-btn"
+                        onClick={cargar}
+                        disabled={cargando}
+                        title="Actualizar cuentas"
+                        aria-label="Actualizar cuentas"
+                    >
+                        <RefreshCw size={14} className={cargando ? 'usr-spin' : ''} />
+                    </button>
                 </div>
             </div>
 
-            {/* Tabla de Usuarios */}
-            <div className="table-card">
+            {/* TABLA LIMPIA (5 COLUMNAS, 0% OVERFLOW) */}
+            <div className="usr-table-card usr-anim-up usr-delay-2" ref={menuRef}>
                 {cargando && usuarios.length === 0 ? (
                     <div className="loading-state">
                         <div className="spinner" />
-                        <p>Cargando cuentas de usuario...</p>
+                        <p>Cargando cuentas...</p>
                     </div>
                 ) : usuariosFiltrados.length === 0 ? (
                     <div className="empty-state">
-                        <Users size={48} className="empty-icon" />
+                        <Users size={40} className="empty-icon" />
                         <h3>No se encontraron usuarios</h3>
-                        <p>Intenta ajustar los términos de búsqueda o restablecer los filtros.</p>
-                        <button type="button" className="btn btn-secondary" onClick={() => { setFiltroKpi('TODOS'); setBusqueda(''); }}>
-                            Limpiar filtros
-                        </button>
+                        <p>Ninguna cuenta coincide con los filtros actuales.</p>
+                        {hayFiltros && (
+                            <button type="button" className="btn btn-secondary" onClick={limpiarFiltros}>
+                                Limpiar filtros
+                            </button>
+                        )}
                     </div>
                 ) : (
-                    <div className="table-responsive">
-                        <table className="data-table">
+                    <>
+                        <table className="usr-table">
                             <thead>
                                 <tr>
-                                    <th style={{ width: '80px' }}>ID</th>
-                                    <th>Usuario</th>
-                                    <th>Correo Electrónico</th>
-                                    <th>Rol</th>
+                                    <th>
+                                        <button
+                                            type="button"
+                                            className={`usr-sort-btn ${orden.campo === 'nombre' || orden.campo === 'idUsuario' ? 'is-sorted' : ''}`}
+                                            onClick={() => toggleOrden(orden.campo === 'idUsuario' ? 'nombre' : 'idUsuario')}
+                                        >
+                                            <span>Usuario / Correo</span>
+                                            <ArrowUpDown size={11} />
+                                        </button>
+                                    </th>
+                                    <th>
+                                        <button
+                                            type="button"
+                                            className={`usr-sort-btn ${orden.campo === 'rol' ? 'is-sorted' : ''}`}
+                                            onClick={() => toggleOrden('rol')}
+                                        >
+                                            <span>Rol</span>
+                                            <ArrowUpDown size={11} />
+                                        </button>
+                                    </th>
                                     <th>Verificación</th>
                                     <th>Estado</th>
-                                    <th className="text-right" style={{ width: '110px' }}>Acciones</th>
+                                    <th className="num">Acción</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {usuariosFiltrados.map((u, idx) => {
                                     const esMismoAdmin = currentUser?.idUsuario === u.idUsuario;
                                     const nombreLimpio = limpiarNombre(u.nombre);
-                                    const esAdmin = u.rol === 'ADMINISTRADOR';
-                                    const esGerente = u.rol === 'GERENTE';
-                                    const esRecepcionista = u.rol === 'RECEPCIONISTA';
-                                    const esStaff = esAdmin || esGerente || esRecepcionista;
+                                    const esStaff = u.rol === 'ADMINISTRADOR' || u.rol === 'GERENTE' || u.rol === 'RECEPCIONISTA';
                                     const menuAbierto = menuActivoId === u.idUsuario;
-                                    const abrirHaciaArriba = idx >= Math.max(0, usuariosFiltrados.length - 2);
+                                    const abrirHaciaArriba = idx >= Math.max(2, usuariosFiltrados.length - 3);
+                                    const fechaAlta = u.fechaCreacion ? String(u.fechaCreacion).split('T')[0] : null;
 
                                     return (
-                                        <tr key={u.idUsuario} className="table-row">
+                                        <tr key={u.idUsuario}>
                                             <td>
-                                                <span className="room-number-pill num">#{u.idUsuario}</span>
-                                            </td>
-                                            <td>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                                                    <div style={{
-                                                        width: 28,
-                                                        height: 28,
-                                                        borderRadius: 'var(--radius-sm)',
-                                                        background: esStaff ? 'var(--admin-accent)' : 'var(--bg-subtle)',
-                                                        color: esStaff ? 'var(--text-inverted)' : 'var(--text-primary)',
-                                                        border: '1px solid var(--border-default)',
-                                                        fontWeight: 700,
-                                                        fontSize: '0.72rem',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        flexShrink: 0
-                                                    }}>
+                                                <div className="usr-identity">
+                                                    <div className={`usr-avatar ${esStaff ? 'is-staff' : ''}`}>
                                                         {obtenerIniciales(nombreLimpio)}
                                                     </div>
-                                                    <div className="hotel-cell">
-                                                        <div className="hotel-name" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                    <div>
+                                                        <div className="usr-name-row">
                                                             <span>{nombreLimpio}</span>
-                                                            {esMismoAdmin && (
-                                                                <span style={{
-                                                                    fontSize: '0.68rem',
-                                                                    fontWeight: 700,
-                                                                    background: 'var(--badge-ocupada-bg)',
-                                                                    color: 'var(--badge-ocupada-text)',
-                                                                    border: '1px solid var(--badge-ocupada-border)',
-                                                                    padding: '0.05rem 0.4rem',
-                                                                    borderRadius: 'var(--radius-pill)'
-                                                                }}>
-                                                                    Tú
-                                                                </span>
-                                                            )}
+                                                            {esMismoAdmin && <span className="usr-you-tag">Tú</span>}
                                                         </div>
-                                                        <div className="hotel-city num">
-                                                            {u.fechaCreacion ? `Alta: ${String(u.fechaCreacion).split('T')[0]}` : 'Registro estándar'}
+                                                        <div className="usr-sub-row">
+                                                            <span>{u.email}</span>
+                                                            <span style={{ color: '#94a3b8' }}> &middot; #{u.idUsuario}</span>
+                                                            {fechaAlta && <span style={{ color: '#94a3b8' }}> &middot; Alta {fechaAlta}</span>}
                                                         </div>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={u.email}>
-                                                {u.email}
-                                            </td>
+
                                             <td>
-                                                <span className="floor-badge" style={{
-                                                    fontSize: '0.72rem',
-                                                    background: esAdmin ? 'rgba(45, 90, 67, 0.12)' : esGerente ? 'rgba(184, 93, 56, 0.12)' : esRecepcionista ? 'rgba(22, 50, 79, 0.10)' : undefined,
-                                                    color: esAdmin ? 'var(--admin-accent)' : esGerente ? 'var(--brand-terracotta-deep)' : esRecepcionista ? 'var(--brand-ocean)' : undefined,
-                                                    borderColor: esAdmin ? 'rgba(45, 90, 67, 0.3)' : esGerente ? 'rgba(184, 93, 56, 0.3)' : esRecepcionista ? 'rgba(22, 50, 79, 0.25)' : undefined
-                                                }}>
+                                                <span className={claseBadgeRol(u.rol)}>
                                                     {esStaff ? <ShieldCheck size={12} /> : <Users size={12} />}
                                                     <span>{obtenerEtiquetaRol(u.rol)}</span>
                                                 </span>
                                             </td>
+
                                             <td>
-                                                <EstadoBadge estado={u.verificado ? 'Verificado' : 'Pendiente'} />
+                                                <span className={`usr-badge ${u.verificado ? 'usr-badge-palm' : 'usr-badge-terra'}`}>
+                                                    {u.verificado ? 'Verificado' : 'Pendiente'}
+                                                </span>
                                             </td>
+
                                             <td>
-                                                <EstadoBadge estado={u.activo ? 'Activa' : 'Suspendida'} />
+                                                <span className={`usr-badge ${u.activo ? 'usr-badge-palm' : 'usr-badge-danger'}`}>
+                                                    {u.activo ? 'Activa' : 'Suspendida'}
+                                                </span>
                                             </td>
-                                            <td className="text-right">
-                                                <div className="row-actions">
-                                                    {/* Editar directo */}
+
+                                            <td className="num">
+                                                <div className="usr-action-cell">
                                                     <button
                                                         type="button"
-                                                        className="btn-action btn-action-edit"
+                                                        className="usr-edit-btn"
                                                         onClick={() => abrirModalEditar(u)}
-                                                        title="Editar datos, rol y estados"
-                                                        aria-label="Editar usuario"
                                                     >
-                                                        <Edit2 size={15} />
+                                                        <Edit2 size={13} />
+                                                        <span>Editar</span>
                                                     </button>
 
-                                                    {/* Menú Contextual para Verificar y Suspender/Eliminar */}
-                                                    <div className="context-menu-wrapper" ref={menuAbierto ? menuRef : null}>
-                                                        <button
-                                                            type="button"
-                                                            className={`btn-action ${menuAbierto ? 'is-active' : ''}`}
-                                                            onClick={() => setMenuActivoId(menuAbierto ? null : u.idUsuario)}
-                                                            title="Opciones avanzadas"
-                                                            aria-label="Opciones avanzadas"
-                                                        >
-                                                            <MoreHorizontal size={15} />
-                                                        </button>
+                                                    <button
+                                                        type="button"
+                                                        className={`usr-more-btn ${menuAbierto ? 'is-open' : ''}`}
+                                                        onClick={() => setMenuActivoId(menuAbierto ? null : u.idUsuario)}
+                                                        aria-label="Más opciones"
+                                                        aria-expanded={menuAbierto}
+                                                    >
+                                                        <MoreHorizontal size={15} />
+                                                    </button>
 
-                                                        {menuAbierto && (
-                                                            <div className={`context-menu ${abrirHaciaArriba ? 'open-upward' : ''}`} role="menu">
-                                                                {/* Opciones cuando es la propia cuenta del administrador en sesión */}
-                                                                {esMismoAdmin ? (
-                                                                    <>
+                                                    {menuAbierto && (
+                                                        <div className={`usr-menu ${abrirHaciaArriba ? 'is-upward' : ''}`} role="menu">
+                                                            {esMismoAdmin ? (
+                                                                <>
+                                                                    <button
+                                                                        type="button"
+                                                                        role="menuitem"
+                                                                        className="usr-menu-item"
+                                                                        onClick={() => abrirModalEditar(u)}
+                                                                    >
+                                                                        <Key size={14} style={{ color: '#b85d38' }} />
+                                                                        <span>Cambiar contraseña</span>
+                                                                    </button>
+                                                                    <div className="usr-menu-sep" />
+                                                                    <div className="usr-menu-note">
+                                                                        <ShieldCheck size={13} style={{ color: '#2d5a43', flexShrink: 0 }} />
+                                                                        <span>Cuenta activa protegida</span>
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    {!u.verificado && (
                                                                         <button
                                                                             type="button"
-                                                                            className="context-menu-item"
-                                                                            onClick={() => abrirModalEditar(u)}
+                                                                            role="menuitem"
+                                                                            className="usr-menu-item"
+                                                                            onClick={() => solicitarVerificarManual(u)}
                                                                         >
-                                                                            <Key size={14} style={{ color: 'var(--brand-terracotta, #b45309)' }} />
-                                                                            <span>Cambiar mi contraseña</span>
+                                                                            <UserCheck size={14} style={{ color: '#2d5a43' }} />
+                                                                            <span>Verificar correo</span>
                                                                         </button>
-                                                                        <div className="context-menu-divider" />
-                                                                        <div style={{ padding: '5px 8px', fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: 5 }}>
-                                                                            <ShieldCheck size={13} style={{ color: '#059669', flexShrink: 0 }} />
-                                                                            <span>Tu cuenta activa (protegida)</span>
-                                                                        </div>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        {!u.verificado && (
-                                                                            <button
-                                                                                type="button"
-                                                                                className="context-menu-item"
-                                                                                onClick={() => solicitarVerificarManual(u)}
-                                                                            >
-                                                                                <UserCheck size={14} style={{ color: 'var(--color-success)' }} />
-                                                                                <span>Verificar correo</span>
-                                                                            </button>
+                                                                    )}
+
+                                                                    <button
+                                                                        type="button"
+                                                                        role="menuitem"
+                                                                        className={`usr-menu-item ${u.activo ? 'is-warn' : ''}`}
+                                                                        onClick={() => solicitarToggleEstado(u)}
+                                                                    >
+                                                                        {u.activo ? (
+                                                                            <>
+                                                                                <Lock size={14} />
+                                                                                <span>Suspender cuenta</span>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <Unlock size={14} style={{ color: '#2d5a43' }} />
+                                                                                <span>Reactivar cuenta</span>
+                                                                            </>
                                                                         )}
+                                                                    </button>
 
-                                                                        <button
-                                                                            type="button"
-                                                                            className="context-menu-item"
-                                                                            onClick={() => solicitarToggleEstado(u)}
-                                                                        >
-                                                                            {u.activo ? (
-                                                                                <>
-                                                                                    <Lock size={14} style={{ color: 'var(--badge-cancelada-text)' }} />
-                                                                                    <span>Suspender cuenta</span>
-                                                                                </>
-                                                                            ) : (
-                                                                                <>
-                                                                                    <Unlock size={14} style={{ color: 'var(--color-success)' }} />
-                                                                                    <span>Reactivar cuenta</span>
-                                                                                </>
-                                                                            )}
-                                                                        </button>
+                                                                    <div className="usr-menu-sep" />
 
-                                                                        <div className="context-menu-divider" />
-                                                                        <button
-                                                                            type="button"
-                                                                            className="context-menu-item is-danger"
-                                                                            onClick={() => solicitarEliminarUsuario(u)}
-                                                                        >
-                                                                            <Trash2 size={14} />
-                                                                            <span>Eliminar cuenta</span>
-                                                                        </button>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                                    <button
+                                                                        type="button"
+                                                                        role="menuitem"
+                                                                        className="usr-menu-item is-danger"
+                                                                        onClick={() => solicitarEliminarUsuario(u)}
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                        <span>Eliminar cuenta</span>
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -632,18 +776,23 @@ export default function UsuariosPage() {
                                 })}
                             </tbody>
                         </table>
-                    </div>
+
+                        <div className="usr-table-footer">
+                            Mostrando <strong style={{ color: 'var(--text-primary)' }}>{usuariosFiltrados.length}</strong> de{' '}
+                            <strong style={{ color: 'var(--text-primary)' }}>{usuarios.length}</strong> cuentas
+                        </div>
+                    </>
                 )}
             </div>
 
-            {/* Modal para Crear / Editar Usuario */}
+            {/* Modal Crear / Editar Usuario (0 emojis, selects alineados) */}
             <Modal
                 isOpen={modalAbierto}
                 onClose={() => setModalAbierto(false)}
-                title={modoEdicion ? `Editar Usuario #${formUser.idUsuario}` : 'Registrar Nuevo Usuario'}
-                subtitle={modoEdicion ? 'Modifica los datos personales, rol de acceso y estados' : 'Alta de cuenta administrativa o de huésped'}
+                title={modoEdicion ? `Editar Usuario #${formUser.idUsuario}` : 'Nuevo Usuario'}
+                subtitle={modoEdicion ? 'Actualiza datos, rol y permisos de acceso' : 'Alta de cuenta en la plataforma'}
                 icon={Users}
-                maxWidth="530px"
+                maxWidth="520px"
             >
                 <form onSubmit={handleSubmitFormulario} className="modal-form">
                     <div className="form-group">
@@ -672,7 +821,7 @@ export default function UsuariosPage() {
 
                     <div className="form-group">
                         <label className="form-label">
-                            {modoEdicion ? 'Nueva Contraseña (opcional)' : 'Contraseña inicial *'}
+                            {modoEdicion ? 'Nueva contraseña (opcional)' : 'Contraseña inicial *'}
                         </label>
                         <input
                             type="password"
@@ -681,34 +830,34 @@ export default function UsuariosPage() {
                             className="form-input"
                             value={formUser.password}
                             onChange={(e) => setFormUser({ ...formUser, password: e.target.value })}
-                            placeholder={modoEdicion ? 'Dejar en blanco para mantener la contraseña actual' : 'Mínimo 8 caracteres'}
+                            placeholder={modoEdicion ? 'Dejar vacío para conservar la actual' : 'Mínimo 8 caracteres'}
                         />
                     </div>
 
                     <div className="form-grid">
                         <div className="form-group">
-                            <label className="form-label">Rol del usuario *</label>
+                            <label className="form-label">Rol *</label>
                             <select
                                 className="form-select"
                                 value={formUser.rol}
                                 onChange={(e) => setFormUser({ ...formUser, rol: e.target.value })}
                             >
-                                <option value="HUESPED">Huésped</option>
-                                <option value="RECEPCIONISTA">Recepcionista (Mostrador)</option>
                                 <option value="GERENTE">Gerente General</option>
-                                <option value="ADMINISTRADOR">Administrador (TI)</option>
+                                <option value="ADMINISTRADOR">Administrador</option>
+                                <option value="RECEPCIONISTA">Recepcionista</option>
+                                <option value="HUESPED">Huésped</option>
                             </select>
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">Verificación de correo *</label>
+                            <label className="form-label">Verificación *</label>
                             <select
                                 className="form-select"
                                 value={formUser.verificado ? 'true' : 'false'}
                                 onChange={(e) => setFormUser({ ...formUser, verificado: e.target.value === 'true' })}
                             >
-                                <option value="true">🟢 Verificado (Acceso permitido)</option>
-                                <option value="false">🟡 Pendiente de verificar</option>
+                                <option value="true">Verificado</option>
+                                <option value="false">Pendiente</option>
                             </select>
                         </div>
                     </div>
@@ -720,8 +869,8 @@ export default function UsuariosPage() {
                             value={formUser.activo ? 'true' : 'false'}
                             onChange={(e) => setFormUser({ ...formUser, activo: e.target.value === 'true' })}
                         >
-                            <option value="true">🟢 Cuenta Activa</option>
-                            <option value="false">🔴 Cuenta Suspendida</option>
+                            <option value="true">Activa</option>
+                            <option value="false">Suspendida</option>
                         </select>
                     </div>
 
@@ -730,13 +879,12 @@ export default function UsuariosPage() {
                             Cancelar
                         </button>
                         <button type="submit" className="btn btn-primary">
-                            {modoEdicion ? 'Guardar Cambios' : 'Crear Usuario'}
+                            {modoEdicion ? 'Guardar cambios' : 'Crear usuario'}
                         </button>
                     </div>
                 </form>
             </Modal>
 
-            {/* Diálogo de Confirmación */}
             <ConfirmDialog
                 isOpen={confirmacion.abierto}
                 onClose={() => setConfirmacion(prev => ({ ...prev, abierto: false }))}

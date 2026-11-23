@@ -4,8 +4,8 @@ import Modal from './Modal';
 
 /**
  * HabitacionModal.jsx
- * Modal para Crear o Editar una Habitación.
- * Consume dinámicamente las listas de Hoteles y Tipos de Habitación desde la BD.
+ * Modal limpio para Crear o Editar una Habitación (0 emojis, sin estado fantasma,
+ * ocultando información monetaria cuando ocultarFinanzas es true).
  */
 export default function HabitacionModal({
     isOpen,
@@ -14,7 +14,8 @@ export default function HabitacionModal({
     habitacionParaEditar,
     hoteles = [],
     tiposHabitacion = [],
-    pisosDisponibles = [1, 2, 3]
+    pisosDisponibles = [1, 2, 3],
+    ocultarFinanzas = false
 }) {
     const defaultPiso = pisosDisponibles.length > 0 ? pisosDisponibles[0] : 1;
 
@@ -28,15 +29,17 @@ export default function HabitacionModal({
     const [error, setError] = useState('');
     const [guardando, setGuardando] = useState(false);
 
-    // Cuando se abre para editar, precargar datos; si es nueva, limpiar formulario
     useEffect(() => {
         if (habitacionParaEditar) {
+            const estadoNorm = ['Disponible', 'Ocupada', 'Mantenimiento'].includes(habitacionParaEditar.estado)
+                ? habitacionParaEditar.estado
+                : 'Disponible';
             setFormData({
                 numero: habitacionParaEditar.numero || '',
                 piso: habitacionParaEditar.piso || defaultPiso,
                 idHotel: habitacionParaEditar.hotel ? habitacionParaEditar.hotel.idHotel : '',
                 idTipo: habitacionParaEditar.tipoHabitacion ? habitacionParaEditar.tipoHabitacion.idTipo : '',
-                estado: habitacionParaEditar.estado || 'Disponible'
+                estado: estadoNorm
             });
         } else {
             setFormData({
@@ -57,21 +60,21 @@ export default function HabitacionModal({
         setError('');
 
         if (!formData.numero.trim()) {
-            setError('Por favor ingresa el número o código de la habitación.');
+            setError('Ingresa el número o código de la habitación.');
             return;
         }
         if (!formData.idHotel) {
-            setError('Debes seleccionar a qué hotel pertenece la habitación.');
+            setError('Selecciona a qué propiedad pertenece la habitación.');
             return;
         }
         if (!formData.idTipo) {
-            setError('Debes seleccionar la categoría de habitación.');
+            setError('Selecciona la categoría de habitación.');
             return;
         }
 
         const pisoNum = parseInt(formData.piso, 10);
         if (!formData.piso || isNaN(pisoNum) || !pisosDisponibles.includes(pisoNum)) {
-            setError('Piso inválido. Debe seleccionar uno de los pisos existentes del hotel.');
+            setError('Selecciona un piso válido.');
             return;
         }
 
@@ -98,28 +101,23 @@ export default function HabitacionModal({
         <Modal
             isOpen={isOpen}
             onClose={onClose}
-            title={isEdit ? `Editar Habitación #${habitacionParaEditar.numero}` : 'Registrar Nueva Habitación'}
-            subtitle={
-                isEdit
-                    ? 'Modifica los datos y relaciones de la habitación seleccionada'
-                    : 'Completa la información para dar de alta una nueva habitación'
-            }
+            title={isEdit ? `Editar Habitación #${habitacionParaEditar.numero}` : 'Nueva Habitación'}
+            subtitle={isEdit ? 'Actualiza los datos de la unidad' : 'Alta de habitación en el inventario'}
             icon={BedDouble}
-            maxWidth="530px"
+            maxWidth="520px"
         >
             <form onSubmit={handleSubmit} className="modal-form">
                 {error && (
                     <div className="alert alert-error">
-                        <Info size={18} />
+                        <Info size={16} />
                         <span>{error}</span>
                     </div>
                 )}
 
                 <div className="form-grid">
-                    {/* 1. Número de Habitación */}
                     <div className="form-group">
                         <label className="form-label">
-                            <Hash size={16} /> Número de Habitación *
+                            <Hash size={14} /> Número *
                         </label>
                         <input
                             type="text"
@@ -131,10 +129,9 @@ export default function HabitacionModal({
                         />
                     </div>
 
-                    {/* 2. Piso Seleccionable Solo Existentes */}
                     <div className="form-group">
                         <label className="form-label">
-                            <Layers size={16} /> Piso / Nivel (Solo Existentes) *
+                            <Layers size={14} /> Piso *
                         </label>
                         <select
                             className="form-select"
@@ -142,7 +139,7 @@ export default function HabitacionModal({
                             onChange={(e) => setFormData({ ...formData, piso: e.target.value })}
                             required
                         >
-                            <option value="">-- Seleccionar Piso --</option>
+                            <option value="">Seleccionar piso</option>
                             {pisosDisponibles.map((p) => (
                                 <option key={p} value={p}>
                                     Piso {p}
@@ -152,10 +149,9 @@ export default function HabitacionModal({
                     </div>
                 </div>
 
-                {/* 3. Selección de Hotel (Llave Foránea) */}
                 <div className="form-group">
                     <label className="form-label">
-                        <Building size={16} /> Hotel de la Cadena *
+                        <Building size={14} /> Propiedad *
                     </label>
                     <select
                         className="form-select"
@@ -163,19 +159,18 @@ export default function HabitacionModal({
                         onChange={(e) => setFormData({ ...formData, idHotel: e.target.value })}
                         required
                     >
-                        <option value="">-- Selecciona el Hotel --</option>
+                        <option value="">Seleccionar propiedad</option>
                         {hoteles.map((h) => (
                             <option key={h.idHotel} value={h.idHotel}>
-                                {h.nombre} ({h.ciudad}) {h.activo ? '• Activo' : '• Inactivo'}
+                                {h.nombre} ({h.ciudad})
                             </option>
                         ))}
                     </select>
                 </div>
 
-                {/* 4. Selección de Categoría de Habitación (Llave Foránea) */}
                 <div className="form-group">
                     <label className="form-label">
-                        <BedDouble size={16} /> Categoría de Habitación *
+                        <BedDouble size={14} /> Categoría *
                     </label>
                     <select
                         className="form-select"
@@ -183,39 +178,43 @@ export default function HabitacionModal({
                         onChange={(e) => setFormData({ ...formData, idTipo: e.target.value })}
                         required
                     >
-                        <option value="">-- Selecciona la Categoría --</option>
-                        {tiposHabitacion.map((t) => (
-                            <option key={t.idTipo} value={t.idTipo}>
-                                {t.nombre} — Capacidad: {t.capacidad} pers. — ${Number(t.precioBase).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN/noche
-                            </option>
-                        ))}
+                        <option value="">Seleccionar categoría</option>
+                        {tiposHabitacion.map((t) => {
+                            const cap = t.capacidad || 1;
+                            const capTxt = `${cap} ${cap === 1 ? 'huésped' : 'huéspedes'}`;
+                            const precioTxt = ocultarFinanzas
+                                ? ''
+                                : ` · $${Number(t.precioBase || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}/noche`;
+                            return (
+                                <option key={t.idTipo} value={t.idTipo}>
+                                    {t.nombre} ({capTxt}){precioTxt}
+                                </option>
+                            );
+                        })}
                     </select>
                 </div>
 
-                {/* 5. Estado de la Habitación */}
                 <div className="form-group">
                     <label className="form-label">
-                        <CheckCircle2 size={16} /> Estado Inicial *
+                        <CheckCircle2 size={14} /> {isEdit ? 'Estado actual *' : 'Estado inicial *'}
                     </label>
                     <select
                         className="form-select"
                         value={formData.estado}
                         onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
                     >
-                        <option value="Disponible">🟢 Disponible (Lista para rentar)</option>
-                        <option value="Pendiente">🟡 Pendiente (Pre-reserva temporal)</option>
-                        <option value="Ocupada">🔵 Ocupada (Huésped hospedado)</option>
-                        <option value="Mantenimiento">🟠 Mantenimiento (Limpieza o reparación)</option>
+                        <option value="Disponible">Disponible</option>
+                        <option value="Ocupada">Ocupada</option>
+                        <option value="Mantenimiento">Mantenimiento</option>
                     </select>
                 </div>
 
-                {/* Botones de Acción */}
                 <div className="modal-actions">
                     <button type="button" className="btn btn-secondary" onClick={onClose} disabled={guardando}>
                         Cancelar
                     </button>
                     <button type="submit" className="btn btn-primary" disabled={guardando}>
-                        {guardando ? 'Guardando...' : isEdit ? 'Actualizar Cambios' : 'Registrar Habitación'}
+                        {guardando ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Registrar habitación'}
                     </button>
                 </div>
             </form>

@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
     CalendarPlus, ClipboardList, Search, BedDouble, User, CheckCircle2, Clock,
-    AlertTriangle, Accessibility, Baby, XCircle, Banknote,
-    UserCheck, Edit2, Trash2, Eye, ArrowLeft, RotateCcw, LogIn, LogOut, UserX
+    AlertTriangle, Accessibility, Baby, XCircle, Banknote, Building2,
+    UserCheck, Edit2, Trash2, Eye, RotateCcw, LogIn, LogOut, UserX,
+    Calendar, ChevronDown, MoreHorizontal, Phone, Mail, Printer
 } from 'lucide-react';
 import {
     getHoteles, buscarDisponibilidad, crearReserva, getReservas, getResumenEstadosReservas,
@@ -14,8 +15,25 @@ import {
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EstadoBadge from '../components/EstadoBadge';
-import KpiCard from '../components/KpiCard';
 import { useAuth } from '../context/AuthContext';
+import { imprimirComprobanteReserva } from '../utils/reservaComprobante';
+import './ReservasPage.css';
+
+function resBadgeClase(estado) {
+    if (estado === 'Confirmada') return 'res-badge res-badge-confirmada';
+    if (estado === 'Finalizada') return 'res-badge res-badge-finalizada';
+    if (estado === 'Ocupada') return 'res-badge res-badge-ocupada';
+    if (estado === 'Pre-reserva') return 'res-badge res-badge-prereserva';
+    return 'res-badge res-badge-danger';
+}
+
+function formatearFechaSinAno(fechaStr) {
+    if (!fechaStr) return '—';
+    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const partes = String(fechaStr).split('T')[0].split('-');
+    if (partes.length !== 3) return fechaStr;
+    return `${parseInt(partes[2], 10)} ${meses[parseInt(partes[1], 10) - 1] || partes[1]}`;
+}
 
 const money = (n) => `$${Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -41,22 +59,44 @@ function formatearFechaCorta(fechaStr) {
 }
 
 export default function ReservasPage() {
-    const [vista, setVista] = useState('lista');
+    const { user } = useAuth();
+    const [preseleccion] = useState(() => {
+        try {
+            const raw = sessionStorage.getItem('hotel_preseleccion_reserva');
+            if (raw) {
+                sessionStorage.removeItem('hotel_preseleccion_reserva');
+                return JSON.parse(raw);
+            }
+        } catch {
+            sessionStorage.removeItem('hotel_preseleccion_reserva');
+        }
+        return null;
+    });
+    const [vista, setVista] = useState(preseleccion ? 'nueva' : 'lista');
 
     return (
-        <div className="page-container">
-            <div className="page-header">
+        <div className="res-view">
+            <header className="res-header res-anim-up">
                 <div>
-                    <h1 className="page-title">Reservaciones</h1>
-                    <p className="page-description">
-                        Panel de administración: consulta disponibilidad, registra reservaciones y gestiona su ciclo de vida.
-                    </p>
+                    <div className="res-eyebrow">
+                        <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
+                            <circle cx="4" cy="4" r="4" fill="#2d5a43" />
+                        </svg>
+                        <span>Operación Hotelera</span>
+                        <span className="res-eyebrow-meta">
+                            &middot; {user?.nombre || 'Don Roberto'}
+                        </span>
+                    </div>
+                    <h1 className="res-title">
+                        {vista === 'nueva' ? 'Nueva Reservación' : 'Reservaciones'}
+                    </h1>
                 </div>
-                <div className="page-header-actions">
+
+                <div>
                     {vista === 'lista' ? (
                         <button
                             type="button"
-                            className="btn btn-primary"
+                            className="res-cta-btn"
                             onClick={() => setVista('nueva')}
                         >
                             <CalendarPlus size={16} />
@@ -65,7 +105,7 @@ export default function ReservasPage() {
                     ) : (
                         <button
                             type="button"
-                            className="btn btn-secondary"
+                            className="res-cta-btn is-secondary"
                             onClick={() => setVista('lista')}
                         >
                             <ClipboardList size={16} />
@@ -73,11 +113,11 @@ export default function ReservasPage() {
                         </button>
                     )}
                 </div>
-            </div>
+            </header>
 
-            <div key={vista} className="reservas-view-wrapper">
+            <div key={vista} className="res-anim-up res-delay-1">
                 {vista === 'nueva'
-                    ? <NuevaReserva onCreada={() => {}} irALista={() => setVista('lista')} />
+                    ? <NuevaReserva preseleccion={preseleccion} onCreada={() => {}} irALista={() => setVista('lista')} />
                     : <ListaReservas onNueva={() => setVista('nueva')} />}
             </div>
         </div>
@@ -87,12 +127,18 @@ export default function ReservasPage() {
 // ------------------------------------------------------------------
 // NUEVA RESERVACIÓN (FLUJO EN PASOS CLAROS CON BOTÓN LIMPIAR TODO)
 // ------------------------------------------------------------------
-function NuevaReserva({ irALista }) {
+function NuevaReserva({ irALista, preseleccion = null }) {
     const [hoteles, setHoteles] = useState([]);
-    const [busq, setBusq] = useState({
-        idHotel: '', fechaEntrada: hoy(), fechaSalida: sumarDias(hoy(), 1),
-        adultos: 1, ninos: 0, cuna: false, camaExtra: false, plantaBaja: false
-    });
+    const [busq, setBusq] = useState(() => ({
+        idHotel: preseleccion?.idHotel ? String(preseleccion.idHotel) : '',
+        fechaEntrada: hoy(),
+        fechaSalida: sumarDias(hoy(), 1),
+        adultos: 1,
+        ninos: 0,
+        cuna: false,
+        camaExtra: false,
+        plantaBaja: false
+    }));
     const [resultados, setResultados] = useState(null);
     const [buscando, setBuscando] = useState(false);
     const [seleccion, setSeleccion] = useState(null);
@@ -100,6 +146,43 @@ function NuevaReserva({ irALista }) {
     const [creada, setCreada] = useState(null);
 
     useEffect(() => { getHoteles().then(setHoteles).catch(() => {}); }, []);
+
+    // Si viene preseleccionada una habitación desde /habitaciones, consultar disponibilidad y seleccionarla automáticamente
+    useEffect(() => {
+        if (!preseleccion?.idHabitacion) return;
+        let cancelado = false;
+        const autoSeleccionar = async () => {
+            setBuscando(true);
+            setError('');
+            try {
+                const payload = {
+                    idHotel: preseleccion.idHotel || undefined,
+                    fechaEntrada: hoy(),
+                    fechaSalida: sumarDias(hoy(), 1),
+                    adultos: 1,
+                    ninos: 0,
+                    cuna: false,
+                    camaExtra: false,
+                    plantaBaja: false
+                };
+                const data = await buscarDisponibilidad(payload);
+                if (cancelado) return;
+                setResultados(data);
+                const match = (Array.isArray(data) ? data : []).find(
+                    (item) => Number(item?.habitacion?.idHabitacion) === Number(preseleccion.idHabitacion)
+                );
+                if (match) {
+                    setSeleccion({ habitacion: match.habitacion, tarifa: match.tarifa });
+                }
+            } catch (err) {
+                if (!cancelado) setError(err.message);
+            } finally {
+                if (!cancelado) setBuscando(false);
+            }
+        };
+        autoSeleccionar();
+        return () => { cancelado = true; };
+    }, [preseleccion]);
 
     const set = (k, v) => { setBusq((b) => ({ ...b, [k]: v })); setResultados(null); setSeleccion(null); };
 
@@ -134,21 +217,21 @@ function NuevaReserva({ irALista }) {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {/* Stepper visual claro */}
+            {/* Stepper visual limpio (sin números duplicados) */}
             <div className="reserva-stepper" aria-label="Progreso de la reservación">
                 <div className={`stepper-step is-active ${resultados ? 'is-complete' : ''}`}>
                     <span className="step-circle">{resultados ? '✓' : '1'}</span>
-                    <span className="step-label">1. Disponibilidad</span>
+                    <span className="step-label">Disponibilidad</span>
                 </div>
                 <div className="stepper-line" />
                 <div className={`stepper-step ${resultados ? 'is-active' : ''} ${seleccion ? 'is-complete' : ''}`}>
                     <span className="step-circle">{seleccion ? '✓' : '2'}</span>
-                    <span className="step-label">2. Habitación</span>
+                    <span className="step-label">Habitación</span>
                 </div>
                 <div className="stepper-line" />
                 <div className={`stepper-step ${seleccion ? 'is-active' : ''}`}>
                     <span className="step-circle">3</span>
-                    <span className="step-label">3. Huésped y pago</span>
+                    <span className="step-label">Huésped y pago</span>
                 </div>
             </div>
 
@@ -156,18 +239,8 @@ function NuevaReserva({ irALista }) {
             <form onSubmit={buscar} className="content-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: 8 }}>
                     <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <Search size={17} /> 1. Consultar disponibilidad
+                        <Search size={17} /> Consultar disponibilidad
                     </h2>
-                    <button
-                        type="button"
-                        className="btn-link"
-                        onClick={limpiarBusqueda}
-                        style={{ fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: 5 }}
-                        title="Limpiar todos los campos de búsqueda"
-                    >
-                        <RotateCcw size={14} />
-                        <span>Limpiar todos los campos</span>
-                    </button>
                 </div>
 
                 {error && <div className="alert alert-error" style={{ marginBottom: '1rem' }}><AlertTriangle size={16} />{error}</div>}
@@ -285,15 +358,15 @@ function NuevaReserva({ irALista }) {
                                                 {h.tipoHabitacion.nombre}
                                             </div>
                                             <div className="room-card-capacity">
-                                                <User size={14} /> Capacidad: hasta {h.tipoHabitacion.capacidad} huéspedes
+                                                <User size={14} /> Capacidad: hasta {h.tipoHabitacion.capacidad} {h.tipoHabitacion.capacidad === 1 ? 'huésped' : 'huéspedes'}
                                             </div>
-                                            <div className="room-card-hotel">
-                                                🏨 {h.hotel.nombre}
+                                            <div className="room-card-hotel" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                <Building2 size={13} /> {h.hotel.nombre}
                                             </div>
-                                            {pb && (
+                                            {busq.plantaBaja && pb && (
                                                 <div className="room-card-accessibility">
                                                     <Accessibility size={15} />
-                                                    <span>Planta baja solicitada</span>
+                                                    <span>Planta baja</span>
                                                 </div>
                                             )}
                                         </div>
@@ -470,7 +543,7 @@ function FormularioHuesped({ busq, seleccion, onCreada, onCancelar }) {
                     <option value="">-- Seleccionar de la lista para autocompletar --</option>
                     {huespedes.map((gh) => (
                         <option key={gh.idHuesped} value={gh.idHuesped}>
-                            👤 {gh.nombre} — Tel: {gh.telefono} · Correo: {gh.email}
+                            {gh.nombre}{gh.telefono ? ` — ${gh.telefono}` : ''}{gh.email ? ` · ${gh.email}` : ''}
                         </option>
                     ))}
                 </select>
@@ -621,7 +694,10 @@ function Comprobante({ reserva: r, onNueva, irALista }) {
             <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
                 Presentar esta confirmación y una identificación oficial vigente en recepción al momento del check-in.
             </p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => imprimirComprobanteReserva(r)}>
+                    <Printer size={16} /> Imprimir comprobante
+                </button>
                 <button type="button" className="btn btn-secondary" onClick={irALista}>
                     <ClipboardList size={16} /> Ver reservaciones
                 </button>
@@ -656,9 +732,47 @@ function ListaReservas({ onNueva }) {
     const [modal, setModal] = useState(null);
     const [reservaAEliminar, setReservaAEliminar] = useState(null);
     const [accionEstancia, setAccionEstancia] = useState(null);
-    const [busqueda, setBusqueda] = useState('');
-    const [busquedaDebounced, setBusquedaDebounced] = useState('');
+    const [busqueda, setBusqueda] = useState(() => {
+        const saved = sessionStorage.getItem('hotel_filtro_reserva_q');
+        if (saved) {
+            sessionStorage.removeItem('hotel_filtro_reserva_q');
+            return saved;
+        }
+        return '';
+    });
+    const [busquedaDebounced, setBusquedaDebounced] = useState(busqueda);
     const [mensajeExito, setMensajeExito] = useState('');
+    const [fechasOpen, setFechasOpen] = useState(false);
+    const [menuAbiertoId, setMenuAbiertoId] = useState(null);
+    const menuWrapRef = useRef(null);
+
+    useEffect(() => {
+        const onAplicarFiltro = () => {
+            const saved = sessionStorage.getItem('hotel_filtro_reserva_q');
+            if (saved) {
+                sessionStorage.removeItem('hotel_filtro_reserva_q');
+                setFiltro('');
+                setHotelFiltro('');
+                setEntradaDesde('');
+                setEntradaHasta('');
+                setBusqueda(saved);
+                setBusquedaDebounced(saved);
+                setPage(0);
+            }
+        };
+        window.addEventListener('hotel:aplicar-filtro-reservas', onAplicarFiltro);
+        return () => window.removeEventListener('hotel:aplicar-filtro-reservas', onAplicarFiltro);
+    }, []);
+
+    useEffect(() => {
+        const handleOutside = (e) => {
+            if (menuWrapRef.current && !menuWrapRef.current.contains(e.target)) {
+                setMenuAbiertoId(null);
+            }
+        };
+        document.addEventListener('mousedown', handleOutside);
+        return () => document.removeEventListener('mousedown', handleOutside);
+    }, []);
 
     useEffect(() => {
         getHoteles()
@@ -755,6 +869,9 @@ function ListaReservas({ onNueva }) {
             } else if (tipo === 'revertir-no-show') {
                 await revertirNoShowReserva(r.idReserva);
                 setMensajeExito(`No-Show revertido para ${r.folio}. Estado restaurado a Confirmada.`);
+            } else if (tipo === 'extender') {
+                await extenderDiaExtraReserva(r.idReserva);
+                setMensajeExito(`Estancia extendida 1 noche adicional para ${r.folio}.`);
             }
             setAccionEstancia(null);
             await cargar();
@@ -765,132 +882,198 @@ function ListaReservas({ onNueva }) {
         }
     };
 
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {error && <div className="alert alert-error"><AlertTriangle size={16} />{error}</div>}
-            {mensajeExito && <div className="alert alert-success"><CheckCircle2 size={16} />{mensajeExito}</div>}
+    const hoyIso = hoy();
+    const filtroHoyActivo = entradaDesde === hoyIso && entradaHasta === hoyIso;
+    const hayFiltrosActivos = Boolean(filtro || hotelFiltro || entradaDesde || entradaHasta || busqueda.trim());
+    const inicioRango = totalElements === 0 ? 0 : page * size + 1;
+    const finRango = Math.min(inicioRango + visibles.length - 1, totalElements);
 
-            {/* Tarjetas KPI como Filtro Único de Estado (4 tarjetas operativas) */}
-            <div className="kpi-grid">
-                <KpiCard
-                    title="Total Reservaciones"
-                    value={kpis.total}
-                    icon={ClipboardList}
-                    colorClass="kpi-blue"
-                    subtitle="Registros en sistema"
-                    isActive={filtro === ''}
+    const toggleFiltroHoy = () => {
+        if (filtroHoyActivo) {
+            setEntradaDesde('');
+            setEntradaHasta('');
+        } else {
+            setEntradaDesde(hoyIso);
+            setEntradaHasta(hoyIso);
+        }
+        setPage(0);
+    };
+
+    const limpiarFiltrosLista = () => {
+        setFiltro('');
+        setHotelFiltro('');
+        setEntradaDesde('');
+        setEntradaHasta('');
+        setBusqueda('');
+        setBusquedaDebounced('');
+        setPage(0);
+    };
+
+    return (
+        <div>
+            {error && <div className="alert alert-error" style={{ marginBottom: '1rem' }}><AlertTriangle size={16} />{error}</div>}
+            {mensajeExito && <div className="alert alert-success" style={{ marginBottom: '1rem' }}><CheckCircle2 size={16} />{mensajeExito}</div>}
+
+            {/* 4 KPIs Compactos Clicables (Cohesivos con Informes) */}
+            <section className="res-kpi-grid" aria-label="Resumen de reservaciones">
+                <button
+                    type="button"
+                    className={`res-kpi-card ${filtro === '' ? 'is-active' : ''}`}
                     onClick={() => { setFiltro(''); setPage(0); }}
-                />
-                <KpiCard
-                    title="Confirmadas"
-                    value={kpis.confirmadas}
-                    icon={CheckCircle2}
-                    colorClass="kpi-green"
-                    subtitle="Anticipo registrado"
-                    isActive={filtro === 'Confirmada'}
+                >
+                    <div className="res-kpi-label">Total Reservaciones</div>
+                    <div className="res-kpi-val">{Number(kpis.total || 0).toLocaleString('es-MX')}</div>
+                    <div className="res-kpi-sub">Registros en sistema</div>
+                </button>
+
+                <button
+                    type="button"
+                    className={`res-kpi-card ${filtro === 'Confirmada' ? 'is-active' : ''}`}
                     onClick={() => { setFiltro('Confirmada'); setPage(0); }}
-                />
-                <KpiCard
-                    title="Pre-reservas"
-                    value={kpis.prereservas}
-                    icon={Clock}
-                    colorClass="kpi-amber"
-                    subtitle="Vigencia temporal"
-                    isActive={filtro === 'Pre-reserva'}
+                >
+                    <div className="res-kpi-label">Confirmadas</div>
+                    <div className="res-kpi-val">{Number(kpis.confirmadas || 0).toLocaleString('es-MX')}</div>
+                    <div className="res-kpi-sub">Listas para Check-In</div>
+                </button>
+
+                <button
+                    type="button"
+                    className={`res-kpi-card is-terra ${filtro === 'Pre-reserva' ? 'is-active' : ''}`}
                     onClick={() => { setFiltro('Pre-reserva'); setPage(0); }}
-                />
-                <KpiCard
-                    title="Canceladas"
-                    value={kpis.canceladas}
-                    icon={XCircle}
-                    colorClass="kpi-red"
-                    subtitle="Estancias anuladas"
-                    isActive={filtro === 'Cancelada'}
+                >
+                    <div className="res-kpi-label">Pre-reservas</div>
+                    <div className="res-kpi-val">{Number(kpis.prereservas || 0).toLocaleString('es-MX')}</div>
+                    <div className="res-kpi-sub">Pendientes de anticipo</div>
+                </button>
+
+                <button
+                    type="button"
+                    className={`res-kpi-card is-danger ${filtro === 'Cancelada' ? 'is-active' : ''}`}
                     onClick={() => { setFiltro('Cancelada'); setPage(0); }}
-                />
+                >
+                    <div className="res-kpi-label">Canceladas</div>
+                    <div className="res-kpi-val">{Number(kpis.canceladas || 0).toLocaleString('es-MX')}</div>
+                    <div className="res-kpi-sub">Estancias anuladas</div>
+                </button>
+            </section>
+
+            {/* Barra unificada de filtros en 1 sola línea */}
+            <div className="res-filter-bar res-anim-up res-delay-1">
+                <div className="res-search-box">
+                    <Search size={14} />
+                    <input
+                        type="text"
+                        placeholder="Folio, titular, correo o teléfono..."
+                        className="res-search-input"
+                        value={busqueda}
+                        onChange={(e) => setBusqueda(e.target.value)}
+                        aria-label="Buscar reservaciones"
+                    />
+                </div>
+
+                <div className="res-select-wrap">
+                    <select
+                        className="res-select"
+                        value={filtro}
+                        onChange={(e) => { setFiltro(e.target.value); setPage(0); }}
+                        aria-label="Filtrar por estado"
+                    >
+                        <option value="">Todos los estados</option>
+                        <option value="Pre-reserva">Pre-reserva</option>
+                        <option value="Confirmada">Confirmada</option>
+                        <option value="Ocupada">Ocupada</option>
+                        <option value="Finalizada">Finalizada</option>
+                        <option value="No-Show">No-Show</option>
+                        <option value="Cancelada">Cancelada</option>
+                    </select>
+                    <ChevronDown size={13} className="res-select-chevron" />
+                </div>
+
+                <div className="res-select-wrap">
+                    <select
+                        className="res-select"
+                        value={hotelFiltro}
+                        onChange={(e) => { setHotelFiltro(e.target.value); setPage(0); }}
+                        aria-label="Filtrar por hotel"
+                    >
+                        <option value="">Todas las sedes</option>
+                        {hoteles.map(h => (
+                            <option key={h.idHotel} value={h.idHotel}>{h.nombre}</option>
+                        ))}
+                    </select>
+                    <ChevronDown size={13} className="res-select-chevron" />
+                </div>
+
+                <div className="res-select-wrap">
+                    <select
+                        className="res-select"
+                        value={sort}
+                        onChange={(e) => { setSort(e.target.value); setPage(0); }}
+                        aria-label="Ordenar por"
+                    >
+                        <option value="fechaCreacion,desc">Más recientes</option>
+                        <option value="fechaEntrada,desc">Entrada (desc)</option>
+                        <option value="fechaEntrada,asc">Entrada (asc)</option>
+                        {!isAdmin && <option value="total,desc">Mayor total</option>}
+                        {!isAdmin && <option value="total,asc">Menor total</option>}
+                    </select>
+                    <ChevronDown size={13} className="res-select-chevron" />
+                </div>
+
+                <button
+                    type="button"
+                    className={`res-fechas-btn ${filtroHoyActivo ? 'is-active' : ''}`}
+                    onClick={toggleFiltroHoy}
+                    title="Mostrar únicamente llegadas programadas para hoy"
+                >
+                    <Clock size={14} />
+                    <span>Hoy</span>
+                </button>
+
+                <button
+                    type="button"
+                    className={`res-fechas-btn ${(fechasOpen || ((entradaDesde || entradaHasta) && !filtroHoyActivo)) ? 'is-active' : ''}`}
+                    onClick={() => setFechasOpen(prev => !prev)}
+                    aria-expanded={fechasOpen}
+                >
+                    <Calendar size={14} />
+                    <span>Fechas</span>
+                </button>
+
+                {hayFiltrosActivos && (
+                    <button type="button" className="res-clear-btn" onClick={limpiarFiltrosLista}>
+                        Limpiar
+                    </button>
+                )}
             </div>
 
-            {/* Buscador, Filtros Servidor y Contador */}
-            <div className="filters-card">
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1, flexWrap: 'wrap' }}>
-                        <div className="search-input-wrapper" style={{ flex: 1, minWidth: 220, maxWidth: 320 }}>
-                            <Search size={16} className="search-icon" />
-                            <input
-                                type="text"
-                                placeholder="Buscar por folio, cliente, email o tel..."
-                                className="search-input"
-                                value={busqueda}
-                                onChange={(e) => setBusqueda(e.target.value)}
-                            />
-                        </div>
-                        <select
-                            className="form-select"
-                            style={{ width: 'auto', minWidth: 180 }}
-                            value={filtro}
-                            onChange={(e) => { setFiltro(e.target.value); setPage(0); }}
-                            aria-label="Filtrar por estado"
-                        >
-                            <option value="">Todos los estados</option>
-                            <option value="Pre-reserva">Pre-reserva</option>
-                            <option value="Confirmada">Confirmada</option>
-                            <option value="Ocupada">Ocupada (Check-In)</option>
-                            <option value="Finalizada">Finalizada (Check-Out)</option>
-                            <option value="No-Show">No-Show</option>
-                            <option value="Cancelada">Cancelada</option>
-                        </select>
-                        <select
-                            className="form-select"
-                            style={{ width: 'auto', minWidth: 180 }}
-                            value={hotelFiltro}
-                            onChange={(e) => { setHotelFiltro(e.target.value); setPage(0); }}
-                            aria-label="Filtrar por hotel"
-                        >
-                            <option value="">Todas las sedes</option>
-                            {hoteles.map(h => (
-                                <option key={h.idHotel} value={h.idHotel}>{h.nombre}</option>
-                            ))}
-                        </select>
+            {/* Rango de fechas desplegable */}
+            {fechasOpen && (
+                <div className="res-fechas-drawer">
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Rango de llegada:</span>
+                    <label className="res-date-field">
+                        <span>Desde</span>
                         <input
                             type="date"
-                            className="form-input"
-                            style={{ width: 'auto' }}
+                            className="res-date-input"
                             value={entradaDesde}
                             onChange={(e) => { setEntradaDesde(e.target.value); setPage(0); }}
-                            title="Entrada desde"
-                            aria-label="Entrada desde"
                         />
+                    </label>
+                    <label className="res-date-field">
+                        <span>Hasta</span>
                         <input
                             type="date"
-                            className="form-input"
-                            style={{ width: 'auto' }}
+                            className="res-date-input"
                             value={entradaHasta}
                             onChange={(e) => { setEntradaHasta(e.target.value); setPage(0); }}
-                            title="Entrada hasta"
-                            aria-label="Entrada hasta"
                         />
-                        <select
-                            className="form-select"
-                            style={{ width: 'auto', minWidth: 165 }}
-                            value={sort}
-                            onChange={(e) => { setSort(e.target.value); setPage(0); }}
-                            aria-label="Ordenar por"
-                        >
-                            <option value="fechaCreacion,desc">Más recientes</option>
-                            <option value="fechaEntrada,desc">Entrada (desc)</option>
-                            <option value="fechaEntrada,asc">Entrada (asc)</option>
-                            <option value="total,desc">Mayor total</option>
-                            <option value="total,asc">Menor total</option>
-                        </select>
-                    </div>
-                    <div className="table-counter">
-                        Mostrando <strong>{visibles.length}</strong> de <strong>{totalElements}</strong> (Pág. {totalPages === 0 ? 0 : page + 1}/{totalPages})
-                    </div>
+                    </label>
                 </div>
-            </div>
+            )}
 
-            {/* Tabla de Reservaciones */}
-            <div className="table-card">
+            {/* Tabla limpia (0% overflow, 1 acción directa + menú contextual ⋯) */}
+            <div className="res-table-card res-anim-up res-delay-2" ref={menuWrapRef}>
                 {cargando && reservas.length === 0 ? (
                     <div className="loading-state">
                         <div className="spinner"></div>
@@ -898,292 +1081,327 @@ function ListaReservas({ onNueva }) {
                     </div>
                 ) : visibles.length === 0 ? (
                     <div className="empty-state">
-                        <ClipboardList size={40} className="empty-icon" />
+                        <ClipboardList size={38} className="empty-icon" />
                         <h3>No hay reservaciones</h3>
-                        <p>No se encontraron registros con los filtros o búsqueda actuales.</p>
-                        <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={() => {
-                                setFiltro('');
-                                setHotelFiltro('');
-                                setEntradaDesde('');
-                                setEntradaHasta('');
-                                setBusqueda('');
-                                setBusquedaDebounced('');
-                                setPage(0);
-                            }}
-                        >
-                            Limpiar filtros
-                        </button>
+                        <p>No se encontraron registros con los filtros actuales.</p>
+                        {hayFiltrosActivos && (
+                            <button type="button" className="res-page-btn" onClick={limpiarFiltrosLista}>
+                                Limpiar filtros
+                            </button>
+                        )}
                     </div>
                 ) : (
-                    <div className="table-responsive" style={{ overflowX: 'auto' }}>
-                        <table className="data-table reservas-table">
-                            <thead>
-                                <tr>
-                                    <th style={{ width: '96px' }}>Folio</th>
-                                    <th>Huésped</th>
-                                    <th>Habitación</th>
-                                    <th>Estancia & Fechas</th>
-                                    <th className="text-right">Total</th>
-                                    <th className="text-right">Saldo</th>
-                                    <th>Estado</th>
-                                    <th className="text-right" style={{ minWidth: '165px' }}>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {visibles.map((r) => {
-                                    const hr = horasRestantes(r);
-                                    const alerta = r.estado === 'Pre-reserva' && hr !== null && hr <= 4;
-                                    const puedeEditar = r.estado === 'Pre-reserva' || r.estado === 'Confirmada';
-                                    const puedeEliminar = isAdmin && r.estado !== 'Ocupada';
-                                    return (
-                                        <tr key={r.idReserva} className="table-row">
-                                            <td>
-                                                <b className="num">{r.folio}</b>
-                                            </td>
-                                            <td>
-                                                <div className="hotel-cell">
-                                                    <div className="hotel-name">{r.huesped?.nombre}</div>
-                                                    <div className="hotel-city">{r.huesped?.telefono}</div>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div className="hotel-cell">
-                                                    <div className="hotel-name">{r.habitacion?.hotel?.nombre}</div>
-                                                    <div className="hotel-city">Hab. #{r.habitacion?.numero} · {r.habitacion?.tipoHabitacion?.nombre}</div>
-                                                </div>
-                                            </td>
+                    <table className="res-table">
+                        <thead>
+                            <tr>
+                                <th>Folio / Huésped</th>
+                                <th>Habitación / Sede</th>
+                                <th>Estancia</th>
+                                {!isAdmin && <th className="num">Total / Saldo</th>}
+                                <th>Estado</th>
+                                <th className="num">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {visibles.map((r) => {
+                                const hr = horasRestantes(r);
+                                const alerta = r.estado === 'Pre-reserva' && hr !== null && hr <= 4;
+                                const puedeEditar = r.estado === 'Pre-reserva' || r.estado === 'Confirmada';
+                                const puedeCancelar = r.estado === 'Pre-reserva' || r.estado === 'Confirmada';
+                                const puedeEliminar = isAdmin && r.estado !== 'Ocupada';
+                                const menuAbierto = menuAbiertoId === r.idReserva;
 
-                                            {/* Fechas Mejoradas con Tarjeta Ergonómica */}
-                                            <td>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                                    <div className="reserva-dates-badge">
-                                                        <div className="reserva-date-col">
-                                                            <span className="date-val num">{formatearFechaCorta(r.fechaEntrada)}</span>
-                                                            <span className="date-sub">Llegada · 15:00 h</span>
-                                                        </div>
-                                                        <div className="reserva-date-sep">
-                                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>→</span>
-                                                            <span className="reserva-nights-pill num">{r.noches} n</span>
-                                                        </div>
-                                                        <div className="reserva-date-col">
-                                                            <span className="date-val num">{formatearFechaCorta(r.fechaSalida)}</span>
-                                                            <span className="date-sub">Salida · 12:00 h</span>
-                                                        </div>
-                                                    </div>
-                                                    {r.porDesocuparse && (
-                                                        <span style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                                                            ⏰ Próxima a desocuparse hoy
-                                                        </span>
-                                                    )}
+                                // Determinar acción principal directa según estado y rol
+                                let accionPrincipal = null;
+                                if (isStaff && r.estado === 'Confirmada') {
+                                    accionPrincipal = {
+                                        label: 'Check-In',
+                                        tone: 'is-palm',
+                                        icon: LogIn,
+                                        onClick: () => setAccionEstancia({ tipo: 'check-in', reserva: r })
+                                    };
+                                } else if (!isAdmin && r.estado === 'Pre-reserva') {
+                                    accionPrincipal = {
+                                        label: 'Anticipo',
+                                        tone: 'is-ocean',
+                                        icon: Banknote,
+                                        onClick: () => setModal({ tipo: 'pagar', reserva: r })
+                                    };
+                                } else if (isStaff && r.estado === 'Ocupada') {
+                                    accionPrincipal = {
+                                        label: 'Check-Out',
+                                        tone: 'is-palm',
+                                        icon: LogOut,
+                                        onClick: () => setModal({ tipo: 'check-out', reserva: r })
+                                    };
+                                } else if (puedeRevertirNoShow && r.estado === 'No-Show') {
+                                    accionPrincipal = {
+                                        label: 'Revertir',
+                                        tone: 'is-ghost',
+                                        icon: RotateCcw,
+                                        onClick: () => setAccionEstancia({ tipo: 'revertir-no-show', reserva: r })
+                                    };
+                                }
+
+                                const tieneSecundarias = Boolean(
+                                    accionPrincipal || puedeEditar || puedeCancelar || puedeEliminar
+                                );
+                                const PrimaryIcon = accionPrincipal?.icon;
+
+                                return (
+                                    <tr key={r.idReserva}>
+                                        <td>
+                                            <div className="res-cell-main res-nowrap">{r.folio}</div>
+                                            <div className="res-cell-sub">
+                                                {r.huesped?.nombre}
+                                                {r.huesped?.telefono ? <span className="res-nowrap"> &middot; {r.huesped.telefono}</span> : ''}
+                                            </div>
+                                        </td>
+
+                                        <td>
+                                            <div className="res-cell-main" style={{ fontWeight: 600 }}>
+                                                Hab. {r.habitacion?.numero}
+                                                <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> &middot; {r.habitacion?.tipoHabitacion?.nombre}</span>
+                                            </div>
+                                            <div className="res-cell-sub">{r.habitacion?.hotel?.nombre}</div>
+                                        </td>
+
+                                        <td className="res-nowrap">
+                                            <div style={{ fontWeight: 600 }}>
+                                                {formatearFechaSinAno(r.fechaEntrada)} &rarr; {formatearFechaSinAno(r.fechaSalida)}
+                                                <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}> ({r.noches}n)</span>
+                                            </div>
+                                            {r.porDesocuparse ? (
+                                                <div className="res-alert-inline">
+                                                    <Clock size={11} />
+                                                    <span>Desocupa hoy</span>
+                                                </div>
+                                            ) : r.estado === 'Pre-reserva' && r.fechaExpiracion ? (
+                                                <div className={`res-alert-inline ${alerta ? 'is-danger' : ''}`}>
+                                                    {alerta && <AlertTriangle size={11} />}
+                                                    <span>Vence {fmtFechaHora(r.fechaExpiracion)}</span>
+                                                </div>
+                                            ) : (
+                                                <div className="res-cell-sub">
+                                                    {r.adultos} {r.adultos === 1 ? 'adulto' : 'adultos'}
+                                                    {r.ninos > 0 ? `, ${r.ninos} ${r.ninos === 1 ? 'niño' : 'niños'}` : ''}
+                                                </div>
+                                            )}
+                                        </td>
+
+                                        {!isAdmin && (
+                                            <td className="num">
+                                                <div style={{ fontWeight: 700 }}>{money(r.total)}</div>
+                                                <div className="res-cell-sub" style={{
+                                                    color: Number(r.saldo || 0) > 0 ? '#b85d38' : '#2d5a43',
+                                                    fontWeight: 600
+                                                }}>
+                                                    {Number(r.saldo || 0) > 0 ? `Saldo: ${money(r.saldo)}` : 'Liquidado'}
                                                 </div>
                                             </td>
+                                        )}
 
-                                            <td className="text-right num">
-                                                {money(r.total)}
-                                            </td>
-                                            <td className="text-right num">
-                                                {money(r.saldo)}
-                                            </td>
-                                            <td>
-                                                <EstadoBadge estado={r.estado} />
-                                                {r.salidaPendiente && (
-                                                    <div style={{
-                                                        marginTop: 4,
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: 4,
-                                                        fontSize: '0.7rem',
-                                                        fontWeight: 700,
-                                                        color: '#b91c1c',
-                                                        background: '#fee2e2',
-                                                        border: '1px solid #fca5a5',
-                                                        padding: '2px 7px',
-                                                        borderRadius: 999
-                                                    }}>
-                                                        <AlertTriangle size={11} />
-                                                        <span>Salida pendiente</span>
-                                                    </div>
-                                                )}
-                                                {r.estado === 'Pre-reserva' && (
-                                                    <div style={{ fontSize: '0.72rem', color: alerta ? 'var(--color-error)' : 'var(--text-secondary)', fontWeight: alerta ? 700 : 400, marginTop: 2 }}>
-                                                        {alerta && '⚠ '}vence {fmtFechaHora(r.fechaExpiracion)}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="text-right">
-                                                <div className="row-actions" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                        <td>
+                                            <span className={resBadgeClase(r.estado)}>{r.estado}</span>
+                                            {r.salidaPendiente && (
+                                                <div className="res-alert-inline is-danger" style={{ display: 'flex' }}>
+                                                    <AlertTriangle size={11} />
+                                                    <span>Salida pendiente</span>
+                                                </div>
+                                            )}
+                                        </td>
+
+                                        <td className="num">
+                                            <div className="res-action-cell">
+                                                {accionPrincipal ? (
                                                     <button
                                                         type="button"
-                                                        className="btn-action btn-action-edit"
-                                                        title="Ver detalle completo"
-                                                        onClick={() => setModal({ tipo: 'detalle', reserva: r })}
-                                                        aria-label="Ver detalle"
+                                                        className={`res-primary-act ${accionPrincipal.tone}`}
+                                                        onClick={accionPrincipal.onClick}
                                                     >
-                                                        <Eye size={15} />
+                                                        {PrimaryIcon && <PrimaryIcon size={13} />}
+                                                        <span>{accionPrincipal.label}</span>
                                                     </button>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        className="res-primary-act is-ghost"
+                                                        onClick={() => setModal({ tipo: 'detalle', reserva: r })}
+                                                    >
+                                                        <Eye size={13} />
+                                                        <span>Ver</span>
+                                                    </button>
+                                                )}
 
-                                                    {puedeEditar && (
+                                                {tieneSecundarias && (
+                                                    <>
                                                         <button
                                                             type="button"
-                                                            className="btn-action btn-action-edit"
-                                                            title="Editar reservación"
-                                                            onClick={() => setModal({ tipo: 'editar', reserva: r })}
-                                                            aria-label="Editar reservación"
+                                                            className={`res-more-btn ${menuAbierto ? 'is-open' : ''}`}
+                                                            onClick={() => setMenuAbiertoId(menuAbierto ? null : r.idReserva)}
+                                                            aria-label="Más acciones"
+                                                            aria-expanded={menuAbierto}
                                                         >
-                                                            <Edit2 size={15} />
+                                                            <MoreHorizontal size={15} />
                                                         </button>
-                                                    )}
 
-                                                    {r.estado === 'Pre-reserva' && (
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-primary"
-                                                            style={{ height: 32, minHeight: 32, padding: '0 8px', fontSize: '0.74rem' }}
-                                                            title="Registrar anticipo"
-                                                            onClick={() => setModal({ tipo: 'pagar', reserva: r })}
-                                                        >
-                                                            Anticipo
-                                                        </button>
-                                                    )}
+                                                        {menuAbierto && (
+                                                            <div className="res-menu" role="menu">
+                                                                <button
+                                                                    type="button"
+                                                                    role="menuitem"
+                                                                    className="res-menu-item"
+                                                                    onClick={() => { setMenuAbiertoId(null); setModal({ tipo: 'detalle', reserva: r }); }}
+                                                                >
+                                                                    <Eye size={14} />
+                                                                    <span>Ver detalle</span>
+                                                                </button>
 
-                                                    {isStaff && r.estado === 'Confirmada' && (
-                                                        <>
-                                                            <button
-                                                                type="button"
-                                                                className="btn btn-primary"
-                                                                style={{ height: 32, minHeight: 32, padding: '0 8px', fontSize: '0.74rem', background: 'var(--admin-accent)', borderColor: 'var(--admin-accent)' }}
-                                                                title="Registrar Check-In (solo a partir de la fecha de entrada)"
-                                                                onClick={() => setAccionEstancia({ tipo: 'check-in', reserva: r })}
-                                                            >
-                                                                <LogIn size={13} />
-                                                                <span>Check-In</span>
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                className="btn btn-secondary"
-                                                                style={{ height: 32, minHeight: 32, padding: '0 8px', fontSize: '0.74rem', color: '#b45309', borderColor: '#f59e0b' }}
-                                                                title="Declarar No-Show (desde las 22:00 hrs del día de llegada)"
-                                                                onClick={() => setAccionEstancia({ tipo: 'no-show', reserva: r })}
-                                                            >
-                                                                <UserX size={13} />
-                                                                <span>No-Show</span>
-                                                            </button>
-                                                        </>
-                                                    )}
+                                                                {puedeEditar && (
+                                                                    <button
+                                                                        type="button"
+                                                                        role="menuitem"
+                                                                        className="res-menu-item"
+                                                                        onClick={() => { setMenuAbiertoId(null); setModal({ tipo: 'editar', reserva: r }); }}
+                                                                    >
+                                                                        <Edit2 size={14} />
+                                                                        <span>Editar reservación</span>
+                                                                    </button>
+                                                                )}
 
-                                                    {isStaff && r.estado === 'Ocupada' && (
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-primary"
-                                                            style={{ height: 32, minHeight: 32, padding: '0 8px', fontSize: '0.74rem' }}
-                                                            title="Registrar Check-Out y liquidar saldo"
-                                                            onClick={() => setModal({ tipo: 'check-out', reserva: r })}
-                                                        >
-                                                            <LogOut size={13} />
-                                                            <span>Check-Out</span>
-                                                        </button>
-                                                    )}
+                                                                {isStaff && r.estado === 'Ocupada' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        role="menuitem"
+                                                                        className="res-menu-item"
+                                                                        onClick={() => { setMenuAbiertoId(null); setAccionEstancia({ tipo: 'extender', reserva: r }); }}
+                                                                    >
+                                                                        <CalendarPlus size={14} />
+                                                                        <span>Extender 1 noche</span>
+                                                                    </button>
+                                                                )}
 
-                                                    {puedeRevertirNoShow && r.estado === 'No-Show' && (
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-secondary"
-                                                            style={{ height: 32, minHeight: 32, padding: '0 8px', fontSize: '0.74rem' }}
-                                                            title="Revertir No-Show a Confirmada (máximo 24 h)"
-                                                            onClick={() => setAccionEstancia({ tipo: 'revertir-no-show', reserva: r })}
-                                                        >
-                                                            <RotateCcw size={13} />
-                                                            <span>Revertir</span>
-                                                        </button>
-                                                    )}
+                                                                <button
+                                                                    type="button"
+                                                                    role="menuitem"
+                                                                    className="res-menu-item"
+                                                                    onClick={() => { setMenuAbiertoId(null); imprimirComprobanteReserva(r, { ocultarFinanzas: isAdmin }); }}
+                                                                >
+                                                                    <Printer size={14} />
+                                                                    <span>Imprimir comprobante</span>
+                                                                </button>
 
-                                                    {(r.estado === 'Pre-reserva' || r.estado === 'Confirmada') && (
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-secondary"
-                                                            style={{ height: 32, minHeight: 32, padding: '0 8px', fontSize: '0.74rem' }}
-                                                            title="Cancelar reservación"
-                                                            onClick={() => setModal({ tipo: 'cancelar', reserva: r })}
-                                                        >
-                                                            Cancelar
-                                                        </button>
-                                                    )}
+                                                                {(isStaff && r.estado === 'Confirmada') || puedeCancelar || puedeEliminar ? (
+                                                                    <div className="res-menu-sep" />
+                                                                ) : null}
 
-                                                    {puedeEliminar && (
-                                                        <button
-                                                            type="button"
-                                                            className="btn-action btn-action-delete"
-                                                            title="Eliminar reservación"
-                                                            onClick={() => setReservaAEliminar(r)}
-                                                            aria-label="Eliminar reservación"
-                                                        >
-                                                            <Trash2 size={15} />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                                                {isStaff && r.estado === 'Confirmada' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        role="menuitem"
+                                                                        className="res-menu-item is-warn"
+                                                                        onClick={() => { setMenuAbiertoId(null); setAccionEstancia({ tipo: 'no-show', reserva: r }); }}
+                                                                    >
+                                                                        <UserX size={14} />
+                                                                        <span>Marcar No-Show</span>
+                                                                    </button>
+                                                                )}
+
+                                                                {puedeCancelar && (
+                                                                    <button
+                                                                        type="button"
+                                                                        role="menuitem"
+                                                                        className="res-menu-item is-danger"
+                                                                        onClick={() => { setMenuAbiertoId(null); setModal({ tipo: 'cancelar', reserva: r }); }}
+                                                                    >
+                                                                        <XCircle size={14} />
+                                                                        <span>Cancelar reservación</span>
+                                                                    </button>
+                                                                )}
+
+                                                                {puedeEliminar && (
+                                                                    <button
+                                                                        type="button"
+                                                                        role="menuitem"
+                                                                        className="res-menu-item is-danger"
+                                                                        onClick={() => { setMenuAbiertoId(null); setReservaAEliminar(r); }}
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                        <span>Eliminar registro</span>
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                )}
+
+                {totalElements > 0 && (
+                    <div className="res-pagination">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <span>
+                                Mostrando <strong style={{ color: 'var(--text-primary)' }}>{inicioRango}&ndash;{finRango}</strong> de{' '}
+                                <strong style={{ color: 'var(--text-primary)' }}>{totalElements.toLocaleString('es-MX')}</strong> registros
+                            </span>
+                            <span style={{ color: 'var(--border-strong)' }}>|</span>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                <span>Por página:</span>
+                                <select
+                                    value={size}
+                                    onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }}
+                                    style={{
+                                        background: 'var(--bg-surface)', color: 'var(--text-primary)',
+                                        border: '1px solid var(--border-default)', borderRadius: 7, padding: '3px 7px',
+                                        fontSize: '0.78rem', fontWeight: 600
+                                    }}
+                                    aria-label="Tamaño de página"
+                                >
+                                    {[10, 20, 50, 100].map(opt => (
+                                        <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
+
+                        {totalPages > 1 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <button
+                                    type="button"
+                                    className="res-page-btn"
+                                    disabled={page <= 0 || cargando}
+                                    onClick={() => setPage(p => Math.max(0, p - 1))}
+                                >
+                                    Anterior
+                                </button>
+                                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                    Página {page + 1} de {totalPages}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="res-page-btn"
+                                    disabled={page + 1 >= totalPages || cargando}
+                                    onClick={() => setPage(p => p + 1)}
+                                >
+                                    Siguiente
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
-
-            {totalPages > 0 && (
-                <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    flexWrap: 'wrap', gap: 12, padding: '8px 4px'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', color: 'var(--text-muted)' }}>
-                        <span>Por página:</span>
-                        <select
-                            className="form-select"
-                            style={{ width: 'auto', minWidth: 74, height: 34 }}
-                            value={size}
-                            onChange={(e) => { setSize(Number(e.target.value)); setPage(0); }}
-                            aria-label="Tamaño de página"
-                        >
-                            {[10, 20, 50, 100].map(opt => (
-                                <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                        </select>
-                        <span>Total: <strong>{totalElements}</strong></span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button
-                            type="button"
-                            className="btn btn-secondary"
-                            disabled={page <= 0 || cargando}
-                            onClick={() => setPage(p => Math.max(0, p - 1))}
-                        >
-                            Anterior
-                        </button>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                            Página {page + 1} de {totalPages}
-                        </span>
-                        <button
-                            type="button"
-                            className="btn btn-secondary"
-                            disabled={page + 1 >= totalPages || cargando}
-                            onClick={() => setPage(p => p + 1)}
-                        >
-                            Siguiente
-                        </button>
-                    </div>
-                </div>
-            )}
 
             {/* Modales de Gestión de Reserva */}
             {modal?.tipo === 'pagar' && <ModalPago reserva={modal.reserva} onClose={() => setModal(null)} onDone={() => { setModal(null); cargar(); }} />}
             {modal?.tipo === 'check-out' && <ModalCheckOut reserva={modal.reserva} onClose={() => setModal(null)} onDone={() => { setModal(null); setMensajeExito(`Check-Out completado y saldo liquidado para ${modal.reserva.folio}.`); cargar(); window.dispatchEvent(new CustomEvent('hotel:reserva-actualizada')); }} />}
             {modal?.tipo === 'cancelar' && <ModalCancelar reserva={modal.reserva} onClose={() => setModal(null)} onDone={() => { setModal(null); cargar(); }} />}
-            {modal?.tipo === 'detalle' && <ModalDetalleReserva reserva={modal.reserva} onClose={() => setModal(null)} />}
+            {modal?.tipo === 'detalle' && <ModalDetalleReserva reserva={modal.reserva} ocultarFinanzas={isAdmin} onClose={() => setModal(null)} />}
             {modal?.tipo === 'editar' && <ModalEditarReserva reserva={modal.reserva} onClose={() => setModal(null)} onDone={() => { setModal(null); cargar(); }} />}
 
             {/* ConfirmDialog para acciones de ciclo de estancia (Check-In / No-Show / Revertir) */}
@@ -1196,7 +1414,9 @@ function ListaReservas({ onNueva }) {
                         ? '¿Registrar Check-In?'
                         : accionEstancia?.tipo === 'no-show'
                             ? '¿Declarar No-Show?'
-                            : '¿Revertir No-Show a Confirmada?'
+                            : accionEstancia?.tipo === 'extender'
+                                ? '¿Extender 1 noche adicional?'
+                                : '¿Revertir No-Show a Confirmada?'
                 }
                 subtitle={accionEstancia?.reserva ? `Folio ${accionEstancia.reserva.folio}` : ''}
                 message={
@@ -1207,6 +1427,10 @@ function ListaReservas({ onNueva }) {
                     ) : accionEstancia?.tipo === 'no-show' ? (
                         <>
                             Se marcará la reservación de <strong>{accionEstancia.reserva?.huesped?.nombre}</strong> como <strong>No-Show</strong>. El anticipo cubierto se conserva como penalización y la habitación quedará disponible.
+                        </>
+                    ) : accionEstancia?.tipo === 'extender' ? (
+                        <>
+                            Se agregará <strong>1 noche adicional</strong> a la estancia de <strong>{accionEstancia.reserva?.huesped?.nombre}</strong> en la habitación <strong>#{accionEstancia.reserva?.habitacion?.numero}</strong> (sujeto a disponibilidad).
                         </>
                     ) : accionEstancia?.reserva ? (
                         <>
@@ -1219,7 +1443,9 @@ function ListaReservas({ onNueva }) {
                         ? 'Confirmar Check-In'
                         : accionEstancia?.tipo === 'no-show'
                             ? 'Declarar No-Show'
-                            : 'Revertir a Confirmada'
+                            : accionEstancia?.tipo === 'extender'
+                                ? 'Extender estancia'
+                                : 'Revertir a Confirmada'
                 }
                 cancelText="Cancelar"
                 type={accionEstancia?.tipo === 'no-show' ? 'warning' : 'info'}
@@ -1360,7 +1586,7 @@ function ModalCancelar({ reserva: r, onClose, onDone }) {
         catch (err) { setError(err.message); setBusy(false); }
     };
     return (
-        <Modal title={`Cancelar reservación — Folio ${r.folio}`} onClose={onClose} icon={XCircle}>
+        <Modal title={`Cancelar — ${r.folio}`} onClose={onClose} icon={XCircle}>
             <form onSubmit={enviar} className="modal-form">
                 {error && <div className="alert alert-error"><AlertTriangle size={16} />{error}</div>}
                 {info && (
@@ -1396,7 +1622,7 @@ function ModalCancelar({ reserva: r, onClose, onDone }) {
     );
 }
 
-function ModalDetalleReserva({ reserva: r, onClose }) {
+function ModalDetalleReserva({ reserva: r, ocultarFinanzas = false, onClose }) {
     if (!r) return null;
 
     return (
@@ -1414,8 +1640,12 @@ function ModalDetalleReserva({ reserva: r, onClose }) {
                     <div className="summary-box">
                         <div className="form-label">Huésped Titular</div>
                         <div style={{ fontWeight: 600 }}>{r.huesped?.nombre}</div>
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem', marginTop: 2 }}>📞 {r.huesped?.telefono}</div>
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>✉ {r.huesped?.email}</div>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem', marginTop: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <Phone size={12} /> <span className="num">{r.huesped?.telefono || '—'}</span>
+                        </div>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem', marginTop: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <Mail size={12} /> <span>{r.huesped?.email || '—'}</span>
+                        </div>
                     </div>
 
                     <div className="summary-box">
@@ -1437,40 +1667,42 @@ function ModalDetalleReserva({ reserva: r, onClose }) {
                     <div>
                         <div className="form-label">Ocupantes y extras</div>
                         <div style={{ fontWeight: 600 }}>{r.adultos} adulto(s), {r.ninos || 0} niño(s)</div>
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>
-                            {r.cuna ? '👶 Cuna ' : ''}
-                            {r.camaExtra ? '🛏 Cama extra ' : ''}
-                            {r.plantaBajaSolicitada ? '♿ Planta baja' : ''}
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 3 }}>
+                            {r.cuna && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Baby size={12} /> Cuna</span>}
+                            {r.camaExtra && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><BedDouble size={12} /> Cama extra</span>}
+                            {r.plantaBajaSolicitada && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Accessibility size={12} /> Planta baja</span>}
                         </div>
                     </div>
                 </div>
 
-                <div className="summary-box">
-                    <div className="form-label">Desglose Financiero</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                        <span>Total de la estancia:</span>
-                        <b className="num">{money(r.total)}</b>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, color: 'var(--color-success)' }}>
-                        <span>Anticipo cubierto:</span>
-                        <b className="num">{money(r.anticipo)}</b>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: 4, marginTop: 4 }}>
-                        <span>Saldo en check-in:</span>
-                        <b className="num" style={{ color: 'var(--color-error)' }}>{money(r.saldo)}</b>
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                        Método de pago del anticipo: {r.metodoPago || 'N/A'}
-                        {r.metodoPagoSaldo ? ` · Método pago saldo: ${r.metodoPagoSaldo}` : ''}
-                    </div>
-                    {(r.checkInAt || r.checkOutAt) && (
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                            {r.checkInAt ? `Check-In: ${fmtFechaHora(r.checkInAt)}` : ''}
-                            {r.checkInAt && r.checkOutAt ? ' · ' : ''}
-                            {r.checkOutAt ? `Check-Out: ${fmtFechaHora(r.checkOutAt)}` : ''}
+                {!ocultarFinanzas && (
+                    <div className="summary-box">
+                        <div className="form-label">Desglose Financiero</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                            <span>Total de la estancia:</span>
+                            <b className="num">{money(r.total)}</b>
                         </div>
-                    )}
-                </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2, color: 'var(--color-success)' }}>
+                            <span>Anticipo cubierto:</span>
+                            <b className="num">{money(r.anticipo)}</b>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: 4, marginTop: 4 }}>
+                            <span>Saldo en check-in:</span>
+                            <b className="num" style={{ color: 'var(--color-error)' }}>{money(r.saldo)}</b>
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                            Método de pago del anticipo: {r.metodoPago || 'N/A'}
+                            {r.metodoPagoSaldo ? ` · Método pago saldo: ${r.metodoPagoSaldo}` : ''}
+                        </div>
+                        {(r.checkInAt || r.checkOutAt) && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                                {r.checkInAt ? `Check-In: ${fmtFechaHora(r.checkInAt)}` : ''}
+                                {r.checkInAt && r.checkOutAt ? ' · ' : ''}
+                                {r.checkOutAt ? `Check-Out: ${fmtFechaHora(r.checkOutAt)}` : ''}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {r.observaciones && (
                     <div>
@@ -1487,7 +1719,15 @@ function ModalDetalleReserva({ reserva: r, onClose }) {
                 </div>
 
                 <div className="modal-actions">
-                    <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
+                    <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => imprimirComprobanteReserva(r, { ocultarFinanzas })}
+                    >
+                        <Printer size={15} />
+                        <span>Imprimir comprobante</span>
+                    </button>
+                    <button type="button" className="btn btn-primary" onClick={onClose}>Cerrar</button>
                 </div>
             </div>
         </Modal>

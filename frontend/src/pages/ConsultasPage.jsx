@@ -1,296 +1,138 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Zap, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
+import {
+    Search, Zap, AlertCircle, RefreshCw, FileSpreadsheet, Play
+} from 'lucide-react';
 import { API_BASE_URL, getStoredToken, clearAuthSession, getHoteles } from '../api/hotelApi';
-import EstadoBadge from '../components/EstadoBadge';
+import { useAuth } from '../context/AuthContext';
+import './ConsultasPage.css';
 
 const LISTA_ATAJOS = [
-    // Consultas de Hoteles y Sedes
-    {
-        id: 1,
-        categoria: 'Hoteles',
-        nombre: 'Directorio general de hoteles',
-        endpoint: '/api/consultas/hoteles',
-        descripcion: 'Listado completo con todas las sedes, direcciones y teléfonos de la cadena.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 2,
-        categoria: 'Hoteles',
-        nombre: 'Hoteles actualmente operando',
-        endpoint: '/api/consultas/hoteles/activos',
-        descripcion: 'Muestra únicamente los hoteles activos y con servicio disponible.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 3,
-        categoria: 'Hoteles',
-        nombre: 'Hoteles por ciudad',
-        endpoint: '/api/consultas/hoteles/ciudad/{ciudad}',
-        paramNombre: 'ciudad',
-        descripcion: 'Filtra las sedes hoteleras ubicadas en una ciudad específica.',
-        tipoParametro: 'ciudad',
-        destacada: true
-    },
-    {
-        id: 4,
-        categoria: 'Hoteles',
-        nombre: 'Total de habitaciones por hotel',
-        endpoint: '/api/consultas/hoteles/total-habitaciones',
-        descripcion: 'Conteo y distribución de cuartos registrados en cada una de las propiedades.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 5,
-        categoria: 'Hoteles',
-        nombre: 'Disponibilidad de cuartos por hotel',
-        endpoint: '/api/consultas/hoteles/habitaciones-disponibles-count',
-        descripcion: 'Conteo numérico de habitaciones disponibles en cada una de las sedes.',
-        tipoParametro: null,
-        destacada: false
-    },
+    // Hoteles
+    { id: 1, categoria: 'Hoteles', nombre: 'Directorio general de hoteles', endpoint: '/api/consultas/hoteles', descripcion: 'Sedes, ubicaciones y contacto de la cadena.', tipoParametro: null },
+    { id: 2, categoria: 'Hoteles', nombre: 'Hoteles operando', endpoint: '/api/consultas/hoteles/activos', descripcion: 'Únicamente propiedades activas en operación.', tipoParametro: null },
+    { id: 3, categoria: 'Hoteles', nombre: 'Hoteles por ciudad', endpoint: '/api/consultas/hoteles/ciudad/{ciudad}', paramNombre: 'ciudad', descripcion: 'Propiedades ubicadas en una ciudad específica.', tipoParametro: 'ciudad' },
+    { id: 4, categoria: 'Hoteles', nombre: 'Total de habitaciones por hotel', endpoint: '/api/consultas/hoteles/total-habitaciones', descripcion: 'Distribución de cuartos registrados por sede.', tipoParametro: null },
+    { id: 5, categoria: 'Hoteles', nombre: 'Disponibles por hotel', endpoint: '/api/consultas/hoteles/habitaciones-disponibles-count', descripcion: 'Conteo de habitaciones listas por propiedad.', tipoParametro: null },
 
-    // Consultas de Categorías y Tarifas
-    {
-        id: 6,
-        categoria: 'Tarifas',
-        nombre: 'Catálogo de categorías de suites',
-        endpoint: '/api/consultas/tipos',
-        descripcion: 'Todas las categorías registradas con sus precios base y capacidades.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 7,
-        categoria: 'Tarifas',
-        nombre: 'Habitaciones dobles (2 personas)',
-        endpoint: '/api/consultas/tipos/capacidad-2',
-        descripcion: 'Categorías configuradas para alojar cómodamente a 2 huéspedes.',
-        tipoParametro: null,
-        destacada: false
-    },
-    {
-        id: 8,
-        categoria: 'Tarifas',
-        nombre: 'Tarifa promedio por noche',
-        endpoint: '/api/consultas/tipos/precio-promedio',
-        descripcion: 'Cálculo del costo promedio estándar por noche en toda la cadena.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 9,
-        categoria: 'Tarifas',
-        nombre: 'Suites con tarifa menor a un monto',
-        endpoint: '/api/consultas/tipos/menor-que/{precio}',
-        paramNombre: 'precio',
-        descripcion: 'Categorías con precio base por noche menor o igual al valor seleccionado.',
-        tipoParametro: 'precio',
-        paramDefault: '1500',
-        destacada: false
-    },
-    {
-        id: 10,
-        categoria: 'Tarifas',
-        nombre: 'Suites con tarifa mayor a un monto',
-        endpoint: '/api/consultas/tipos/mayor-que/{precio}',
-        paramNombre: 'precio',
-        descripcion: 'Categorías con precio base por noche superior al valor seleccionado.',
-        tipoParametro: 'precio',
-        paramDefault: '1200',
-        destacada: false
-    },
-    {
-        id: 11,
-        categoria: 'Tarifas',
-        nombre: 'Suite más económica de la cadena',
-        endpoint: '/api/consultas/tipos/mas-barato',
-        descripcion: 'La categoría con la tarifa por noche más accesible del sistema.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 12,
-        categoria: 'Tarifas',
-        nombre: 'Suite más exclusiva (tarifa más alta)',
-        endpoint: '/api/consultas/tipos/mas-caro',
-        descripcion: 'La suite o penthouse con el precio base más elevado de la cadena.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 13,
-        categoria: 'Tarifas',
-        nombre: 'Capacidad máxima de huéspedes en suite',
-        endpoint: '/api/consultas/tipos/capacidad-maxima',
-        descripcion: 'El número más alto de ocupantes permitido en una sola habitación.',
-        tipoParametro: null,
-        destacada: false
-    },
-    {
-        id: 14,
-        categoria: 'Tarifas',
-        nombre: 'Total de categorías registradas',
-        endpoint: '/api/consultas/tipos/total-count',
-        descripcion: 'Número total de tipos de suites dados de alta en el sistema.',
-        tipoParametro: null,
-        destacada: false
-    },
+    // Tarifas y Categorías
+    { id: 6, categoria: 'Tarifas', nombre: 'Catálogo de categorías', endpoint: '/api/consultas/tipos', descripcion: 'Categorías registradas, capacidad y tarifa base.', tipoParametro: null },
+    { id: 7, categoria: 'Tarifas', nombre: 'Categorías para 2 huéspedes', endpoint: '/api/consultas/tipos/capacidad-2', descripcion: 'Categorías configuradas para 2 personas.', tipoParametro: null },
+    { id: 8, categoria: 'Tarifas', nombre: 'Tarifa promedio por noche', endpoint: '/api/consultas/tipos/precio-promedio', descripcion: 'Costo promedio estándar por noche en la cadena.', tipoParametro: null, soloGerente: true, unidad: 'MXN' },
+    { id: 9, categoria: 'Tarifas', nombre: 'Categorías con tarifa menor a...', endpoint: '/api/consultas/tipos/menor-que/{precio}', paramNombre: 'precio', descripcion: 'Categorías con tarifa menor o igual al monto elegido.', tipoParametro: 'precio', paramDefault: '1500', soloGerente: true },
+    { id: 10, categoria: 'Tarifas', nombre: 'Categorías con tarifa mayor a...', endpoint: '/api/consultas/tipos/mayor-que/{precio}', paramNombre: 'precio', descripcion: 'Categorías con tarifa superior al monto elegido.', tipoParametro: 'precio', paramDefault: '1200', soloGerente: true },
+    { id: 11, categoria: 'Tarifas', nombre: 'Categoría más económica', endpoint: '/api/consultas/tipos/mas-barato', descripcion: 'Categoría con la tarifa base más accesible.', tipoParametro: null, soloGerente: true },
+    { id: 12, categoria: 'Tarifas', nombre: 'Categoría más exclusiva', endpoint: '/api/consultas/tipos/mas-caro', descripcion: 'Suite con la tarifa base más elevada.', tipoParametro: null, soloGerente: true },
+    { id: 13, categoria: 'Tarifas', nombre: 'Capacidad máxima por suite', endpoint: '/api/consultas/tipos/capacidad-maxima', descripcion: 'Mayor número de ocupantes en una unidad.', tipoParametro: null, unidad: 'huéspedes' },
+    { id: 14, categoria: 'Tarifas', nombre: 'Total de categorías registradas', endpoint: '/api/consultas/tipos/total-count', descripcion: 'Conteo total de tipos de habitación.', tipoParametro: null, unidad: 'categorías' },
 
-    // Consultas de Inventario y Habitaciones
-    {
-        id: 15,
-        categoria: 'Habitaciones',
-        nombre: 'Habitaciones disponibles hoy',
-        endpoint: '/api/consultas/habitaciones/disponibles',
-        descripcion: 'Suites libres y listas para asignación inmediata.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 16,
-        categoria: 'Habitaciones',
-        nombre: 'Habitaciones actualmente ocupadas',
-        endpoint: '/api/consultas/habitaciones/ocupadas',
-        descripcion: 'Habitaciones con huéspedes alojados actualmente en el hotel.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 17,
-        categoria: 'Habitaciones',
-        nombre: 'Habitaciones en mantenimiento',
-        endpoint: '/api/consultas/habitaciones/mantenimiento',
-        descripcion: 'Listado de suites en limpieza profunda, servicio técnico o reparaciones.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 18,
-        categoria: 'Habitaciones',
-        nombre: 'Total de cuartos en mantenimiento',
-        endpoint: '/api/consultas/habitaciones/mantenimiento-count',
-        descripcion: 'Conteo numérico de habitaciones actualmente fuera de servicio.',
-        tipoParametro: null,
-        destacada: false
-    },
-    {
-        id: 19,
-        categoria: 'Habitaciones',
-        nombre: 'Habitaciones por hotel específico',
-        endpoint: '/api/consultas/habitaciones/hotel/{nombreHotel}',
-        paramNombre: 'nombreHotel',
-        descripcion: 'Inventario de habitaciones pertenecientes a la sede seleccionada.',
-        tipoParametro: 'hotel',
-        destacada: true
-    },
-    {
-        id: 20,
-        categoria: 'Habitaciones',
-        nombre: 'Disponibles en hotel específico',
-        endpoint: '/api/consultas/habitaciones/disponibles/{nombreHotel}',
-        paramNombre: 'nombreHotel',
-        descripcion: 'Cuartos listos para reservar en la propiedad seleccionada.',
-        tipoParametro: 'hotel',
-        destacada: true
-    },
-    {
-        id: 21,
-        categoria: 'Habitaciones',
-        nombre: 'Habitaciones familiares (4 personas)',
-        endpoint: '/api/consultas/habitaciones/capacidad-4',
-        descripcion: 'Suites amplias diseñadas para alojar hasta 4 ocupantes.',
-        tipoParametro: null,
-        destacada: false
-    },
-    {
-        id: 22,
-        categoria: 'Habitaciones',
-        nombre: 'Habitaciones con tipo y tarifa asignada',
-        endpoint: '/api/consultas/habitaciones/tipo-precio',
-        descripcion: 'Inventario general de cuartos con desglose de su categoría y precio base.',
-        tipoParametro: null,
-        destacada: false
-    },
-    {
-        id: 23,
-        categoria: 'Habitaciones',
-        nombre: 'Habitaciones por nivel o piso',
-        endpoint: '/api/consultas/habitaciones/piso/{piso}',
-        paramNombre: 'piso',
-        descripcion: 'Muestra todas las habitaciones situadas en un piso determinado.',
-        tipoParametro: 'piso',
-        paramDefault: '1',
-        destacada: false
-    },
-    {
-        id: 24,
-        categoria: 'Habitaciones',
-        nombre: 'Habitaciones por hotel y piso',
-        endpoint: '/api/consultas/habitaciones/hotel/{nombreHotel}/piso/{piso}',
-        paramNombre: 'nombreHotel',
-        paramNombre2: 'piso',
-        paramDefault2: '1',
-        descripcion: 'Filtra las habitaciones seleccionando el hotel y el nivel deseado.',
-        tipoParametro: 'hotel_piso',
-        destacada: false
-    },
-    {
-        id: 25,
-        categoria: 'Habitaciones',
-        nombre: 'Total de habitaciones registradas',
-        endpoint: '/api/consultas/habitaciones/total-count',
-        descripcion: 'Inventario general de cuartos de todos los hoteles de la cadena.',
-        tipoParametro: null,
-        destacada: false
-    },
-    {
-        id: 26,
-        categoria: 'Habitaciones',
-        nombre: 'Ingreso potencial máximo por noche',
-        endpoint: '/api/consultas/habitaciones/ingreso-potencial',
-        descripcion: 'Monto total que generaría la cadena si todas las habitaciones estuvieran ocupadas.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 27,
-        categoria: 'Habitaciones',
-        nombre: 'Resumen de inventario por estado',
-        endpoint: '/api/consultas/habitaciones/resumen-estados',
-        descripcion: 'Desglose proporcional de cuartos disponibles, ocupados y en mantenimiento.',
-        tipoParametro: null,
-        destacada: true
-    },
-    {
-        id: 28,
-        categoria: 'Habitaciones',
-        nombre: 'Habitaciones en una ciudad',
-        endpoint: '/api/consultas/habitaciones/ciudad/{ciudad}',
-        paramNombre: 'ciudad',
-        descripcion: 'Habitaciones de hoteles situados en la ciudad seleccionada.',
-        tipoParametro: 'ciudad',
-        destacada: false
-    },
-    {
-        id: 29,
-        categoria: 'Habitaciones',
-        nombre: 'Disponibles ordenadas por tarifa',
-        endpoint: '/api/consultas/habitaciones/disponibles/ordenadas-por-precio',
-        descripcion: 'Suites listas para reservar ordenadas de menor a mayor precio.',
-        tipoParametro: null,
-        destacada: false
-    }
+    // Habitaciones
+    { id: 15, categoria: 'Habitaciones', nombre: 'Habitaciones disponibles hoy', endpoint: '/api/consultas/habitaciones/disponibles', descripcion: 'Unidades libres y listas para asignar.', tipoParametro: null },
+    { id: 16, categoria: 'Habitaciones', nombre: 'Habitaciones ocupadas', endpoint: '/api/consultas/habitaciones/ocupadas', descripcion: 'Unidades con huéspedes en casa.', tipoParametro: null },
+    { id: 17, categoria: 'Habitaciones', nombre: 'Habitaciones en mantenimiento', endpoint: '/api/consultas/habitaciones/mantenimiento', descripcion: 'Unidades fuera de servicio temporal.', tipoParametro: null },
+    { id: 18, categoria: 'Habitaciones', nombre: 'Total en mantenimiento', endpoint: '/api/consultas/habitaciones/mantenimiento-count', descripcion: 'Conteo de habitaciones en mantenimiento.', tipoParametro: null, unidad: 'habitaciones' },
+    { id: 19, categoria: 'Habitaciones', nombre: 'Habitaciones por hotel', endpoint: '/api/consultas/habitaciones/hotel/{nombreHotel}', paramNombre: 'nombreHotel', descripcion: 'Inventario de cuartos de la sede elegida.', tipoParametro: 'hotel' },
+    { id: 20, categoria: 'Habitaciones', nombre: 'Disponibles en un hotel', endpoint: '/api/consultas/habitaciones/disponibles/{nombreHotel}', paramNombre: 'nombreHotel', descripcion: 'Cuartos libres en la sede seleccionada.', tipoParametro: 'hotel' },
+    { id: 21, categoria: 'Habitaciones', nombre: 'Habitaciones familiares (4 pers.)', endpoint: '/api/consultas/habitaciones/capacidad-4', descripcion: 'Unidades con capacidad para 4 huéspedes.', tipoParametro: null },
+    { id: 22, categoria: 'Habitaciones', nombre: 'Habitaciones con tipo y tarifa', endpoint: '/api/consultas/habitaciones/tipo-precio', descripcion: 'Inventario con categoría y tarifa asignada.', tipoParametro: null, soloGerente: true },
+    { id: 23, categoria: 'Habitaciones', nombre: 'Habitaciones por piso', endpoint: '/api/consultas/habitaciones/piso/{piso}', paramNombre: 'piso', descripcion: 'Cuartos situados en el nivel elegido.', tipoParametro: 'piso', paramDefault: '1' },
+    { id: 24, categoria: 'Habitaciones', nombre: 'Habitaciones por hotel y piso', endpoint: '/api/consultas/habitaciones/hotel/{nombreHotel}/piso/{piso}', paramNombre: 'nombreHotel', paramNombre2: 'piso', paramDefault2: '1', descripcion: 'Filtra cuartos por sede y nivel.', tipoParametro: 'hotel_piso' },
+    { id: 25, categoria: 'Habitaciones', nombre: 'Total de habitaciones', endpoint: '/api/consultas/habitaciones/total-count', descripcion: 'Inventario total de cuartos de la cadena.', tipoParametro: null, unidad: 'habitaciones' },
+    { id: 26, categoria: 'Habitaciones', nombre: 'Ingreso potencial por noche', endpoint: '/api/consultas/habitaciones/ingreso-potencial', descripcion: 'Ingreso máximo con 100% de ocupación diaria.', tipoParametro: null, soloGerente: true, unidad: 'MXN' },
+    { id: 27, categoria: 'Habitaciones', nombre: 'Resumen por estado', endpoint: '/api/consultas/habitaciones/resumen-estados', descripcion: 'Conteo agrupado por estado operativo.', tipoParametro: null },
+    { id: 28, categoria: 'Habitaciones', nombre: 'Habitaciones por ciudad', endpoint: '/api/consultas/habitaciones/ciudad/{ciudad}', paramNombre: 'ciudad', descripcion: 'Cuartos de hoteles en la ciudad elegida.', tipoParametro: 'ciudad' },
+    { id: 29, categoria: 'Habitaciones', nombre: 'Disponibles ordenadas por tarifa', endpoint: '/api/consultas/habitaciones/disponibles/ordenadas-por-precio', descripcion: 'Cuartos libres de menor a mayor precio.', tipoParametro: null, soloGerente: true }
 ];
 
+const ETIQUETAS_COL = {
+    nombre: 'Nombre',
+    ciudad: 'Ciudad',
+    direccion: 'Dirección',
+    telefono: 'Teléfono',
+    email: 'Correo',
+    activo: 'Estado',
+    numero: 'Habitación',
+    hotel: 'Propiedad',
+    tipoHabitacion: 'Categoría',
+    piso: 'Piso',
+    estado: 'Estado',
+    capacidad: 'Capacidad',
+    descripcion: 'Descripción',
+    precioBase: 'Tarifa / Noche',
+    precio: 'Tarifa / Noche',
+    total: 'Total',
+    cantidad: 'Cantidad',
+    disponibles: 'Disponibles'
+};
+
+const CLAVES_OCULTAS = new Set([
+    'idHotel', 'idHabitacion', 'idTipo', 'idReservaActiva', 'imagenUrl',
+    'latitud', 'longitud', 'tagEditorial', 'periodosOcupados', 'costoDiaExtra',
+    'diaExtraDisponible', 'estadoReservaActiva', 'fechaOcupacionFin',
+    'fechaOcupacionInicio', 'folioActivo', 'nuevaFechaDesocupacion', 'ocupadaHoy'
+]);
+
+function esColumnaMonetaria(col) {
+    const c = String(col || '').toLowerCase();
+    return c.includes('precio') || c.includes('tarifa') || c.includes('ingreso') || c.includes('monto');
+}
+
+function etiquetaColumna(col) {
+    if (ETIQUETAS_COL[col]) return ETIQUETAS_COL[col];
+    return String(col || '')
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/_/g, ' ')
+        .trim();
+}
+
+function obtenerColumnasLimpias(filas, isAdmin) {
+    if (!Array.isArray(filas) || filas.length === 0) return [];
+    const sample = filas[0] || {};
+    const keys = Object.keys(sample);
+
+    // Proyección limpia para entidades conocidas (evita 12–16 columnas técnicas crudas)
+    if ('idHotel' in sample || ('ciudad' in sample && 'direccion' in sample)) {
+        return ['nombre', 'ciudad', 'direccion', 'telefono', 'activo'].filter(k => k in sample);
+    }
+    if ('idHabitacion' in sample || ('numero' in sample && 'piso' in sample)) {
+        return ['numero', 'hotel', 'tipoHabitacion', 'piso', 'estado'].filter(k => k in sample);
+    }
+    if ('idTipo' in sample || ('capacidad' in sample && 'precioBase' in sample)) {
+        return ['nombre', 'capacidad', 'descripcion', ...(!isAdmin ? ['precioBase'] : [])].filter(k => k in sample);
+    }
+
+    return keys.filter(k => !CLAVES_OCULTAS.has(k) && (!isAdmin || !esColumnaMonetaria(k)));
+}
+
+function textoPlanoCelda(col, val, isAdmin) {
+    if (val === null || val === undefined || val === '') return '';
+    if (typeof val === 'boolean') return val ? 'Activo' : 'Inactivo';
+    if (typeof val === 'object') {
+        if (val.nombre && val.precioBase !== undefined) {
+            return isAdmin ? val.nombre : `${val.nombre} ($${Number(val.precioBase).toFixed(2)})`;
+        }
+        if (val.nombre) return val.nombre;
+        return JSON.stringify(val);
+    }
+    if (typeof val === 'number' && esColumnaMonetaria(col)) {
+        return Number(val).toFixed(2);
+    }
+    return String(val);
+}
+
+function badgeEstadoClase(val) {
+    const s = String(val || '').toLowerCase();
+    if (s === 'activo' || s === 'disponible') return 'con-badge con-badge-palm';
+    if (s === 'ocupada' || s === 'confirmada') return 'con-badge con-badge-ocean';
+    if (s === 'mantenimiento' || s === 'pre-reserva') return 'con-badge con-badge-terra';
+    return 'con-badge con-badge-danger';
+}
+
 export default function ConsultasPage() {
+    const { user, isAdmin } = useAuth();
     const [categoriaActual, setCategoriaActual] = useState('TODAS');
     const [busqueda, setBusqueda] = useState('');
     const [atajoSeleccionado, setAtajoSeleccionado] = useState(LISTA_ATAJOS[0]);
 
-    // Datos maestros para llenar los selects automáticamente
     const [hoteles, setHoteles] = useState([]);
     const [param1, setParam1] = useState('');
     const [param2, setParam2] = useState('');
@@ -299,14 +141,12 @@ export default function ConsultasPage() {
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState('');
 
-    // Cargar hoteles para poblar ciudades y nombres sin teclear a mano
     useEffect(() => {
         getHoteles().then(data => {
             if (Array.isArray(data)) setHoteles(data);
         }).catch(() => {});
     }, []);
 
-    // Opciones dinámicas
     const ciudadesDisponibles = useMemo(() => {
         const set = new Set(hoteles.map(h => h.ciudad).filter(Boolean));
         const arr = Array.from(set).sort();
@@ -321,26 +161,6 @@ export default function ConsultasPage() {
 
     const pisosDisponibles = useMemo(() => [1, 2, 3, 4, 5], []);
     const preciosSugeridos = useMemo(() => ['800', '1000', '1200', '1500', '2000', '2500', '3000'], []);
-
-    // Inicializar parámetros al cambiar de atajo
-    useEffect(() => {
-        if (!atajoSeleccionado) return;
-        if (atajoSeleccionado.tipoParametro === 'ciudad') {
-            setParam1(ciudadesDisponibles[0] || 'Cancún');
-        } else if (atajoSeleccionado.tipoParametro === 'hotel') {
-            setParam1(hotelesDisponibles[0] || 'Hotel Paraíso');
-        } else if (atajoSeleccionado.tipoParametro === 'piso') {
-            setParam1('1');
-        } else if (atajoSeleccionado.tipoParametro === 'hotel_piso') {
-            setParam1(hotelesDisponibles[0] || 'Hotel Paraíso');
-            setParam2('1');
-        } else if (atajoSeleccionado.tipoParametro === 'precio') {
-            setParam1(atajoSeleccionado.paramDefault || '1500');
-        } else {
-            setParam1('');
-            setParam2('');
-        }
-    }, [atajoSeleccionado, ciudadesDisponibles, hotelesDisponibles]);
 
     const buildUrl = useCallback((atajo, p1, p2) => {
         let ep = atajo.endpoint;
@@ -364,11 +184,11 @@ export default function ConsultasPage() {
                 headers: token ? { 'Authorization': `Bearer ${token}` } : {}
             });
             if (res.status === 401) {
-                clearAuthSession('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+                clearAuthSession('Tu sesión ha expirado. Inicia sesión nuevamente.');
                 throw new Error('Tu sesión ha expirado.');
             }
             if (!res.ok) {
-                throw new Error(`No se pudo obtener la información (${res.status}: ${res.statusText})`);
+                throw new Error(`No se pudo obtener la información (${res.status})`);
             }
             const data = await res.json();
             setResultado(data);
@@ -380,7 +200,6 @@ export default function ConsultasPage() {
         }
     }, [buildUrl]);
 
-    // Ejecutar consulta inicial
     useEffect(() => {
         ejecutarAtajo(LISTA_ATAJOS[0], '', '');
     }, [ejecutarAtajo]);
@@ -389,143 +208,189 @@ export default function ConsultasPage() {
         setAtajoSeleccionado(a);
         let p1 = '';
         let p2 = '';
-        if (a.tipoParametro === 'ciudad') {
-            p1 = ciudadesDisponibles[0] || 'Cancún';
-        } else if (a.tipoParametro === 'hotel') {
-            p1 = hotelesDisponibles[0] || 'Hotel Paraíso';
-        } else if (a.tipoParametro === 'piso') {
-            p1 = '1';
-        } else if (a.tipoParametro === 'hotel_piso') {
+        if (a.tipoParametro === 'ciudad') p1 = ciudadesDisponibles[0] || 'Cancún';
+        else if (a.tipoParametro === 'hotel') p1 = hotelesDisponibles[0] || 'Hotel Paraíso';
+        else if (a.tipoParametro === 'piso') p1 = '1';
+        else if (a.tipoParametro === 'hotel_piso') {
             p1 = hotelesDisponibles[0] || 'Hotel Paraíso';
             p2 = '1';
-        } else if (a.tipoParametro === 'precio') {
-            p1 = a.paramDefault || '1500';
-        }
+        } else if (a.tipoParametro === 'precio') p1 = a.paramDefault || '1500';
         setParam1(p1);
         setParam2(p2);
         ejecutarAtajo(a, p1, p2);
     };
 
-    const handleActualizarParametros = (e) => {
-        e?.preventDefault();
-        ejecutarAtajo(atajoSeleccionado, param1, param2);
+    const atajosPermitidos = useMemo(
+        () => LISTA_ATAJOS.filter(a => !(isAdmin && a.soloGerente)),
+        [isAdmin]
+    );
+
+    const atajosFiltrados = useMemo(() => {
+        const q = busqueda.trim().toLowerCase();
+        return atajosPermitidos.filter(a => {
+            const matchesCat = categoriaActual === 'TODAS' || a.categoria === categoriaActual;
+            const matchesQuery = !q || a.nombre.toLowerCase().includes(q) || a.descripcion.toLowerCase().includes(q);
+            return matchesCat && matchesQuery;
+        });
+    }, [atajosPermitidos, categoriaActual, busqueda]);
+
+    const exportarResultadoCsv = () => {
+        if (resultado === null || resultado === undefined) return;
+        let rows = [];
+        if (Array.isArray(resultado) && resultado.length > 0) {
+            const cols = obtenerColumnasLimpias(resultado, isAdmin);
+            rows = [
+                cols.map(etiquetaColumna),
+                ...resultado.map(fila => cols.map(c => textoPlanoCelda(c, fila[c], isAdmin)))
+            ];
+        } else if (typeof resultado === 'object') {
+            rows = [
+                ['Concepto', 'Valor'],
+                ...Object.entries(resultado)
+                    .filter(([k]) => !CLAVES_OCULTAS.has(k) && (!isAdmin || !esColumnaMonetaria(k)))
+                    .map(([k, v]) => [etiquetaColumna(k), textoPlanoCelda(k, v, isAdmin)])
+            ];
+        } else {
+            rows = [['Consulta', 'Resultado'], [atajoSeleccionado.nombre, String(resultado)]];
+        }
+
+        const csv = '\uFEFF' + rows
+            .map(r => r.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+            .join('\r\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const slug = atajoSeleccionado.nombre.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `HotelParaiso_Consulta_${slug}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
-    const atajosFiltrados = LISTA_ATAJOS.filter(a => {
-        const matchesCat = categoriaActual === 'TODAS' || a.categoria === categoriaActual;
-        const query = busqueda.trim().toLowerCase();
-        const matchesQuery = !query ? true : a.nombre.toLowerCase().includes(query) || a.descripcion.toLowerCase().includes(query);
-        return matchesCat && matchesQuery;
-    });
-
-    const renderValorCelda = (col, val) => {
-        if (val === null || val === undefined) return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+    const renderValorCelda = (col, val, fila = null) => {
+        if (val === null || val === undefined || val === '') {
+            return <span style={{ color: 'var(--text-muted)' }}>&mdash;</span>;
+        }
         if (typeof val === 'boolean') {
-            return <EstadoBadge estado={val ? 'Activo' : 'Inactivo'} />;
+            return <span className={badgeEstadoClase(val ? 'Activo' : 'Inactivo')}>{val ? 'Activo' : 'Inactivo'}</span>;
         }
         if (col.toLowerCase().includes('estado')) {
-            return <EstadoBadge estado={String(val)} />;
+            return <span className={badgeEstadoClase(val)}>{String(val)}</span>;
+        }
+        if (col === 'numero') {
+            return <span style={{ fontWeight: 700 }}>Hab. {val}</span>;
+        }
+        if (col === 'piso') {
+            return <span style={{ color: 'var(--text-muted)' }}>Piso {val}</span>;
+        }
+        if (col === 'capacidad') {
+            const n = Number(val || 0);
+            return <span className="num">{n} {n === 1 ? 'huésped' : 'huéspedes'}</span>;
+        }
+        if (col === 'telefono' && fila?.email) {
+            return (
+                <div>
+                    <div className="num" style={{ textAlign: 'left', fontWeight: 600 }}>{val}</div>
+                    <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>{fila.email}</div>
+                </div>
+            );
         }
         if (typeof val === 'object') {
             if (val.nombre && val.precioBase !== undefined) {
                 return (
-                    <div className="hotel-cell">
-                        <div className="hotel-name">{val.nombre}</div>
-                        <div className="hotel-city num">${Number(val.precioBase).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN</div>
+                    <div>
+                        <div style={{ fontWeight: 600 }}>{val.nombre}</div>
+                        {!isAdmin && (
+                            <div className="num" style={{ textAlign: 'left', fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+                                ${Number(val.precioBase).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            </div>
+                        )}
                     </div>
                 );
             }
-            if (val.nombre && val.ciudad) {
+            if (val.nombre) {
                 return (
-                    <div className="hotel-cell">
-                        <div className="hotel-name">{val.nombre}</div>
-                        <div className="hotel-city">{val.ciudad}</div>
+                    <div>
+                        <div style={{ fontWeight: 600 }}>{val.nombre}</div>
+                        {val.ciudad && <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>{val.ciudad}</div>}
                     </div>
                 );
             }
             return <span className="num">{JSON.stringify(val)}</span>;
         }
-
-        const isMonetario = typeof val === 'number' && (
-            col.toLowerCase().includes('precio') ||
-            col.toLowerCase().includes('ingreso') ||
-            col.toLowerCase().includes('total') ||
-            !Number.isInteger(val)
-        );
-
-        if (isMonetario) {
-            return <span className="num">${Number(val).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN</span>;
+        if (typeof val === 'number' && esColumnaMonetaria(col)) {
+            return (
+                <span className="num" style={{ fontWeight: 700, color: 'var(--brand-ocean, #16324f)' }}>
+                    ${Number(val).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </span>
+            );
         }
-
         if (typeof val === 'number') {
-            return <span className="num">{val}</span>;
+            return <span className="num" style={{ fontWeight: 700 }}>{val.toLocaleString('es-MX')}</span>;
         }
-
         return String(val);
     };
 
-    const renderResultadosClaros = () => {
+    const conteoResultados = Array.isArray(resultado)
+        ? resultado.length
+        : resultado && typeof resultado === 'object'
+            ? Object.keys(resultado).length
+            : resultado !== null && resultado !== undefined ? 1 : 0;
+
+    const renderResultados = () => {
+        if (cargando) {
+            return (
+                <div className="loading-state" style={{ padding: '2.5rem' }}>
+                    <div className="spinner"></div>
+                    <p>Consultando información...</p>
+                </div>
+            );
+        }
         if (resultado === null || resultado === undefined) return null;
 
-        // Caso 1: Valor escalar simple (conteo o total)
+        // Escalar
         if (typeof resultado !== 'object') {
-            const esMoneda = typeof resultado === 'number' && (
-                !Number.isInteger(resultado) ||
-                atajoSeleccionado.endpoint.includes('precio') ||
-                atajoSeleccionado.endpoint.includes('ingreso')
-            );
-
+            const esMoneda = atajoSeleccionado.unidad === 'MXN';
             return (
-                <div style={{
-                    padding: '2.5rem 1.5rem',
-                    background: '#f8fafc',
-                    borderRadius: '12px',
-                    border: '1px solid #e2e8f0',
-                    textAlign: 'center'
-                }}>
-                    <div style={{
-                        fontSize: '0.76rem',
-                        color: '#64748b',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        marginBottom: '0.5rem'
-                    }}>
-                        Métrica Consolidada
-                    </div>
-                    <div className="num" style={{ fontSize: '2.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                <div className="con-scalar-box">
+                    <div className="con-scalar-label">Resultado Consolidado</div>
+                    <div className="con-scalar-val">
                         {esMoneda
-                            ? `$${Number(resultado).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`
-                            : resultado}
+                            ? `$${Number(resultado).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+                            : Number(resultado).toLocaleString('es-MX')}
+                        {atajoSeleccionado.unidad && (
+                            <span className="con-scalar-unit">{atajoSeleccionado.unidad}</span>
+                        )}
                     </div>
                 </div>
             );
         }
 
-        // Caso 2: Array de objetos
+        // Lista de registros
         if (Array.isArray(resultado)) {
             if (resultado.length === 0) {
                 return (
-                    <div className="empty-state">
-                        <Zap size={40} className="empty-icon" />
-                        <h3>Sin registros encontrados</h3>
-                        <p>No se encontraron resultados para los criterios seleccionados.</p>
+                    <div className="empty-state" style={{ padding: '2.5rem' }}>
+                        <Zap size={36} className="empty-icon" />
+                        <h3>Sin registros</h3>
+                        <p>No hay resultados para los criterios seleccionados.</p>
                     </div>
                 );
             }
 
-            const columnas = Object.keys(resultado[0] || {});
-
+            const columnas = obtenerColumnasLimpias(resultado, isAdmin);
             return (
-                <div className="table-responsive">
-                    <table className="data-table">
+                <div className="con-table-scroll">
+                    <table className="con-table">
                         <thead>
                             <tr>
                                 {columnas.map(col => {
-                                    const esNum = typeof resultado[0][col] === 'number';
+                                    const esNum = typeof resultado[0]?.[col] === 'number' && col !== 'piso' && col !== 'capacidad';
                                     return (
-                                        <th key={col} className={esNum ? 'text-right' : ''}>
-                                            {col.replace(/([A-Z])/g, ' $1').replace('_', ' ')}
+                                        <th key={col} className={esNum ? 'num' : ''}>
+                                            {etiquetaColumna(col)}
                                         </th>
                                     );
                                 })}
@@ -533,12 +398,12 @@ export default function ConsultasPage() {
                         </thead>
                         <tbody>
                             {resultado.map((fila, idx) => (
-                                <tr key={idx} className="table-row">
+                                <tr key={idx}>
                                     {columnas.map(col => {
-                                        const esNum = typeof fila[col] === 'number';
+                                        const esNum = typeof fila[col] === 'number' && col !== 'piso' && col !== 'capacidad';
                                         return (
-                                            <td key={col} className={esNum ? 'text-right' : ''}>
-                                                {renderValorCelda(col, fila[col])}
+                                            <td key={col} className={esNum ? 'num' : ''}>
+                                                {renderValorCelda(col, fila[col], fila)}
                                             </td>
                                         );
                                     })}
@@ -550,24 +415,24 @@ export default function ConsultasPage() {
             );
         }
 
-        // Caso 3: Objeto único (clave-valor)
-        const entries = Object.entries(resultado);
+        // Objeto clave-valor
+        const entries = Object.entries(resultado).filter(
+            ([k]) => !CLAVES_OCULTAS.has(k) && (!isAdmin || !esColumnaMonetaria(k))
+        );
         return (
-            <div className="table-responsive">
-                <table className="data-table">
+            <div className="con-table-scroll">
+                <table className="con-table">
                     <thead>
                         <tr>
-                            <th style={{ width: '35%' }}>Concepto</th>
-                            <th>Información</th>
+                            <th style={{ width: '40%' }}>Concepto</th>
+                            <th className="num">Valor</th>
                         </tr>
                     </thead>
                     <tbody>
                         {entries.map(([campo, valor]) => (
-                            <tr key={campo} className="table-row">
-                                <td style={{ fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>
-                                    {campo.replace(/([A-Z])/g, ' $1').replace('_', ' ')}
-                                </td>
-                                <td>{renderValorCelda(campo, valor)}</td>
+                            <tr key={campo}>
+                                <td style={{ fontWeight: 600 }}>{etiquetaColumna(campo)}</td>
+                                <td className="num">{renderValorCelda(campo, valor)}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -576,257 +441,209 @@ export default function ConsultasPage() {
         );
     };
 
-    return (
-        <div className="page-container">
-            {/* Encabezado Profesional */}
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Atajos y Consultas Rápidas</h1>
-                    <p className="page-description">
-                        Consulta métricas operativas, inventario y resúmenes de la cadena con filtros inmediatos sin configuraciones complejas.
-                    </p>
-                </div>
-            </div>
+    const tabsCategorias = isAdmin
+        ? [
+            { id: 'TODAS', label: 'Todas' },
+            { id: 'Hoteles', label: 'Hoteles' },
+            { id: 'Habitaciones', label: 'Cuartos' }
+        ]
+        : [
+            { id: 'TODAS', label: 'Todas' },
+            { id: 'Hoteles', label: 'Hoteles' },
+            { id: 'Tarifas', label: 'Tarifas' },
+            { id: 'Habitaciones', label: 'Cuartos' }
+        ];
 
-            {/* Layout Principal de 2 Columnas */}
-            <div className="consultas-layout">
-                {/* Columna Izquierda: Listado y Categorías de Atajos */}
-                <div className="table-card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {/* Buscador */}
-                    <div className="search-input-wrapper">
-                        <Search size={16} className="search-icon" />
+    return (
+        <div className="con-view">
+            {/* CABECERA EDITORIAL */}
+            <header className="con-header con-anim-up">
+                <div>
+                    <div className="con-eyebrow">
+                        <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
+                            <circle cx="4" cy="4" r="4" fill="#2d5a43" />
+                        </svg>
+                        <span>Consultas Rápidas</span>
+                        <span className="con-eyebrow-meta">
+                            &middot; {user?.nombre || 'Don Roberto'}
+                        </span>
+                    </div>
+                    <h1 className="con-title">Consultas SQL</h1>
+                </div>
+            </header>
+
+            <div className="con-layout con-anim-up con-delay-1">
+                {/* PANEL IZQUIERDO: CATÁLOGO */}
+                <aside className="con-sidebar">
+                    <div className="con-search-box">
+                        <Search size={14} />
                         <input
                             type="text"
-                            placeholder="Buscar consulta o atajo..."
+                            className="con-search-input"
+                            placeholder="Buscar consulta..."
                             value={busqueda}
-                            onChange={e => setBusqueda(e.target.value)}
-                            className="search-input"
+                            onChange={(e) => setBusqueda(e.target.value)}
+                            aria-label="Buscar consulta"
                         />
                     </div>
 
-                    {/* Filtro por Categoría */}
-                    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                        {[
-                            { id: 'TODAS', label: 'Todos' },
-                            { id: 'Hoteles', label: 'Hoteles' },
-                            { id: 'Tarifas', label: 'Tarifas' },
-                            { id: 'Habitaciones', label: 'Habitaciones' }
-                        ].map(cat => (
+                    <div className={`con-cat-tabs ${tabsCategorias.length === 3 ? 'is-three' : ''}`} role="tablist">
+                        {tabsCategorias.map(tab => (
                             <button
-                                key={cat.id}
+                                key={tab.id}
                                 type="button"
-                                onClick={() => setCategoriaActual(cat.id)}
-                                className={`btn ${categoriaActual === cat.id ? 'btn-primary' : 'btn-secondary'}`}
-                                style={{
-                                    height: '28px',
-                                    minHeight: '28px',
-                                    padding: '0 0.65rem',
-                                    fontSize: '0.75rem'
-                                }}
+                                role="tab"
+                                aria-selected={categoriaActual === tab.id}
+                                className={`con-cat-tab ${categoriaActual === tab.id ? 'is-active' : ''}`}
+                                onClick={() => setCategoriaActual(tab.id)}
                             >
-                                {cat.label}
+                                {tab.label}
                             </button>
                         ))}
                     </div>
 
-                    {/* Contador */}
-                    <div className="table-counter">
-                        {atajosFiltrados.length} {atajosFiltrados.length === 1 ? 'consulta disponible' : 'consultas disponibles'}
+                    <div className="con-list-meta">
+                        {atajosFiltrados.length} {atajosFiltrados.length === 1 ? 'consulta' : 'consultas'}
                     </div>
 
-                    {/* Lista Scrolleable de Atajos */}
-                    <div className="consulta-list">
-                        {atajosFiltrados.length === 0 ? (
-                            <div className="empty-state" style={{ padding: '2rem 1rem' }}>
-                                <Zap size={32} className="empty-icon" />
-                                <p style={{ fontSize: '0.8rem' }}>Sin coincidencias</p>
-                            </div>
-                        ) : (
-                            atajosFiltrados.map(a => {
-                                const isActivo = atajoSeleccionado.id === a.id;
-                                return (
-                                    <button
-                                        key={a.id}
-                                        type="button"
-                                        onClick={() => seleccionarAtajo(a)}
-                                        className={`consulta-card-btn ${isActivo ? 'is-active' : ''}`}
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                                            <span className="consulta-tag">{a.categoria}</span>
-                                            {a.destacada && <Sparkles size={12} style={{ color: '#d97706' }} />}
-                                        </div>
-                                        <div className="consulta-title">{a.nombre}</div>
-                                    </button>
-                                );
-                            })
-                        )}
+                    <div className="con-list">
+                        {atajosFiltrados.map(a => {
+                            const activo = atajoSeleccionado?.id === a.id;
+                            return (
+                                <button
+                                    key={a.id}
+                                    type="button"
+                                    className={`con-item ${activo ? 'is-active' : ''}`}
+                                    onClick={() => seleccionarAtajo(a)}
+                                >
+                                    <div className="con-item-title">{a.nombre}</div>
+                                    <div className="con-item-cat">{a.categoria}</div>
+                                </button>
+                            );
+                        })}
                     </div>
-                </div>
+                </aside>
 
-                {/* Columna Derecha: Panel de Parámetros y Visualización de Resultados */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {/* Ficha del Atajo Seleccionado */}
-                    <div className="content-card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                            <span className="floor-badge" style={{ fontSize: '0.72rem', color: 'var(--brand-terracotta, #b45309)', fontWeight: 700 }}>
-                                {atajoSeleccionado.categoria}
-                            </span>
+                {/* PANEL DERECHO: RESULTADOS */}
+                <section className="con-main">
+                    {error && (
+                        <div className="alert alert-error">
+                            <AlertCircle size={16} />
+                            <span>{error}</span>
                         </div>
-                        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 0.35rem 0' }}>
-                            {atajoSeleccionado.nombre}
-                        </h2>
-                        <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                            {atajoSeleccionado.descripcion}
-                        </p>
+                    )}
 
-                        {/* Parámetros Inteligentes con Selects (sin escribir manual) */}
+                    <div className="con-card">
+                        <div className="con-card-header">
+                            <div>
+                                <div className="con-cat-pill">{atajoSeleccionado.categoria}</div>
+                                <h2 className="con-query-title">{atajoSeleccionado.nombre}</h2>
+                                <p className="con-query-desc">{atajoSeleccionado.descripcion}</p>
+                            </div>
+
+                            <div className="con-toolbar">
+                                {!cargando && resultado !== null && (
+                                    <span className="con-count-pill">
+                                        {conteoResultados} {conteoResultados === 1 ? 'registro' : 'registros'}
+                                    </span>
+                                )}
+                                <button
+                                    type="button"
+                                    className="con-btn-csv"
+                                    onClick={exportarResultadoCsv}
+                                    disabled={cargando || resultado === null}
+                                    title="Descargar resultado en CSV para Excel"
+                                >
+                                    <FileSpreadsheet size={13} style={{ color: '#2d5a43' }} />
+                                    <span>CSV</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className="con-icon-btn"
+                                    onClick={() => ejecutarAtajo(atajoSeleccionado, param1, param2)}
+                                    disabled={cargando}
+                                    title="Volver a consultar"
+                                    aria-label="Volver a consultar"
+                                >
+                                    <RefreshCw size={14} className={cargando ? 'con-spin' : ''} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Parámetros inline si la consulta los requiere */}
                         {atajoSeleccionado.tipoParametro && (
-                            <form onSubmit={handleActualizarParametros} style={{
-                                marginTop: '1rem',
-                                background: '#f8fafc',
-                                padding: '0.85rem 1rem',
-                                borderRadius: '8px',
-                                border: '1px solid #e2e8f0'
-                            }}>
-                                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                                    {/* Opción Ciudad */}
-                                    {atajoSeleccionado.tipoParametro === 'ciudad' && (
-                                        <div style={{ flex: 1, minWidth: '200px' }}>
-                                            <label className="form-label">Selecciona la Ciudad</label>
-                                            <select
-                                                className="form-select"
-                                                value={param1}
-                                                onChange={e => setParam1(e.target.value)}
-                                            >
-                                                {ciudadesDisponibles.map(c => (
-                                                    <option key={c} value={c}>{c}</option>
-                                                ))}
+                            <form
+                                className="con-params-bar"
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    ejecutarAtajo(atajoSeleccionado, param1, param2);
+                                }}
+                            >
+                                {atajoSeleccionado.tipoParametro === 'ciudad' && (
+                                    <label className="con-param-group">
+                                        <span>Ciudad:</span>
+                                        <select className="con-param-select" value={param1} onChange={(e) => setParam1(e.target.value)}>
+                                            {ciudadesDisponibles.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </label>
+                                )}
+
+                                {atajoSeleccionado.tipoParametro === 'hotel' && (
+                                    <label className="con-param-group">
+                                        <span>Propiedad:</span>
+                                        <select className="con-param-select" value={param1} onChange={(e) => setParam1(e.target.value)}>
+                                            {hotelesDisponibles.map(h => <option key={h} value={h}>{h}</option>)}
+                                        </select>
+                                    </label>
+                                )}
+
+                                {atajoSeleccionado.tipoParametro === 'piso' && (
+                                    <label className="con-param-group">
+                                        <span>Piso:</span>
+                                        <select className="con-param-select" value={param1} onChange={(e) => setParam1(e.target.value)}>
+                                            {pisosDisponibles.map(p => <option key={p} value={String(p)}>Piso {p}</option>)}
+                                        </select>
+                                    </label>
+                                )}
+
+                                {atajoSeleccionado.tipoParametro === 'hotel_piso' && (
+                                    <>
+                                        <label className="con-param-group">
+                                            <span>Propiedad:</span>
+                                            <select className="con-param-select" value={param1} onChange={(e) => setParam1(e.target.value)}>
+                                                {hotelesDisponibles.map(h => <option key={h} value={h}>{h}</option>)}
                                             </select>
-                                        </div>
-                                    )}
-
-                                    {/* Opción Hotel */}
-                                    {atajoSeleccionado.tipoParametro === 'hotel' && (
-                                        <div style={{ flex: 1, minWidth: '220px' }}>
-                                            <label className="form-label">Selecciona el Hotel</label>
-                                            <select
-                                                className="form-select"
-                                                value={param1}
-                                                onChange={e => setParam1(e.target.value)}
-                                            >
-                                                {hotelesDisponibles.map(h => (
-                                                    <option key={h} value={h}>{h}</option>
-                                                ))}
+                                        </label>
+                                        <label className="con-param-group">
+                                            <span>Piso:</span>
+                                            <select className="con-param-select" value={param2} onChange={(e) => setParam2(e.target.value)}>
+                                                {pisosDisponibles.map(p => <option key={p} value={String(p)}>Piso {p}</option>)}
                                             </select>
-                                        </div>
-                                    )}
+                                        </label>
+                                    </>
+                                )}
 
-                                    {/* Opción Piso */}
-                                    {atajoSeleccionado.tipoParametro === 'piso' && (
-                                        <div style={{ flex: 1, minWidth: '160px' }}>
-                                            <label className="form-label">Selecciona el Nivel / Piso</label>
-                                            <select
-                                                className="form-select"
-                                                value={param1}
-                                                onChange={e => setParam1(e.target.value)}
-                                            >
-                                                {pisosDisponibles.map(p => (
-                                                    <option key={p} value={p}>Piso {p}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    )}
+                                {atajoSeleccionado.tipoParametro === 'precio' && (
+                                    <label className="con-param-group">
+                                        <span>Monto ($ MXN):</span>
+                                        <select className="con-param-select" value={param1} onChange={(e) => setParam1(e.target.value)}>
+                                            {preciosSugeridos.map(pr => (
+                                                <option key={pr} value={pr}>${Number(pr).toLocaleString('es-MX')}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                )}
 
-                                    {/* Opción Hotel + Piso */}
-                                    {atajoSeleccionado.tipoParametro === 'hotel_piso' && (
-                                        <>
-                                            <div style={{ flex: 1, minWidth: '180px' }}>
-                                                <label className="form-label">Hotel</label>
-                                                <select
-                                                    className="form-select"
-                                                    value={param1}
-                                                    onChange={e => setParam1(e.target.value)}
-                                                >
-                                                    {hotelesDisponibles.map(h => (
-                                                        <option key={h} value={h}>{h}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div style={{ width: '130px' }}>
-                                                <label className="form-label">Piso</label>
-                                                <select
-                                                    className="form-select"
-                                                    value={param2}
-                                                    onChange={e => setParam2(e.target.value)}
-                                                >
-                                                    {pisosDisponibles.map(p => (
-                                                        <option key={p} value={p}>Piso {p}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* Opción Precio */}
-                                    {atajoSeleccionado.tipoParametro === 'precio' && (
-                                        <div style={{ flex: 1, minWidth: '200px' }}>
-                                            <label className="form-label">Monto límite ($ MXN)</label>
-                                            <select
-                                                className="form-select"
-                                                value={param1}
-                                                onChange={e => setParam1(e.target.value)}
-                                            >
-                                                {preciosSugeridos.map(pr => (
-                                                    <option key={pr} value={pr}>${Number(pr).toLocaleString('es-MX')} MXN</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    <button
-                                        type="submit"
-                                        className="btn btn-primary"
-                                        disabled={cargando}
-                                        style={{ height: '38px', minWidth: '110px' }}
-                                    >
-                                        <RefreshCw size={14} className={cargando ? 'spin-animation' : ''} />
-                                        <span>{cargando ? 'Obteniendo...' : 'Obtener'}</span>
-                                    </button>
-                                </div>
+                                <button type="submit" className="con-run-btn" disabled={cargando}>
+                                    <Play size={12} />
+                                    <span>Consultar</span>
+                                </button>
                             </form>
                         )}
+
+                        {renderResultados()}
                     </div>
-
-                    {/* Resultados Visuales en Tabla */}
-                    <div className="table-card" style={{ minHeight: '340px' }}>
-                        <div className="table-header-info">
-                            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                                Información Obtenida
-                            </span>
-                        </div>
-
-                        {error && (
-                            <div className="alert alert-error" style={{ margin: '1rem' }}>
-                                <AlertCircle size={18} />
-                                <div><strong>Aviso:</strong> {error}</div>
-                            </div>
-                        )}
-
-                        {cargando ? (
-                            <div className="loading-state" style={{ padding: '3.5rem 1rem' }}>
-                                <div className="spinner"></div>
-                                <p>Obteniendo información del hotel...</p>
-                            </div>
-                        ) : resultado === null ? (
-                            <div className="empty-state" style={{ padding: '3.5rem 1rem' }}>
-                                <Zap size={40} className="empty-icon" />
-                                <p>Selecciona un atajo de la lista para ver su información.</p>
-                            </div>
-                        ) : (
-                            renderResultadosClaros()
-                        )}
-                    </div>
-                </div>
+                </section>
             </div>
         </div>
     );
