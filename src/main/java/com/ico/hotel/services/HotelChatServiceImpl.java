@@ -17,6 +17,10 @@ import com.ico.hotel.tools.TipoHabitacionTool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.MessageType;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -46,6 +50,7 @@ public class HotelChatServiceImpl implements HotelChatService {
     private final DashboardService dashboardService;
     private final UsuarioRepository usuarioRepository;
     private final ReservaRepository reservaRepository;
+    private final ChatMemory chatMemory;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private CustomUserDetails obtenerUsuarioActual() {
@@ -119,19 +124,100 @@ public class HotelChatServiceImpl implements HotelChatService {
                     .map(h -> h.getNombre() + " (" + h.getCiudad() + ")")
                     .reduce((a, b) -> a + ", " + b)
                     .orElse("Hotel Paraíso");
-            var cats = tipoHabitacionTool.consultarCatalogoCategoriasHabitacion();
-            String resumenCats = cats.stream()
-                    .map(c -> c.get("categoria") + " (" + c.get("capacidad") + (ocultarPrecios ? ")" : ", " + c.get("precioBasePorNoche") + ")"))
-                    .reduce((a, b) -> a + "; " + b)
-                    .orElse("");
+            habitacionSearchTool.resetCallTracker();
+            Map<String, List<String>> porHotel = new LinkedHashMap<>();
+            for (Map<String, Object> r : habitacionSearchTool.findHabitacionesPorHotel(null)) {
+                if (r.get("hotel") == null) continue;
+                String tipo = String.valueOf(r.get("tipo"));
+                String item = ocultarPrecios ? tipo : tipo + " " + fmtMoneda(r.get("precioBase"));
+                List<String> l = porHotel.computeIfAbsent(String.valueOf(r.get("hotel")), k -> new ArrayList<>());
+                if (!l.contains(item)) l.add(item);
+            }
+            habitacionSearchTool.resetCallTracker();
+            StringBuilder inv = new StringBuilder();
+            porHotel.forEach((h, l) -> inv.append(h).append(" SOLO tiene: ").append(String.join(", ", l)).append(". "));
+            String resumenCats = inv.toString().trim();
             return "[DATOS ACTUALES DE LA CADENA: Hoteles activos: " + nombresHoteles +
-                   ". Categorías: " + resumenCats +
+                   ". INVENTARIO REAL (cada hotel solo ofrece lo listado, NUNCA cruces hoteles con categorías): " + resumenCats +
                    ". Check-in: 15:00 hrs, Check-out: 12:00 hrs. Anticipo obligatorio: 50%. Vigencia pre-reserva: 24-48 hrs. " +
                    "Cancelación: >72h = 100% reembolso, 48-72h = 50% reembolso, <48h = 0% reembolso. No-Show: 22:00 hrs. " +
                    "Responde directo al usuario en español sin usar encabezados como 'Respuesta al usuario:'.]";
         } catch (Exception e) {
             return "";
         }
+    }
+
+    /** Contexto SOLO para el mensaje de sistema (no se guarda en la memoria de chat). */
+    private String construirContextoSistema(CustomUserDetails user, String hotelEnContexto) {
+        String s = construirContextoSeguridadPrompt(user, "\u0000");
+        int i = s.indexOf("\n\nPregunta");
+        if (i > 0) s = s.substring(0, i);
+        if (hotelEnContexto != null) {
+            s += "\nHOTEL ACTIVO EN LA CONVERSACIÓN: " + hotelEnContexto +
+                 ". Si el usuario pide habitaciones, precios o disponibilidad sin nombrar hotel, se refiere a este hotel.";
+        }
+        return s;
+    }
+
+    private void guardarTurnoEnMemoria(String convId, String userText, String botText) {
+        try {
+            chatMemory.add(convId, List.of(new UserMessage(userText), new AssistantMessage(botText)));
+        } catch (Exception e) {
+            log.warn("No se pudo guardar turno en memoria: {}", e.getMessage());
+        }
+    }
+
+    private String detectarHotelEnTexto(String norm) {
+        if (norm == null) return null;
+        if (norm.contains("ejecutivo") || norm.contains("ciudad de mexico") || norm.contains("cdmx")) return "Hotel Paraíso Ejecutivo";
+        if (norm.contains("uaem") || norm.contains("atlacomulco")) return "Hotel UAEM";
+        if (norm.contains("arcos") || norm.contains("guadalajara")) return "Hotel Los Arcos";
+        if (norm.contains("costa azul") || norm.contains("acapulco")) return "Hotel Costa Azul";
+        if (norm.contains("cancun") || norm.contains("paraiso")) return "Hotel Paraíso";
+        return null;
+    }
+
+    private String resolverHotelEnContexto(String prompt, String convId) {
+        String norm = normalizarTexto(prompt);
+        if (norm.contains("todos los hoteles") || norm.contains("toda la cadena") || norm.contains("ambos")) return null;
+        String h = detectarHotelEnTexto(norm);
+        if (h != null) return h;
+        try {
+            List<Message> hist = chatMemory.get(convId);
+            for (int i = hist.size() - 1; i >= 0; i--) {
+                Message m = hist.get(i);
+                if (m.getMessageType() != MessageType.USER) continue;
+                String t = normalizarTexto(m.getText());
+                if (t.contains("todos los hoteles") || t.contains("toda la cadena")) return null;
+                String d = detectarHotelEnTexto(t);
+                if (d != null) return d;
+            }
+        } catch (Exception e) {
+            log.warn("No se pudo leer memoria: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private String tablaHabitacionesHotel(String hotel, boolean esAdmin, String intro) {
+        habitacionSearchTool.resetCallTracker();
+        List<Map<String, Object>> rooms = habitacionSearchTool.findHabitacionesPorHotel(hotel);
+        habitacionSearchTool.resetCallTracker();
+        rooms = rooms.stream().filter(r -> r.get("numero") != null).toList();
+        String nombre = rooms.isEmpty() ? hotel : String.valueOf(rooms.get(0).get("hotel"));
+        String ciudad = rooms.isEmpty() ? "" : String.valueOf(rooms.get(0).get("ciudad"));
+        StringBuilder sb = new StringBuilder(intro).append("\n\n");
+        if (rooms.isEmpty()) {
+            return sb.append("Por el momento **").append(nombre).append("** no tiene habitaciones disponibles para mostrar.").toString();
+        }
+        sb.append("### ").append(nombre).append(" · ").append(ciudad).append("\n\n");
+        sb.append(esAdmin ? "| Habitación | Piso | Categoría | Estado |\n| :---: | :---: | :--- | :---: |\n"
+                          : "| Habitación | Piso | Categoría | Tarifa / Noche | Estado |\n| :---: | :---: | :--- | ---: | :---: |\n");
+        for (Map<String, Object> r : rooms) {
+            sb.append("| #").append(r.get("numero")).append(" | ").append(r.get("piso")).append(" | ").append(r.get("tipo"));
+            if (!esAdmin) sb.append(" | **").append(fmtMoneda(r.get("precioBase"))).append("**");
+            sb.append(" | ").append(r.get("estado")).append(" |\n");
+        }
+        return sb.append("\n¿Desea cotizar o apartar una de estas habitaciones? Indíqueme fechas de entrada y salida.").toString();
     }
 
     private String aislarConversationIdPorUsuario(CustomUserDetails user, String conversationId) {
@@ -259,7 +345,7 @@ public class HotelChatServiceImpl implements HotelChatService {
      * usuarios registrados, reservaciones, políticas oficiales e inventario operativo.
      */
     @SuppressWarnings("unchecked")
-    private String resolverConsultaDirecta(String prompt, CustomUserDetails user) {
+    private String resolverConsultaDirecta(String prompt, CustomUserDetails user, String scopedConvId) {
         if (prompt == null || prompt.isBlank()) return null;
         String norm = normalizarTexto(prompt);
         Rol rol = user != null ? user.getRol() : null;
@@ -772,6 +858,62 @@ public class HotelChatServiceImpl implements HotelChatService {
 
         // 4. CONSULTAS DE INVENTARIO, HABITACIONES Y RESERVACIONES
 
+        // 4-PRE. Flujos conversacionales con memoria de hotel/ciudad
+        boolean temaOtro = norm.contains("mantenimiento") || norm.contains("ocupada") || norm.contains("planta baja")
+                || norm.contains("4 personas") || norm.contains("mas cara") || norm.contains("categoria")
+                || norm.contains("tipos de") || norm.contains("cotiz") || norm.contains("reserv")
+                || norm.contains("pre reserva") || norm.contains("piso ");
+        if (!temaOtro) {
+            // Lista de hoteles disponibles
+            if (norm.contains("hoteles disponibles") || norm.contains("que hoteles hay") || norm.contains("hoteles tienen")) {
+                habitacionSearchTool.resetCallTracker();
+                List<Map<String, Object>> todas = habitacionSearchTool.findHabitacionesPorHotel(null);
+                habitacionSearchTool.resetCallTracker();
+                StringBuilder sb = new StringBuilder("### Hoteles de la cadena\n\n");
+                sb.append(esAdmin ? "| Propiedad | Ciudad | Habitaciones disponibles |\n| :--- | :--- | :---: |\n"
+                                  : "| Propiedad | Ciudad | Habitaciones disponibles | Desde / Noche |\n| :--- | :--- | :---: | ---: |\n");
+                for (Hotel h : hotelSearchTool.getHotelesActivos()) {
+                    List<Map<String, Object>> hs = todas.stream()
+                            .filter(r -> h.getNombre().equals(String.valueOf(r.get("hotel")))
+                                    && "Disponible".equalsIgnoreCase(String.valueOf(r.get("estado")))).toList();
+                    double min = hs.stream().filter(r -> r.get("precioBase") instanceof Number)
+                            .mapToDouble(r -> ((Number) r.get("precioBase")).doubleValue()).min().orElse(0);
+                    sb.append("| **").append(h.getNombre()).append("** | ").append(h.getCiudad()).append(" | ").append(hs.size());
+                    if (!esAdmin) sb.append(" | ").append(hs.isEmpty() ? "—" : fmtMoneda(min));
+                    sb.append(" |\n");
+                }
+                return sb.append("\n¿En qué ciudad o hotel desea hospedarse?").toString();
+            }
+            // El usuario elige hotel/ciudad
+            String hotelPrompt = detectarHotelEnTexto(norm);
+            boolean eligeHotel = hotelPrompt != null && (norm.contains("hospedar") || norm.contains("alojar")
+                    || norm.contains("quedar") || norm.contains("busco") || norm.startsWith("en ")
+                    || norm.contains("quiero ir") || norm.contains("hotel en") || norm.contains("habitaciones en")
+                    || norm.contains("habitaciones del") || norm.contains("habitaciones de "));
+            if (eligeHotel) {
+                return tablaHabitacionesHotel(hotelPrompt, esAdmin,
+                        "Con gusto. Estas son las habitaciones de **" + hotelPrompt + "**:");
+            }
+            // Pide habitaciones sin nombrar hotel: usar memoria
+            boolean pideHabs = (norm.contains("habitacion") || norm.contains("cuarto"))
+                    && (norm.contains("muestra") || norm.contains("mostrar") || norm.startsWith("ver ") || norm.contains("dame")
+                    || norm.contains("cuales") || norm.contains("que habitaciones") || norm.contains("tienen")
+                    || norm.contains("disponibles"));
+            if (pideHabs) {
+                String ctx = resolverHotelEnContexto(prompt, scopedConvId);
+                if (ctx != null) {
+                    return tablaHabitacionesHotel(ctx, esAdmin, "Estas son las habitaciones de **" + ctx + "**:");
+                }
+                if (!norm.contains("disponibles")) {
+                    StringBuilder sb = new StringBuilder("¿De cuál hotel desea ver las habitaciones?\n\n");
+                    for (Hotel h : hotelSearchTool.getHotelesActivos()) {
+                        sb.append("- **").append(h.getNombre()).append("** (").append(h.getCiudad()).append(")\n");
+                    }
+                    return sb.toString();
+                }
+            }
+        }
+
         // 4A. Total de habitaciones por cada hotel
         if ((norm.contains("cuantas habitaciones") || norm.contains("total de habitaciones") || norm.contains("total por hotel"))
                 && (norm.contains("cada hotel") || norm.contains("por hotel") || norm.contains("cadena"))) {
@@ -1164,7 +1306,9 @@ public class HotelChatServiceImpl implements HotelChatService {
                 scopedConvId);
 
         if (isGreetingOrIntro(prompt)) {
-            return obtenerSaludoPorRol(currentUser);
+            String saludo = obtenerSaludoPorRol(currentUser);
+            guardarTurnoEnMemoria(scopedConvId, prompt, saludo);
+            return saludo;
         }
 
         habitacionSearchTool.resetCallTracker();
@@ -1172,16 +1316,19 @@ public class HotelChatServiceImpl implements HotelChatService {
         HabitacionSearchTool.CURRENT_AUTH_USER.set(currentUser);
         try {
             // 1. Resolución determinística instantánea (<25ms)
-            String respuestaDirecta = resolverConsultaDirecta(prompt, currentUser);
+            String respuestaDirecta = resolverConsultaDirecta(prompt, currentUser, scopedConvId);
             if (respuestaDirecta != null) {
                 log.info("Hotel Chat resuelto vía Fast-Track determinístico para rol={}", currentUser != null ? currentUser.getRol() : "NONE");
+                guardarTurnoEnMemoria(scopedConvId, prompt, respuestaDirecta);
                 return respuestaDirecta;
             }
 
-            // 2. Consulta abierta al LLM
-            String enrichedPrompt = construirContextoSeguridadPrompt(currentUser, prompt);
+            // 2. Consulta abierta al LLM (contexto en system; memoria queda limpia)
+            String sysCtx = construirContextoSistema(currentUser, resolverHotelEnContexto(prompt, scopedConvId));
             var chatResponse = clientResolver.resolve(model)
-                    .prompt(enrichedPrompt)
+                    .prompt()
+                    .system(sysCtx)
+                    .user(prompt)
                     .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, scopedConvId))
                     .call()
                     .chatResponse();
@@ -1219,22 +1366,34 @@ public class HotelChatServiceImpl implements HotelChatService {
                 scopedConvId);
 
         if (isGreetingOrIntro(prompt)) {
-            return Flux.just(obtenerSaludoPorRol(currentUser));
+            String saludo = obtenerSaludoPorRol(currentUser);
+            guardarTurnoEnMemoria(scopedConvId, prompt, saludo);
+            return Flux.just(saludo);
         }
 
         HabitacionSearchTool.CURRENT_USER_PROMPT.set(prompt);
         HabitacionSearchTool.CURRENT_AUTH_USER.set(currentUser);
-        String respuestaDirecta = resolverConsultaDirecta(prompt, currentUser);
+        String respuestaDirecta;
+        try {
+            respuestaDirecta = resolverConsultaDirecta(prompt, currentUser, scopedConvId);
+        } catch (Exception e) {
+            HabitacionSearchTool.CURRENT_USER_PROMPT.remove();
+            HabitacionSearchTool.CURRENT_AUTH_USER.remove();
+            return Flux.just(obtenerMensajeErrorAmigable(model, e));
+        }
         if (respuestaDirecta != null) {
             HabitacionSearchTool.CURRENT_USER_PROMPT.remove();
             HabitacionSearchTool.CURRENT_AUTH_USER.remove();
+            guardarTurnoEnMemoria(scopedConvId, prompt, respuestaDirecta);
             return Flux.just(respuestaDirecta);
         }
 
         try {
-            String enrichedPrompt = construirContextoSeguridadPrompt(currentUser, prompt);
+            String sysCtx = construirContextoSistema(currentUser, resolverHotelEnContexto(prompt, scopedConvId));
             return clientResolver.resolve(model)
-                    .prompt(enrichedPrompt)
+                    .prompt()
+                    .system(sysCtx)
+                    .user(prompt)
                     .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, scopedConvId))
                     .stream()
                     .content()
