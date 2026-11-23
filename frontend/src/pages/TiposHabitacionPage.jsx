@@ -20,7 +20,7 @@ function formatoMoneda(valor) {
 }
 
 export default function TiposHabitacionPage() {
-    const { user, isAdmin, navigate } = useAuth();
+    const { user, navigate } = useAuth();
 
     const [tipos, setTipos] = useState([]);
     const [habitaciones, setHabitaciones] = useState([]);
@@ -133,7 +133,7 @@ export default function TiposHabitacionPage() {
             mostrarMensaje('error', 'La capacidad debe ser mayor a cero.');
             return;
         }
-        if (!isAdmin && formTipo.precioBase < 0) {
+        if (formTipo.precioBase < 0) {
             mostrarMensaje('error', 'La tarifa base no puede ser negativa.');
             return;
         }
@@ -141,7 +141,7 @@ export default function TiposHabitacionPage() {
         try {
             const payload = {
                 ...formTipo,
-                precioBase: isAdmin && tipoAEditar ? (tipoAEditar.precioBase || 0) : formTipo.precioBase
+                precioBase: formTipo.precioBase
             };
             if (tipoAEditar) {
                 await actualizarTipoHabitacion(tipoAEditar.idTipo, payload);
@@ -195,7 +195,7 @@ export default function TiposHabitacionPage() {
                 t.nombre?.toLowerCase().includes(q) ||
                 t.descripcion?.toLowerCase().includes(q) ||
                 String(t.capacidad).includes(q) ||
-                (!isAdmin && String(t.precioBase).includes(q));
+                String(t.precioBase).includes(q);
             return coincideCap && coincideBusqueda;
         });
 
@@ -212,7 +212,7 @@ export default function TiposHabitacionPage() {
             }
             return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es') * mult;
         });
-    }, [tipos, filtroCapacidad, busqueda, isAdmin, orden, conteoPorTipo]);
+    }, [tipos, filtroCapacidad, busqueda, orden, conteoPorTipo]);
 
     const hayFiltros = Boolean(filtroCapacidad !== 'TODOS' || busqueda.trim());
 
@@ -300,7 +300,7 @@ export default function TiposHabitacionPage() {
                         <input
                             type="text"
                             className="cat-search-input"
-                            placeholder={isAdmin ? 'Buscar categoría o descripción...' : 'Buscar categoría, descripción o tarifa...'}
+                            placeholder="Buscar categoría, descripción o tarifa..."
                             value={busqueda}
                             onChange={(e) => setBusqueda(e.target.value)}
                             aria-label="Buscar categorías"
@@ -380,7 +380,6 @@ export default function TiposHabitacionPage() {
                                             <ArrowUpDown size={11} />
                                         </button>
                                     </th>
-                                    {!isAdmin && (
                                         <th className="num">
                                             <button
                                                 type="button"
@@ -391,7 +390,6 @@ export default function TiposHabitacionPage() {
                                                 <ArrowUpDown size={11} />
                                             </button>
                                         </th>
-                                    )}
                                     <th className="num">Acción</th>
                                 </tr>
                             </thead>
@@ -426,11 +424,9 @@ export default function TiposHabitacionPage() {
                                                 </button>
                                             </td>
 
-                                            {!isAdmin && (
                                                 <td className="num" style={{ fontWeight: 700, color: 'var(--brand-ocean, #16324f)' }}>
                                                     {formatoMoneda(t.precioBase)}
                                                 </td>
-                                            )}
 
                                             <td className="num">
                                                 <div className="cat-action-cell">
@@ -524,7 +520,7 @@ export default function TiposHabitacionPage() {
                         />
                     </div>
 
-                    <div className={isAdmin ? '' : 'form-grid'}>
+                    <div className="form-grid">
                         <div className="form-group">
                             <label className="form-label">Capacidad (huéspedes) *</label>
                             <input
@@ -537,7 +533,6 @@ export default function TiposHabitacionPage() {
                             />
                         </div>
 
-                        {!isAdmin && (
                             <div className="form-group">
                                 <label className="form-label">Tarifa base ($ MXN / noche) *</label>
                                 <input
@@ -550,7 +545,6 @@ export default function TiposHabitacionPage() {
                                     className="form-input num"
                                 />
                             </div>
-                        )}
                     </div>
 
                     <div className="form-group">

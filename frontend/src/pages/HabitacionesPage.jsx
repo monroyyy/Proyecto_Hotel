@@ -510,7 +510,6 @@ export default function HabitacionesPage() {
                                     </th>
                                     <th>Propiedad</th>
                                     <th>Categoría</th>
-                                    {!isAdmin && (
                                         <th className="num">
                                             <button
                                                 type="button"
@@ -521,7 +520,6 @@ export default function HabitacionesPage() {
                                                 <ArrowUpDown size={11} />
                                             </button>
                                         </th>
-                                    )}
                                     <th>
                                         <button
                                             type="button"
@@ -567,11 +565,9 @@ export default function HabitacionesPage() {
                                                 </div>
                                             </td>
 
-                                            {!isAdmin && (
                                                 <td className="num" style={{ fontWeight: 700, color: 'var(--brand-ocean, #16324f)' }}>
                                                     {formatoMoneda(tipo?.precioBase)}
                                                 </td>
-                                            )}
 
                                             <td>
                                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -707,7 +703,7 @@ export default function HabitacionesPage() {
                         maxWidth="600px"
                     >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                            <div className="hab-detail-grid" style={isAdmin ? { gridTemplateColumns: 'repeat(3, 1fr)' } : undefined}>
+                            <div className="hab-detail-grid">
                                 <div className="hab-detail-card">
                                     <span className="hab-detail-label">Propiedad</span>
                                     <span className="hab-detail-val">{habitacionDetalle.hotel?.nombre || 'No asignada'}</span>
@@ -725,7 +721,6 @@ export default function HabitacionesPage() {
                                     <span className="hab-detail-val">Piso {habitacionDetalle.piso}</span>
                                     <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Hab. #{habitacionDetalle.numero}</span>
                                 </div>
-                                {!isAdmin && (
                                     <div className="hab-detail-card">
                                         <span className="hab-detail-label">Tarifa por Noche</span>
                                         <span className="hab-detail-val num" style={{ color: '#16324f' }}>
@@ -733,7 +728,6 @@ export default function HabitacionesPage() {
                                         </span>
                                         <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Tarifa base MXN</span>
                                     </div>
-                                )}
                             </div>
 
                             {habitacionDetalle.estado === 'Ocupada' && habitacionDetalle.fechaOcupacionFin ? (
