@@ -86,10 +86,8 @@ export function AuthProvider({ children }) {
         let rutaDestino = '/portal-huesped';
         if (res.usuario?.rol === 'GERENTE') {
             rutaDestino = '/dashboard';
-        } else if (res.usuario?.rol === 'RECEPCIONISTA') {
+        } else if (res.usuario?.rol === 'RECEPCIONISTA' || res.usuario?.rol === 'ADMINISTRADOR') {
             rutaDestino = '/reservas';
-        } else if (res.usuario?.rol === 'ADMINISTRADOR') {
-            rutaDestino = '/dashboard';
         }
         navigate(rutaDestino, true);
         return res;

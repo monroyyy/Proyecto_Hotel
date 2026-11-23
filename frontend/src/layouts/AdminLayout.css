@@ -1,0 +1,356 @@
+/* ============================================================================
+ * AdminLayout — Cabecera Océano Ejecutiva + Subbarra Editorial Agrupada
+ * Fusión Opción 1 (separadores de dominio + chip de rol + píldora activa)
+ * y Opción 3 (franja superior #16324f + subbarra clara con indicador inferior)
+ * ============================================================================ */
+
+.admin-navbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    width: 100%;
+    height: auto !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border-bottom: none !important;
+    box-shadow: 0 4px 16px -6px rgba(15, 23, 42, 0.12);
+}
+
+/* --- Franja 1: Cabecera Océano (#16324f) --- */
+.admin-topbar {
+    background: #16324f;
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-topbar-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 24px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.admin-brand-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.admin-navbar .admin-wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 4px 6px 4px 0;
+    margin-left: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #ffffff;
+    transition: opacity 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.admin-navbar .admin-wordmark:hover {
+    background: transparent;
+    opacity: 0.85;
+}
+
+.admin-monogram {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    flex-shrink: 0;
+}
+
+.admin-wordmark-brand {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 0.98rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #ffffff !important;
+    white-space: nowrap;
+}
+
+.admin-wordmark-sep {
+    color: rgba(255, 255, 255, 0.3) !important;
+    font-weight: 300;
+    font-size: 0.9rem;
+}
+
+.admin-wordmark-context {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.72) !important;
+    white-space: nowrap;
+}
+
+.admin-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+/* --- Account Trigger sobre fondo Océano --- */
+.admin-navbar .admin-account-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 10px 3px 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    cursor: pointer;
+    transition: background-color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+        border-color 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.admin-navbar .admin-account-trigger:hover,
+.admin-navbar .admin-account-trigger.is-open {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.admin-navbar .admin-account-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    background: #2d5a43;
+    color: #ffffff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: 0.02em;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.admin-navbar .admin-account-name {
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #ffffff;
+    max-width: 155px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-navbar .admin-account-chevron {
+    color: rgba(255, 255, 255, 0.72);
+    transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.admin-navbar .admin-account-trigger.is-open .admin-account-chevron {
+    transform: rotate(180deg);
+}
+
+.admin-navbar .admin-account-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    min-width: 230px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 16px 36px -10px rgba(15, 23, 42, 0.22);
+    padding: 6px;
+    z-index: 1200;
+    animation: adminMenuIn 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes adminMenuIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.admin-navbar .admin-account-data {
+    padding: 10px 10px 8px;
+}
+
+.admin-navbar .admin-account-data-name {
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.admin-navbar .admin-account-data-email {
+    font-size: 0.74rem;
+    color: #64748b;
+    margin-top: 2px;
+    word-break: break-all;
+}
+
+.admin-navbar .admin-account-data-role {
+    display: inline-block;
+    margin-top: 7px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: #e8f3ed;
+    color: #2d5a43;
+}
+
+.admin-navbar .admin-account-divider {
+    height: 1px;
+    background: #f1f5f9;
+    margin: 4px 0;
+}
+
+.admin-navbar .admin-account-logout {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #b91c1c;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 140ms ease;
+}
+
+.admin-navbar .admin-account-logout:hover {
+    background: #fef2f2;
+}
+
+/* --- Franja 2: Subbarra Clara con Separadores de Dominio --- */
+.admin-subnav {
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.admin-subnav-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 24px;
+    height: 44px;
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.admin-subnav-inner::-webkit-scrollbar {
+    display: none;
+}
+
+.admin-nav-group {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.admin-nav-divider {
+    width: 1px;
+    height: 18px;
+    background: #e2e8f0;
+    align-self: center;
+    margin: 0 8px;
+    flex-shrink: 0;
+}
+
+.admin-subnav .admin-tab-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 11px;
+    height: 44px;
+    border: none;
+    background: transparent;
+    color: #475569;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+        background-color 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.admin-subnav .admin-tab-btn::after {
+    content: '';
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: transparent;
+    transition: background-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.admin-subnav .admin-tab-btn:hover {
+    color: #0f172a;
+    background: #f8fafc;
+}
+
+.admin-subnav .admin-tab-btn.is-active {
+    color: #2d5a43;
+    font-weight: 700;
+    background: #eef6f1;
+}
+
+.admin-subnav .admin-tab-btn.is-active::after {
+    background: #2d5a43;
+}
+
+.admin-subnav .admin-tab-btn svg {
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+.admin-subnav .admin-tab-btn.is-active svg {
+    opacity: 1;
+    color: #2d5a43;
+}
+
+/* --- Responsive --- */
+@media (max-width: 900px) {
+    .admin-topbar-inner,
+    .admin-subnav-inner {
+        padding: 0 14px;
+    }
+
+    .admin-wordmark-sep,
+    .admin-wordmark-context {
+        display: none;
+    }
+
+    .admin-navbar .admin-account-name {
+        display: none;
+    }
+
+    .admin-navbar .admin-account-trigger {
+        padding: 3px 8px 3px 4px;
+    }
+}

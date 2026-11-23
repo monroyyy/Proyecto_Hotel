@@ -171,10 +171,6 @@ export default function RegisterPage() {
             setMsgReenvio('');
             setErrorCodigo('');
             const res = await reenviarCorreoVerificacion(registroExitoso.email);
-            setRegistroExitoso(prev => ({
-                ...prev,
-                codigoDesarrollo: res.codigoDesarrollo || prev?.codigoDesarrollo
-            }));
             setDigitos(['', '', '', '']);
             setMsgReenvio(res.mensaje || 'Nuevo código de 4 dígitos enviado a tu correo.');
             setTimeout(() => inputsRef.current[0]?.focus(), 100);

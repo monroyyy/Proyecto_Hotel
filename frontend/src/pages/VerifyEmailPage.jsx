@@ -14,7 +14,6 @@ export default function VerifyEmailPage() {
     const [digitos, setDigitos] = useState(['', '', '', '']);
     const [verificandoCodigo, setVerificandoCodigo] = useState(false);
     const [animandoDigitos, setAnimandoDigitos] = useState(false);
-    const [codigoDesarrollo, setCodigoDesarrollo] = useState('');
     const [msgReenvio, setMsgReenvio] = useState('');
     const [reenviando, setReenviando] = useState(false);
     const ejecutadoRef = useRef(false);
@@ -123,9 +122,6 @@ export default function VerifyEmailPage() {
             setMsgReenvio('');
             setError('');
             const res = await reenviarCorreoVerificacion(email.trim());
-            if (res.codigoDesarrollo) {
-                setCodigoDesarrollo(res.codigoDesarrollo);
-            }
             setDigitos(['', '', '', '']);
             setMsgReenvio(res.mensaje || 'Nuevo código de 4 dígitos enviado a tu correo.');
             setTimeout(() => inputsRef.current[0]?.focus(), 100);

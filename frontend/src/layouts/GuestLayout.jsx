@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
     Compass, CalendarCheck, Sparkles, User, LogOut,
-    CheckCircle2, Hotel, LogIn, UserPlus, Lock
+    CheckCircle2, LogIn, UserPlus, ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ChatWidget from '../components/ChatWidget';
@@ -31,14 +31,16 @@ function obtenerIniciales(nombre) {
 export default function GuestLayout({ children, activeTab, setActiveTab }) {
     const { user, isAuthenticated, logout, navigate, routePath } = useAuth();
     const [menuAbierto, setMenuAbierto] = useState(false);
+    const [cuentaAbierta, setCuentaAbierta] = useState(false);
     const headerRef = useRef(null);
+    const cuentaRef = useRef(null);
 
     const huespedNavItems = [
         {
             id: 'portal-huesped',
             path: '/portal-huesped',
             label: 'Explorar Hoteles',
-            desc: 'Descubre nuestras propiedades, tarifas y suites frente al mar',
+            desc: 'Descubre nuestras propiedades, tarifas y suites en México',
             icon: Compass,
             publico: true
         },
@@ -46,15 +48,15 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
             id: 'mis-reservas',
             path: '/mis-reservas',
             label: 'Mis Reservaciones',
-            desc: 'Consulta tu itinerario, pagos confirmados y pre-reservas',
+            desc: 'Consulta tu itinerario, comprobantes PDF y pre-reservas',
             icon: CalendarCheck,
             publico: false
         },
         {
             id: 'experiencias',
             path: '/experiencias',
-            label: 'Guía y Servicios',
-            desc: 'Gastronomía local, bienestar, traslados y atención 24/7',
+            label: 'Guía y Políticas',
+            desc: 'Horarios de estancia, garantías y políticas de reembolso',
             icon: Sparkles,
             publico: true
         },
@@ -62,34 +64,42 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
             id: 'mi-perfil',
             path: '/mi-perfil',
             label: 'Mi Perfil',
-            desc: 'Administra tus datos personales y preferencias de viaje',
+            desc: 'Administra tus datos de contacto y seguridad de cuenta',
             icon: User,
             publico: false
         }
     ];
 
-    // Cerrar el menú hamburguesa con Escape
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') {
                 setMenuAbierto(false);
+                setCuentaAbierta(false);
+            }
+        };
+        const handleClickOutside = (e) => {
+            if (cuentaRef.current && !cuentaRef.current.contains(e.target)) {
+                setCuentaAbierta(false);
             }
         };
         document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
     }, []);
 
     const handleTabClick = (item) => {
         setMenuAbierto(false);
+        setCuentaAbierta(false);
         if (setActiveTab) setActiveTab(item.id);
         navigate(item.path);
     };
 
-    const nombreMostrar = limpiarTextoCorrupto(user?.nombre);
-    const seccionActual = huespedNavItems.find((item) => item.id === activeTab) || huespedNavItems[0];
-    const ActiveIcon = seccionActual.icon;
+    const nombreMostrar = limpiarTextoCorrupto(user?.nombre) || 'Huésped';
 
-    const isAuthScreen = ['/login', '/registro', '/verificar-correo'].includes(routePath);
+    const isAuthScreen = ['/login', '/registro', '/verificar-correo', '/recuperar-password'].includes(routePath);
 
     if (isAuthScreen) {
         return (
@@ -101,41 +111,41 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
 
     return (
         <div className="app-layout guest-layout-container" data-surface="brand">
-            {/* Backdrop traslúcido cuando el menú hamburguesa está desplegado */}
             <div
                 className={`guest-drawer-backdrop ${menuAbierto ? 'is-open' : ''}`}
                 onClick={() => setMenuAbierto(false)}
                 aria-hidden="true"
             />
 
-            {/* Cabecera de Marca con Barra Ergonómica */}
+            {/* Cabecera Boutique Editorial de 62px (Opción 1) */}
             <header
                 ref={headerRef}
                 className={`guest-navbar ${menuAbierto ? 'is-open' : ''}`}
             >
                 <div className="guest-navbar-inner">
-                    {/* Izquierda: Wordmark de Marca */}
+                    {/* Izquierda: Monograma HP + Marca */}
                     <div className="guest-navbar-left">
                         <button
                             type="button"
                             className="guest-brand-wordmark"
                             onClick={() => {
                                 setMenuAbierto(false);
+                                setCuentaAbierta(false);
                                 if (setActiveTab) setActiveTab('portal-huesped');
                                 navigate('/portal-huesped');
                             }}
                         >
-                            <div className="guest-brand-emblem">
-                                <Hotel size={20} />
+                            <div className="guest-brand-emblem" aria-hidden="true">
+                                HP
                             </div>
                             <div>
                                 <div className="guest-brand-title">Hotel Paraíso</div>
-                                <div className="guest-brand-subtitle">Costa &amp; Hospitalidad</div>
+                                <div className="guest-brand-subtitle">Colección México</div>
                             </div>
                         </button>
                     </div>
 
-                    {/* Centro: Enlaces directos en escritorio */}
+                    {/* Centro: Pestañas directas en escritorio */}
                     <nav className="guest-navbar-desktop-nav" aria-label="Navegación principal">
                         {huespedNavItems
                             .filter(item => isAuthenticated || item.publico)
@@ -156,25 +166,72 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                             })}
                     </nav>
 
-                    {/* Derecha: Acciones según sesión activa o Modo Visitante */}
+                    {/* Derecha: Notificaciones + Menú desplegable de cuenta */}
                     <div className="guest-navbar-actions">
                         {isAuthenticated && user ? (
                             <>
                                 <NotificationBell isAdminSurface={false} />
-                                <button
-                                    type="button"
-                                    className="guest-user-chip"
-                                    onClick={() => handleTabClick(huespedNavItems[3])}
-                                    title="Ir a Mi Perfil"
-                                >
-                                    <div className="guest-user-avatar">
-                                        {obtenerIniciales(nombreMostrar)}
-                                    </div>
-                                    <div className="guest-user-meta">
-                                        <div className="guest-user-name">{nombreMostrar}</div>
-                                        <div className="guest-user-role">Huésped Paraíso</div>
-                                    </div>
-                                </button>
+                                <div ref={cuentaRef} className="guest-account-dropdown-wrap">
+                                    <button
+                                        type="button"
+                                        className={`guest-user-chip ${cuentaAbierta ? 'is-open' : ''}`}
+                                        onClick={() => setCuentaAbierta((prev) => !prev)}
+                                        aria-expanded={cuentaAbierta}
+                                        aria-haspopup="menu"
+                                    >
+                                        <div className="guest-user-avatar">
+                                            {obtenerIniciales(nombreMostrar)}
+                                        </div>
+                                        <div className="guest-user-meta">
+                                            <div className="guest-user-name">{nombreMostrar}</div>
+                                        </div>
+                                        <ChevronDown size={14} className="guest-user-chevron" />
+                                    </button>
+
+                                    {cuentaAbierta && (
+                                        <div className="guest-account-menu" role="menu" aria-label="Menú de huésped">
+                                            <div className="guest-account-menu-header">
+                                                <div className="guest-account-menu-name">{nombreMostrar}</div>
+                                                <div className="guest-account-menu-email">{user.email}</div>
+                                                <span className="guest-account-menu-badge">
+                                                    <CheckCircle2 size={11} /> Huésped Verificado
+                                                </span>
+                                            </div>
+                                            <div className="guest-account-menu-divider" />
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                className="guest-account-menu-item"
+                                                onClick={() => handleTabClick(huespedNavItems[1])}
+                                            >
+                                                <CalendarCheck size={14} />
+                                                <span>Mis Reservaciones</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                className="guest-account-menu-item"
+                                                onClick={() => handleTabClick(huespedNavItems[3])}
+                                            >
+                                                <User size={14} />
+                                                <span>Mi Perfil y Contraseña</span>
+                                            </button>
+                                            <div className="guest-account-menu-divider" />
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                className="guest-account-menu-item is-logout"
+                                                onClick={() => {
+                                                    setCuentaAbierta(false);
+                                                    logout();
+                                                }}
+                                            >
+                                                <LogOut size={14} />
+                                                <span>Cerrar sesión</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </>
                         ) : (
                             <div className="guest-visitor-auth-btns">
@@ -197,7 +254,6 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                             </div>
                         )}
 
-                        {/* Botón de menú móvil / compacto */}
                         <button
                             type="button"
                             className={`guest-hamburger-btn ${menuAbierto ? 'is-open' : ''}`}
@@ -215,7 +271,7 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                     </div>
                 </div>
 
-                {/* Panel Desplegable Ergonómico (Limpio, sin textos invasivos) */}
+                {/* Panel Desplegable Móvil */}
                 <nav
                     className={`guest-nav-drawer ${menuAbierto ? 'is-open' : ''}`}
                     aria-label="Navegación general"
@@ -255,7 +311,6 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                                 })}
                         </div>
 
-                        {/* Acciones del menú desplegable */}
                         {isAuthenticated && user ? (
                             <div className="guest-mobile-drawer-footer">
                                 <div className="guest-drawer-user-summary">
@@ -305,19 +360,16 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                 </nav>
             </header>
 
-            {/* Contenido Principal de Marca */}
             <main className="main-content guest-main-content" style={{ flex: 1 }}>
                 {children}
             </main>
 
-            {/* Chatbot Asistente exclusivo para Huéspedes Autenticados */}
             {isAuthenticated && <ChatWidget />}
 
-            {/* Footer de Marca */}
             <footer className="app-footer guest-footer">
                 <div className="guest-footer-inner">
                     <span style={{ color: 'var(--brand-ocean)', fontWeight: 600 }}>
-                        Hotel Paraíso &bull; Hospitalidad Mexicana Frente al Mar
+                        Hotel Paraíso &bull; Colección de Hospitalidad Mexicana
                     </span>
                     <span style={{ color: 'var(--text-muted)' }}>
                         &copy; {new Date().getFullYear()} Hotel Paraíso

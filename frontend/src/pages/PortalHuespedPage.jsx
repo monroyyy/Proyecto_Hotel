@@ -6,7 +6,7 @@ import {
     ArrowRight, Info, SlidersHorizontal, User, Award, Phone,
     Mail, Check, HelpCircle, FileText, Sun, LogOut, Hotel,
     Lock, KeyRound, Eye, EyeOff, Moon, AlertCircle, CalendarPlus, Bell,
-    UserPlus, LogIn
+    UserPlus, LogIn, Printer
 } from 'lucide-react';
 import {
     getHoteles,
@@ -24,6 +24,7 @@ import Modal from '../components/Modal';
 import EstadoBadge from '../components/EstadoBadge';
 import MexicoMicroMap from '../components/MexicoMicroMap';
 import IMAGENES_HOTEL from '../data/imagenes';
+import { imprimirComprobanteReserva } from '../utils/reservaComprobante';
 import './PortalHuespedPage.css';
 
 // Formateador elegante de fechas para tarjetas de itinerario / check-in
@@ -311,6 +312,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
     // Filtro en Mis Reservaciones
     const [filtroEstadoReserva, setFiltroEstadoReserva] = useState('TODAS');
     const [voucherReserva, setVoucherReserva] = useState(null);
+    const [reservaInstruccionesPago, setReservaInstruccionesPago] = useState(null);
 
     // Modal de Ficha Técnica de Habitación
     const [habitacionDetalle, setHabitacionDetalle] = useState(null);
@@ -492,6 +494,19 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
         });
         return map;
     }, [habitaciones, fechaEntrada, fechaSalida]);
+
+    const precioMinimoPorHotelId = useMemo(() => {
+        const map = {};
+        habitaciones.forEach(h => {
+            const idH = h.hotel?.idHotel;
+            const p = Number(h.tipoHabitacion?.precioBase || 0);
+            if (!idH || p <= 0) return;
+            if (!map[idH] || p < map[idH]) {
+                map[idH] = p;
+            }
+        });
+        return map;
+    }, [habitaciones]);
 
     // Hoteles activos sin duplicados de nombre+ciudad
     const hotelesUnicos = useMemo(() => {
@@ -679,9 +694,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
         }
     };
 
-    const handleConfirmarMiReserva = async (reserva) => {
-        const anticipoSugerido = Number(reserva.anticipoRequerido || (Number(reserva.costoTotal || 0) * 0.5)).toLocaleString('es-MX');
-        showAlert('info', `Para confirmar tu pre-reserva ${reserva.folio || '#' + reserva.idReserva}: realiza tu transferencia por el 50% de anticipo ($${anticipoSugerido} MXN) y envía tu comprobante a recepción por WhatsApp o correo. La administración validará el pago para registrar tu estancia como Confirmada.`);
+    const handleConfirmarMiReserva = (reserva) => {
+        setReservaInstruccionesPago(reserva);
     };
 
     const handleAgregarDiaExtraHabitacion = async (hab) => {
@@ -827,13 +841,13 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
 
     const reservasFiltradas = useMemo(() => {
         if (filtroEstadoReserva === 'ACTIVAS') {
-            return misReservas.filter(r => r.estado === 'Confirmada');
+            return misReservas.filter(r => r.estado === 'Confirmada' || r.estado === 'Ocupada');
         }
         if (filtroEstadoReserva === 'PRE_RESERVAS') {
             return misReservas.filter(r => r.estado === 'Pre-reserva');
         }
         if (filtroEstadoReserva === 'CANCELADAS') {
-            return misReservas.filter(r => r.estado === 'Cancelada' || r.estado === 'Finalizada');
+            return misReservas.filter(r => r.estado === 'Cancelada' || r.estado === 'Finalizada' || r.estado === 'No-Show');
         }
         return misReservas;
     }, [misReservas, filtroEstadoReserva]);
@@ -851,7 +865,14 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             .reduce((acc, r) => acc + (Number(r.total) || 0), 0);
     }, [misReservas]);
 
-    const primerNombre = (user?.nombre || 'Viajero').trim().split(/\s+/)[0];
+    const primerNombre = useMemo(() => {
+        const limpio = (user?.nombre || 'Viajero').replace(/\([^)]*\)/g, '').trim();
+        const partes = limpio.split(/\s+/).filter(Boolean);
+        if (partes.length >= 2 && /^(don|doña|dr\.?|dra\.?|ing\.?|lic\.?)$/i.test(partes[0])) {
+            return `${partes[0]} ${partes[1]}`;
+        }
+        return partes[0] || 'Viajero';
+    }, [user?.nombre]);
 
     return (
         <div className="hp-wrapper">
@@ -875,13 +896,13 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                         <div className="hp-hero-content">
                             <div className="hp-hero-badge">
                                 <span className="hp-hero-dot" />
-                                <span>Costa & Hospitalidad Mexicana</span>
+                                <span>Colección México · Tarifa Preferencial Directa</span>
                             </div>
                             <h1 className="hp-hero-title">
-                                Un refugio sereno frente al Pacífico
+                                Hospitalidad mexicana diseñada para el descanso
                             </h1>
                             <p className="hp-hero-subtitle">
-                                Hola, <strong>{primerNombre}</strong>. Descubre suites de descanso con luz natural, arquitectura integrada al paisaje costero y reservación directa con tarifa preferencial.
+                                Hola, <strong>{primerNombre}</strong>. Explora nuestras propiedades en Cancún, Ciudad de México, Acapulco, Guadalajara y Atlacomulco con apartado inmediato sin costo por 24 horas.
                             </p>
                         </div>
                     </section>
@@ -1161,7 +1182,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                                 <div className="hp-accordion-action-col">
                                                                     <div className="hp-accordion-price-wrap">
                                                                         <span className="hp-accordion-price-val num">
-                                                                            Desde ${Number(perfil.precioDesde).toLocaleString('es-MX')} MXN
+                                                                            Desde ${Number(precioMinimoPorHotelId[h.idHotel] || perfil.precioDesde).toLocaleString('es-MX')} MXN
                                                                         </span>
                                                                         <span className="hp-accordion-price-unit">/ noche</span>
                                                                     </div>
@@ -1219,6 +1240,38 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 </p>
                             </div>
                         </div>
+
+                        {/* Cinta rápida de sedes con tarifas reales de BD */}
+                        {hotelesUnicos.length > 1 && (
+                            <div className="hp-category-bar" style={{ marginBottom: 12 }}>
+                                <button
+                                    type="button"
+                                    className={`hp-cat-pill ${filtroHotel === 'TODOS' ? 'active' : ''}`}
+                                    onClick={() => setFiltroHotel('TODOS')}
+                                >
+                                    Todas las sedes ({habitaciones.filter(h => (h.estado || '').toLowerCase() !== 'mantenimiento').length})
+                                </button>
+                                {hotelesUnicos.map((h) => {
+                                    const minPrecio = precioMinimoPorHotelId[h.idHotel];
+                                    const dispCount = disponiblesPorHotelId[h.idHotel] || 0;
+                                    return (
+                                        <button
+                                            key={h.idHotel}
+                                            type="button"
+                                            className={`hp-cat-pill ${String(filtroHotel) === String(h.idHotel) ? 'active' : ''}`}
+                                            onClick={() => setFiltroHotel(String(h.idHotel))}
+                                        >
+                                            <span>{h.nombre} · {h.ciudad}</span>
+                                            {minPrecio ? (
+                                                <span className="num" style={{ marginLeft: 6, opacity: 0.85, fontWeight: 700 }}>
+                                                    (${Number(minPrecio).toLocaleString('es-MX')}+ · {dispCount} {dispCount === 1 ? 'libre' : 'libres'})
+                                                </span>
+                                            ) : null}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
 
                         {/* Barra de filtros de categoría y orden */}
                         <div className="hp-catalog-toolbar">
@@ -1515,88 +1568,6 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                             </>
                         )}
                     </section>
-
-                    {/* =========================================================
-                        SECCIÓN BREVE DE AMENIDADES CON COMPOSICIÓN ASIMÉTRICA
-                       ========================================================= */}
-                    <section className="hp-amenities-editorial-section">
-                        <div className="hp-section-header">
-                            <div>
-                                <span className="hp-section-kicker">Espacios & Hospitalidad</span>
-                                <h2 className="hp-section-title">Diseñado para desconectar del mundo</h2>
-                                <p className="hp-section-desc">
-                                    Cada área de Hotel Paraíso está pensada para convivir con la brisa marina, los materiales nobles y la quietud.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="hp-amenities-asymmetric-grid">
-                            <div className="hp-amenity-big-card">
-                                <img
-                                    src={IMAGENES_HOTEL.alberca.webp}
-                                    alt={IMAGENES_HOTEL.alberca.alt}
-                                    className="hp-amenity-img"
-                                    loading="lazy"
-                                />
-                                <div className="hp-amenity-caption">
-                                    <h4>Alberca infinita al amanecer</h4>
-                                    <p>Deck de teca, camastros de descanso y vista despejada al horizonte del océano Pacífico.</p>
-                                </div>
-                            </div>
-
-                            <div className="hp-amenity-stacked-col">
-                                <div className="hp-amenity-small-card">
-                                    <img
-                                        src={IMAGENES_HOTEL.restaurante.webp}
-                                        alt={IMAGENES_HOTEL.restaurante.alt}
-                                        className="hp-amenity-img"
-                                        loading="lazy"
-                                    />
-                                    <div className="hp-amenity-caption">
-                                        <h4>Gastronomía costera</h4>
-                                        <p>Cocina mexicana contemporánea e ingredientes frescos frente a la puesta de sol.</p>
-                                    </div>
-                                </div>
-
-                                <div className="hp-amenity-small-card">
-                                    <img
-                                        src={IMAGENES_HOTEL.recepcion.webp}
-                                        alt={IMAGENES_HOTEL.recepcion.alt}
-                                        className="hp-amenity-img"
-                                        loading="lazy"
-                                    />
-                                    <div className="hp-amenity-caption">
-                                        <h4>Lobby de arquitectura viva</h4>
-                                        <p>Muros de cantera, vigas de madera natural y hospitalidad cálida desde tu llegada.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* =========================================================
-                        CIERRE DE PÁGINA ÚNICO CON "RESERVAR"
-                       ========================================================= */}
-                    <section className="hp-brand-closing-banner">
-                        <div className="hp-closing-content">
-                            <h2 className="hp-closing-title">Tu descanso frente al Pacífico comienza aquí</h2>
-                            <p className="hp-closing-desc">
-                                Aparta tu suite en línea en menos de dos minutos. Cancela sin costo hasta 72 horas antes de tu llegada.
-                            </p>
-                            <button
-                                type="button"
-                                className="btn btn-primary hp-closing-btn"
-                                onClick={() => {
-                                    const el = document.getElementById('hp-search-dock');
-                                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                                    else if (suiteDestacada) abrirModalReserva(suiteDestacada);
-                                }}
-                            >
-                                <span>Reservar</span>
-                                <ArrowRight size={16} />
-                            </button>
-                        </div>
-                    </section>
                 </>
             )}
 
@@ -1656,9 +1627,9 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                     <div className="hp-category-bar" style={{ marginBottom: '1.5rem' }}>
                         {[
                             { id: 'TODAS', label: `Todas (${misReservas.length})` },
-                            { id: 'ACTIVAS', label: `Confirmadas (${misReservas.filter(r => r.estado === 'Confirmada').length})` },
+                            { id: 'ACTIVAS', label: `Confirmadas / En curso (${misReservas.filter(r => r.estado === 'Confirmada' || r.estado === 'Ocupada').length})` },
                             { id: 'PRE_RESERVAS', label: `Pre-reservas por confirmar (${misReservas.filter(r => r.estado === 'Pre-reserva').length})` },
-                            { id: 'CANCELADAS', label: `Historial / Canceladas (${misReservas.filter(r => r.estado === 'Cancelada' || r.estado === 'Finalizada').length})` }
+                            { id: 'CANCELADAS', label: `Historial / Canceladas (${misReservas.filter(r => r.estado === 'Cancelada' || r.estado === 'Finalizada' || r.estado === 'No-Show').length})` }
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -1980,6 +1951,11 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                     <span className="hp-profile-reservas-badge">
                                         <CalendarCheck size={13} /> {misReservas.length} {misReservas.length === 1 ? 'reservación' : 'reservaciones'}
                                     </span>
+                                    {totalNochesAcumuladas > 0 && (
+                                        <span className="hp-profile-reservas-badge">
+                                            <Moon size={13} /> {totalNochesAcumuladas} {totalNochesAcumuladas === 1 ? 'noche acumulada' : 'noches acumuladas'}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -2929,9 +2905,89 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                             <button type="button" className="btn btn-secondary" onClick={() => setVoucherReserva(null)}>
                                 Cerrar
                             </button>
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={() => imprimirComprobanteReserva(voucherReserva)}
+                            >
+                                <Printer size={15} />
+                                <span>Imprimir comprobante PDF</span>
+                            </button>
                         </div>
                     </div>
                 )}
+            </Modal>
+
+            {/* =================================================================
+                MODAL 3B: INSTRUCCIONES PARA CONFIRMAR PRE-RESERVA CON ANTICIPO
+               ================================================================= */}
+            <Modal
+                isOpen={Boolean(reservaInstruccionesPago)}
+                onClose={() => setReservaInstruccionesPago(null)}
+                title={reservaInstruccionesPago ? `Confirmar Pre-reserva · ${reservaInstruccionesPago.folio || `#${reservaInstruccionesPago.idReserva}`}` : ''}
+                subtitle="Validación de anticipo del 50% para garantizar tu estancia"
+                icon={ShieldCheck}
+                maxWidth="460px"
+            >
+                {reservaInstruccionesPago && (() => {
+                    const total = Number(reservaInstruccionesPago.total || reservaInstruccionesPago.costoTotal || 0);
+                    const anticipo = Number(reservaInstruccionesPago.anticipoRequerido || (total * 0.5));
+                    return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            <div style={{
+                                background: '#eef6f1',
+                                border: '1px solid #c6e0d0',
+                                borderRadius: 12,
+                                padding: '14px 16px'
+                            }}>
+                                <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: '#2d5a43', letterSpacing: '0.04em' }}>
+                                    Anticipo requerido (50%)
+                                </div>
+                                <div className="num" style={{ fontSize: '1.4rem', fontWeight: 800, color: '#16324f', marginTop: 2 }}>
+                                    ${anticipo.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
+                                </div>
+                                <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: 2 }}>
+                                    Total de la estancia: <strong className="num">${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN</strong>
+                                </div>
+                            </div>
+
+                            <div style={{
+                                background: '#f8fafc',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: 12,
+                                padding: '12px 14px',
+                                fontSize: '0.82rem',
+                                color: '#334155',
+                                lineHeight: 1.55
+                            }}>
+                                <strong style={{ color: '#0f172a', display: 'block', marginBottom: 6 }}>
+                                    Pasos para confirmar tu suite:
+                                </strong>
+                                <div>1. Realiza tu transferencia bancaria o pago en mostrador por el <strong>50% de anticipo</strong> indicando tu folio <strong className="num">{reservaInstruccionesPago.folio}</strong>.</div>
+                                <div style={{ marginTop: 4 }}>2. Envía tu comprobante a recepción; nuestro personal validará el depósito y actualizará tu estado a <strong>Confirmada</strong>.</div>
+                                <div style={{ marginTop: 4 }}>3. El 50% restante se liquida al realizar tu Check-in (15:00 hrs).</div>
+                            </div>
+
+                            <div className="modal-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => imprimirComprobanteReserva(reservaInstruccionesPago)}
+                                >
+                                    <Printer size={15} />
+                                    <span>Imprimir ficha PDF</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={() => setReservaInstruccionesPago(null)}
+                                >
+                                    Entendido
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })()}
             </Modal>
 
             {/* =================================================================

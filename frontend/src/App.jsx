@@ -37,9 +37,9 @@ function AppContent() {
         if (loading) return;
 
         if (routePath === '/') {
-            if (isAuthenticated && (isGerente || isAdmin)) {
+            if (isAuthenticated && isGerente) {
                 navigate('/dashboard', true);
-            } else if (isAuthenticated && isRecepcionista) {
+            } else if (isAuthenticated && (isRecepcionista || isAdmin)) {
                 navigate('/reservas', true);
             } else {
                 navigate('/portal-huesped', true);
@@ -54,9 +54,9 @@ function AppContent() {
                 navigate('/login', true);
             }
         } else if (isAuthenticated && (routePath === '/login' || routePath === '/registro')) {
-            if (isGerente || isAdmin) {
+            if (isGerente) {
                 navigate('/dashboard', true);
-            } else if (isRecepcionista) {
+            } else if (isRecepcionista || isAdmin) {
                 navigate('/reservas', true);
             } else {
                 navigate('/portal-huesped', true);
@@ -78,8 +78,8 @@ function AppContent() {
         if (routePath.startsWith('/portal-huesped')) return 'portal-huesped';
         if (routePath.startsWith('/reservas')) return 'reservas';
 
-        if (isGerente || isAdmin) return 'dashboard';
-        if (isRecepcionista) return 'reservas';
+        if (isGerente) return 'dashboard';
+        if (isRecepcionista || isAdmin) return 'reservas';
         return 'portal-huesped';
     })();
 
@@ -109,8 +109,12 @@ function AppContent() {
             return <LoginPage />;
         }
 
-        // Si el usuario es HUESPED o Visitante sin sesión, mostrar el Portal de Huéspedes
-        if (!isStaff) {
+        // Si el usuario es HUESPED, Visitante sin sesión, o navega explícitamente a una ruta del portal de huéspedes
+        const isExplicitGuestRoute = routePath.startsWith('/portal-huesped')
+            || routePath.startsWith('/mis-reservas')
+            || routePath.startsWith('/experiencias')
+            || routePath.startsWith('/mi-perfil');
+        if (!isStaff || isExplicitGuestRoute) {
             let initialSection = 'explorar';
             if (routePath.startsWith('/mis-reservas')) initialSection = 'mis-reservas';
             else if (routePath.startsWith('/experiencias')) initialSection = 'experiencias';
@@ -148,23 +152,27 @@ function AppContent() {
             );
         }
 
-        // Control de permisos para GERENTE (no tiene acceso a gestión técnica de usuarios ni consola SQL)
-        if (isGerente && (routePath.startsWith('/usuarios') || routePath.startsWith('/consultas'))) {
+        // Control de permisos para ADMINISTRADOR (NO puede ver Dashboard, Informes, Usuarios ni información monetaria)
+        if (isAdmin && (
+            routePath.startsWith('/dashboard') ||
+            routePath.startsWith('/informes') ||
+            routePath.startsWith('/usuarios')
+        )) {
             return (
                 <div className="page-container" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
                     <div style={{
-                        maxWidth: 460, margin: '0 auto', background: 'var(--bg-surface)',
+                        maxWidth: 480, margin: '0 auto', background: 'var(--bg-surface)',
                         border: '1px solid var(--color-error-border)', borderRadius: 16, padding: '2.2rem'
                     }}>
                         <ShieldAlert size={44} style={{ color: 'var(--color-error)', marginBottom: 12 }} />
                         <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>
-                            Módulo exclusivo de Administración TI
+                            Módulo exclusivo de Gerencia General
                         </h2>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: 20 }}>
-                            La gestión de usuarios y la consola de consultas SQL son exclusivas para el Administrador del sistema.
+                            El Dashboard financiero, los Informes ejecutivos, la información monetaria del hotel y la Gestión de Usuarios son exclusivos para el Gerente General.
                         </p>
-                        <button type="button" className="btn btn-primary" onClick={() => navigate('/dashboard')}>
-                            <ArrowLeft size={16} /> Volver al Dashboard
+                        <button type="button" className="btn btn-primary" onClick={() => navigate('/reservas')}>
+                            <ArrowLeft size={16} /> Ir a Control Operativo
                         </button>
                     </div>
                 </div>

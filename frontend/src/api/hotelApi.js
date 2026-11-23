@@ -548,26 +548,42 @@ export async function getDashboardPorHotel(year, incluirInactivos = false) {
 // SERVICIOS DE INFORMES EJECUTIVOS (GERENCIA)
 // ==========================================
 
-export async function getInformeFinanciero(inicio, fin, hotelId, page = 0, size = 20) {
+export async function getInformeFinanciero(inicio, fin, hotelId, page = 0, size = 20, filtros = {}) {
     const params = new URLSearchParams();
     if (inicio) params.append('inicio', inicio);
     if (fin) params.append('fin', fin);
     if (hotelId) params.append('hotelId', hotelId);
     params.append('page', String(page));
     params.append('size', String(size));
+    if (filtros?.estado && filtros.estado !== 'TODOS') params.append('estado', filtros.estado);
+    if (filtros?.metodoPago && filtros.metodoPago !== 'TODOS') params.append('metodoPago', filtros.metodoPago);
+    if (filtros?.q && filtros.q.trim()) params.append('q', filtros.q.trim());
     return await apiRequest(`/informes/financiero?${params.toString()}`);
 }
 
-export async function getInformeOcupacion(year, hotelId) {
+export async function getInformeOcupacion(year, hotelId, inicio = null, fin = null) {
     const params = new URLSearchParams();
     if (year) params.append('year', year);
     if (hotelId) params.append('hotelId', hotelId);
+    if (inicio) params.append('inicio', inicio);
+    if (fin) params.append('fin', fin);
     return await apiRequest(`/informes/ocupacion?${params.toString()}`);
 }
 
-export async function getInformeCancelaciones(year, hotelId) {
+export async function getInformeCancelaciones(year, hotelId, inicio = null, fin = null) {
     const params = new URLSearchParams();
     if (year) params.append('year', year);
     if (hotelId) params.append('hotelId', hotelId);
+    if (inicio) params.append('inicio', inicio);
+    if (fin) params.append('fin', fin);
     return await apiRequest(`/informes/cancelaciones?${params.toString()}`);
+}
+
+export async function getInformeCuentasPorCobrar(year, hotelId, inicio = null, fin = null) {
+    const params = new URLSearchParams();
+    if (year) params.append('year', year);
+    if (hotelId) params.append('hotelId', hotelId);
+    if (inicio) params.append('inicio', inicio);
+    if (fin) params.append('fin', fin);
+    return await apiRequest(`/informes/cuentas-por-cobrar?${params.toString()}`);
 }

@@ -1072,87 +1072,60 @@ select.chat-model-select {
    ========================================================================== */
 
 .chat-bubble.is-stopped-bubble {
-  padding: 10px 12px;
-  background: #faf7f2;
-  border-color: #e6dccf;
+  padding: 5px 10px;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  border-radius: 999px;
 }
 
 .chat-stopped-notice {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 220px;
+  gap: 8px;
 }
 
 .chat-stopped-notice.with-partial-text {
-  margin-top: 10px;
-  padding-top: 9px;
-  border-top: 1px dashed var(--border-default, #e2d9cc);
-}
-
-.chat-stopped-left {
   display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px dashed #e2e8f0;
 }
 
-.chat-stopped-icon-badge {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  background: rgba(184, 93, 56, 0.12);
-  border: 1px solid rgba(184, 93, 56, 0.25);
-  color: var(--brand-terracotta, #b85d38);
+.chat-stopped-pill {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1;
 }
 
-.chat-stopped-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.chat-stopped-title {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--brand-ocean, #16324f);
-  line-height: 1.2;
-}
-
-.chat-stopped-sub {
-  font-size: 0.69rem;
-  color: var(--text-muted, #64748b);
-  line-height: 1.25;
+.chat-stopped-pill svg {
+  color: #b85d38;
 }
 
 .chat-stopped-retry-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
+  gap: 4px;
+  padding: 2px 7px;
   border-radius: 999px;
-  border: 1px solid var(--border-default, #e2d9cc);
+  border: 1px solid #e2e8f0;
   background: #ffffff;
-  color: var(--brand-ocean, #16324f);
+  color: #16324f;
   font-family: var(--font-sans);
-  font-size: 0.71rem;
+  font-size: 0.69rem;
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 .chat-stopped-retry-btn:hover {
-  background: var(--brand-terracotta-light, #faebe5);
-  border-color: var(--brand-terracotta, #b85d38);
-  color: var(--brand-terracotta-hover, #9e4e2d);
-  transform: translateY(-1px);
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
 }
 
 /* ==========================================================================
@@ -1315,4 +1288,197 @@ select.chat-model-select {
     height: calc(100% - 66px);
     box-shadow: 12px 0 32px rgba(15, 35, 56, 0.18);
   }
+}
+
+
+/* ==========================================================================
+   IN-CHAT INTERACTIVE CHARTS (EXCLUSIVE FOR GERENTE)
+   ========================================================================== */
+
+.chat-charts-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.chat-chart-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 14px -4px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chat-chart-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-chart-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.chat-chart-subtitle {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.chat-chart-Modes {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  gap: 2px;
+}
+
+.chat-chart-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.69rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.chat-chart-mode-btn:hover {
+  color: #0f172a;
+}
+
+.chat-chart-mode-btn.is-active {
+  background: #ffffff;
+  color: #16324f;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.chat-chart-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.71rem;
+  color: #475569;
+  font-weight: 600;
+}
+
+.chat-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chat-chart-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.chat-chart-hover-readout {
+  margin-left: auto;
+  font-size: 0.71rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+.chat-chart-svg-wrap {
+  width: 100%;
+  overflow: hidden;
+  background: #fcfcfd;
+  border: 1px solid #f1f5f9;
+  border-radius: 9px;
+  padding: 6px 4px 2px;
+}
+
+.chat-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.chat-chart-table-wrap {
+  max-height: 195px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.chat-chart-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+}
+
+.chat-chart-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.chat-chart-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #0f172a;
+}
+
+.chat-chart-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.chat-chart-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.chat-chart-stat-lbl {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.chat-chart-stat-val {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #0f172a;
 }

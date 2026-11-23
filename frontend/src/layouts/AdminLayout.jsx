@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
-    BedDouble, Building2, Tag, Database, CalendarPlus, Zap,
-    Users, LogOut, ChevronDown, TrendingUp, FileText, LayoutDashboard
+    BedDouble, Building2, Tag, CalendarPlus, Zap,
+    Users, LogOut, ChevronDown, TrendingUp, FileText
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ChatWidget from '../components/ChatWidget';
 import NotificationBell from '../components/NotificationBell';
+import './AdminLayout.css';
 
 function limpiarTextoCorrupto(texto) {
     if (!texto) return '';
@@ -53,36 +54,49 @@ export default function AdminLayout({ children, activeTab, setActiveTab }) {
         };
     }, []);
 
-    // Pestañas dinámicas según el rol autenticado (Gerente vs Recepcionista vs Administrador)
-    const adminNavItems = useMemo(() => {
+    // Grupos de navegación por dominio según el rol autenticado
+    const adminNavGroups = useMemo(() => {
         const rol = user?.rol;
 
         if (rol === 'RECEPCIONISTA') {
             return [
-                { id: 'reservas', path: '/reservas', label: 'Reservaciones', icon: CalendarPlus },
-                { id: 'habitaciones', path: '/habitaciones', label: 'Habitaciones', icon: BedDouble },
+                [
+                    { id: 'reservas', path: '/reservas', label: 'Reservaciones', icon: CalendarPlus },
+                    { id: 'habitaciones', path: '/habitaciones', label: 'Habitaciones', icon: BedDouble },
+                ],
             ];
         }
 
         if (rol === 'GERENTE') {
             return [
-                { id: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: TrendingUp },
-                { id: 'informes', path: '/informes', label: 'Informes', icon: FileText },
-                { id: 'reservas', path: '/reservas', label: 'Reservaciones', icon: CalendarPlus },
-                { id: 'habitaciones', path: '/habitaciones', label: 'Habitaciones', icon: BedDouble },
+                [
+                    { id: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: TrendingUp },
+                    { id: 'informes', path: '/informes', label: 'Informes', icon: FileText },
+                ],
+                [
+                    { id: 'reservas', path: '/reservas', label: 'Reservaciones', icon: CalendarPlus },
+                    { id: 'habitaciones', path: '/habitaciones', label: 'Habitaciones', icon: BedDouble },
+                ],
+                [
+                    { id: 'hoteles', path: '/hoteles', label: 'Hoteles', icon: Building2 },
+                    { id: 'tipos', path: '/tipos', label: 'Categorías', icon: Tag },
+                    { id: 'consultas', path: '/consultas', label: 'Consultas SQL', icon: Zap },
+                    { id: 'usuarios', path: '/usuarios', label: 'Usuarios', icon: Users },
+                ],
             ];
         }
 
-        // Por defecto: ADMINISTRADOR (Superusuario / TI)
+        // ADMINISTRADOR: Operación técnica e infraestructura (Sin Dashboard, Sin Informes, Sin Usuarios)
         return [
-            { id: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: TrendingUp },
-            { id: 'informes', path: '/informes', label: 'Informes', icon: FileText },
-            { id: 'reservas', path: '/reservas', label: 'Reservaciones', icon: CalendarPlus },
-            { id: 'habitaciones', path: '/habitaciones', label: 'Habitaciones', icon: BedDouble },
-            { id: 'hoteles', path: '/hoteles', label: 'Hoteles', icon: Building2 },
-            { id: 'tipos', path: '/tipos', label: 'Categorías', icon: Tag },
-            { id: 'consultas', path: '/consultas', label: 'Consultas SQL', icon: Zap },
-            { id: 'usuarios', path: '/usuarios', label: 'Usuarios', icon: Users },
+            [
+                { id: 'reservas', path: '/reservas', label: 'Reservaciones', icon: CalendarPlus },
+                { id: 'habitaciones', path: '/habitaciones', label: 'Habitaciones', icon: BedDouble },
+            ],
+            [
+                { id: 'hoteles', path: '/hoteles', label: 'Hoteles', icon: Building2 },
+                { id: 'tipos', path: '/tipos', label: 'Categorías', icon: Tag },
+                { id: 'consultas', path: '/consultas', label: 'Consultas SQL', icon: Zap },
+            ],
         ];
     }, [user?.rol]);
 
@@ -104,88 +118,99 @@ export default function AdminLayout({ children, activeTab, setActiveTab }) {
 
     return (
         <div className="app-layout admin-layout-container" data-surface="product">
-            {/* Barra Superior Operativa de 54px */}
+            {/* Barra Superior: Cabecera Océano Ejecutiva + Subbarra Editorial Agrupada */}
             <header className="admin-navbar">
-                <div className="admin-navbar-inner">
-                    {/* Wordmark puro: "Hotel Paraíso / Gestión Hotelera" */}
-                    <button
-                        type="button"
-                        className="admin-wordmark"
-                        onClick={() => navigate((isGerente || isAdmin) ? '/dashboard' : '/reservas')}
-                        aria-label="Ir al inicio de Gestión Hotelera"
-                    >
-                        <span className="admin-wordmark-brand">Hotel Paraíso</span>
-                        <span className="admin-wordmark-sep" aria-hidden="true">/</span>
-                        <span className="admin-wordmark-context">Gestión Hotelera</span>
-                    </button>
-
-                    {/* Pestañas compactas con indicador activo en acento verde */}
-                    <nav className="admin-tabs-nav" aria-label="Navegación administrativa">
-                        {adminNavItems.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = activeTab === item.id;
-                            return (
-                                <button
-                                    key={item.id}
-                                    type="button"
-                                    className={`admin-tab-btn ${isActive ? 'is-active' : ''}`}
-                                    aria-current={isActive ? 'page' : undefined}
-                                    onClick={() => handleTabClick(item)}
-                                >
-                                    <Icon size={15} aria-hidden="true" />
-                                    <span>{item.label}</span>
-                                </button>
-                            );
-                        })}
-                    </nav>
-
-                    {/* Menú de Cuenta con solo datos y "Cerrar sesión" */}
-                    {isAuthenticated && user && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <NotificationBell isAdminSurface={true} />
-                            <div ref={menuRef} className="admin-account-wrapper">
+                <div className="admin-topbar">
+                    <div className="admin-topbar-inner">
+                        <div className="admin-brand-group">
                             <button
                                 type="button"
-                                className={`admin-account-trigger ${menuAbierto ? 'is-open' : ''}`}
-                                onClick={() => setMenuAbierto((prev) => !prev)}
-                                aria-expanded={menuAbierto}
-                                aria-haspopup="menu"
+                                className="admin-wordmark"
+                                onClick={() => navigate(isGerente ? '/dashboard' : '/reservas')}
+                                aria-label="Ir al inicio de Gestión Hotelera"
                             >
-                                <span className="admin-account-avatar" aria-hidden="true">
-                                    {iniciales}
-                                </span>
-                                <span className="admin-account-name">{nombreMostrar}</span>
-                                <ChevronDown size={14} className="admin-account-chevron" aria-hidden="true" />
+                                <span className="admin-monogram" aria-hidden="true">HP</span>
+                                <span className="admin-wordmark-brand">Hotel Paraíso</span>
+                                <span className="admin-wordmark-sep" aria-hidden="true">/</span>
+                                <span className="admin-wordmark-context">Gestión Hotelera</span>
                             </button>
+                        </div>
 
-                            {menuAbierto && (
-                                <div className="admin-account-menu" role="menu" aria-label="Menú de cuenta">
-                                    <div className="admin-account-data">
-                                        <div className="admin-account-data-name">{nombreMostrar}</div>
-                                        <div className="admin-account-data-email">{user.email}</div>
-                                        <div className="admin-account-data-role">
-                                            {etiquetaRol}
-                                        </div>
-                                    </div>
-                                    <div className="admin-account-divider" role="separator" />
+                        {isAuthenticated && user && (
+                            <div className="admin-topbar-actions">
+                                <NotificationBell isAdminSurface={true} />
+                                <div ref={menuRef} className="admin-account-wrapper">
                                     <button
                                         type="button"
-                                        role="menuitem"
-                                        className="admin-account-logout"
-                                        onClick={() => {
-                                            setMenuAbierto(false);
-                                            logout();
-                                        }}
+                                        className={`admin-account-trigger ${menuAbierto ? 'is-open' : ''}`}
+                                        onClick={() => setMenuAbierto((prev) => !prev)}
+                                        aria-expanded={menuAbierto}
+                                        aria-haspopup="menu"
                                     >
-                                        <LogOut size={15} aria-hidden="true" />
-                                        <span>Cerrar sesión</span>
+                                        <span className="admin-account-avatar" aria-hidden="true">
+                                            {iniciales}
+                                        </span>
+                                        <span className="admin-account-name">{nombreMostrar}</span>
+                                        <ChevronDown size={14} className="admin-account-chevron" aria-hidden="true" />
                                     </button>
+
+                                    {menuAbierto && (
+                                        <div className="admin-account-menu" role="menu" aria-label="Menú de cuenta">
+                                            <div className="admin-account-data">
+                                                <div className="admin-account-data-name">{nombreMostrar}</div>
+                                                <div className="admin-account-data-email">{user.email}</div>
+                                                <div className="admin-account-data-role">
+                                                    {etiquetaRol}
+                                                </div>
+                                            </div>
+                                            <div className="admin-account-divider" role="separator" />
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                className="admin-account-logout"
+                                                onClick={() => {
+                                                    setMenuAbierto(false);
+                                                    logout();
+                                                }}
+                                            >
+                                                <LogOut size={15} aria-hidden="true" />
+                                                <span>Cerrar sesión</span>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
+
+                <nav className="admin-subnav" aria-label="Navegación administrativa">
+                    <div className="admin-subnav-inner">
+                        {adminNavGroups.map((grupo, idx) => (
+                            <React.Fragment key={idx}>
+                                {idx > 0 && <span className="admin-nav-divider" aria-hidden="true" />}
+                                <div className="admin-nav-group">
+                                    {grupo.map((item) => {
+                                        const Icon = item.icon;
+                                        const isActive = activeTab === item.id;
+                                        return (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                className={`admin-tab-btn ${isActive ? 'is-active' : ''}`}
+                                                aria-current={isActive ? 'page' : undefined}
+                                                onClick={() => handleTabClick(item)}
+                                            >
+                                                <Icon size={14} aria-hidden="true" />
+                                                <span>{item.label}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </React.Fragment>
+                        ))}
+                    </div>
+                </nav>
             </header>
 
             {/* Contenido Operativo */}
