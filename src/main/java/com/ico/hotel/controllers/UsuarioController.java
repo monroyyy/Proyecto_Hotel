@@ -20,13 +20,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Controlador exclusivo para ADMINISTRADOR: gestión completa de cuentas de usuario
+ * Controlador exclusivo para GERENTE: gestión completa de cuentas de usuario
  * (creación, edición de datos, cambio de rol/estado y eliminación).
  */
 @RestController
 @RequestMapping("/api/usuarios")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMINISTRADOR')")
+@PreAuthorize("hasRole('GERENTE')")
 public class UsuarioController {
 
     private final UsuarioRepository usuarioRepository;
@@ -124,8 +124,8 @@ public class UsuarioController {
             } catch (IllegalArgumentException e) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Rol inválido."));
             }
-            if (esMismoAdmin && nuevoRol != Rol.ADMINISTRADOR) {
-                return ResponseEntity.badRequest().body(Map.of("error", "No puede quitarse a sí mismo el rol de ADMINISTRADOR."));
+            if (esMismoAdmin && nuevoRol != Rol.GERENTE) {
+                return ResponseEntity.badRequest().body(Map.of("error", "No puede quitarse a sí mismo el rol de GERENTE."));
             }
             u.setRol(nuevoRol);
         }
@@ -183,8 +183,8 @@ public class UsuarioController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Usuario no encontrado."));
         }
 
-        if (adminActual != null && adminActual.getIdUsuario().equals(id) && nuevoRol != Rol.ADMINISTRADOR) {
-            return ResponseEntity.badRequest().body(Map.of("error", "No puede quitarse a sí mismo el rol de ADMINISTRADOR."));
+        if (adminActual != null && adminActual.getIdUsuario().equals(id) && nuevoRol != Rol.GERENTE) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No puede quitarse a sí mismo el rol de GERENTE."));
         }
 
         u.setRol(nuevoRol);

@@ -203,7 +203,134 @@ public class DashboardService {
         kpis.put("cambioIngresosPct", cambioIngresosPct);
         kpis.put("ingresosAnoAnterior", ingresosPrev.setScale(2, RoundingMode.HALF_UP));
 
+        // 4. Desglose por Método de Pago (cobros efectivos del periodo)
+        Map<String, BigDecimal> montoPorMetodo = new LinkedHashMap<>();
+        Map<String, Integer> opsPorMetodo = new LinkedHashMap<>();
+        List<String> ordenMetodos = List.of("TARJETA_CREDITO", "TRANSFERENCIA", "TARJETA_DEBITO", "EFECTIVO");
+        for (String cod : ordenMetodos) {
+            montoPorMetodo.put(cod, BigDecimal.ZERO);
+            opsPorMetodo.put(cod, 0);
+        }
+        long sumaDiasAnticipacion = 0;
+        int conteoConAnticipacion = 0;
+
+        for (Reserva r : reservasAno) {
+            String est = r.getEstado() != null ? r.getEstado() : "";
+            if (Reserva.FINALIZADA.equals(est) || Reserva.CONFIRMADA.equals(est) || Reserva.OCUPADA.equals(est)) {
+                BigDecimal ant = r.getAnticipo() != null ? r.getAnticipo() : BigDecimal.ZERO;
+                if (ant.compareTo(BigDecimal.ZERO) > 0) {
+                    String codAnt = normalizarMetodoPagoDashboard(r.getMetodoPago());
+                    montoPorMetodo.put(codAnt, montoPorMetodo.get(codAnt).add(ant));
+                    opsPorMetodo.put(codAnt, opsPorMetodo.get(codAnt) + 1);
+                }
+                if (Reserva.FINALIZADA.equals(est)) {
+                    BigDecimal t = r.getTotal() != null ? r.getTotal() : BigDecimal.ZERO;
+                    BigDecimal liq = t.subtract(ant).max(BigDecimal.ZERO);
+                    if (liq.compareTo(BigDecimal.ZERO) > 0) {
+                        String codSal = normalizarMetodoPagoDashboard(
+                                r.getMetodoPagoSaldo() != null && !r.getMetodoPagoSaldo().isBlank()
+                                        ? r.getMetodoPagoSaldo()
+                                        : r.getMetodoPago()
+                        );
+                        montoPorMetodo.put(codSal, montoPorMetodo.get(codSal).add(liq));
+                        opsPorMetodo.put(codSal, opsPorMetodo.get(codSal) + 1);
+                    }
+                }
+                if (r.getFechaCreacion() != null && r.getFechaEntrada() != null) {
+                    long dias = java.time.temporal.ChronoUnit.DAYS.between(r.getFechaCreacion().toLocalDate(), r.getFechaEntrada());
+                    if (dias >= 0 && dias <= 730) {
+                        sumaDiasAnticipacion += dias;
+                        conteoConAnticipacion++;
+                    }
+                }
+            }
+        }
+
+        BigDecimal totalCobradoMetodos = montoPorMetodo.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<Map<String, Object>> metodosPago = new ArrayList<>();
+        for (String cod : ordenMetodos) {
+            BigDecimal m = montoPorMetodo.get(cod).setScale(2, RoundingMode.HALF_UP);
+            double pct = totalCobradoMetodos.compareTo(BigDecimal.ZERO) > 0
+                    ? Math.round((m.doubleValue() / totalCobradoMetodos.doubleValue()) * 1000.0) / 10.0
+                    : 0.0;
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("codigo", cod);
+            row.put("nombre", etiquetaMetodoPagoDashboard(cod));
+            row.put("monto", m);
+            row.put("operaciones", opsPorMetodo.get(cod));
+            row.put("porcentaje", pct);
+            metodosPago.add(row);
+        }
+        metodosPago.sort((a, b) -> ((BigDecimal) b.get("monto")).compareTo((BigDecimal) a.get("monto")));
+        kpis.put("metodosPago", metodosPago);
+        kpis.put("totalCobradoMetodos", totalCobradoMetodos.setScale(2, RoundingMode.HALF_UP));
+
+        // 5. Embudo de Conversión y Comportamiento de Estancia (ALOS / Lead Time)
+        int estanciasValidas = conteoFinalizadas + conteoConfirmadasOcupadas;
+        double estanciaPromedioNoches = estanciasValidas > 0
+                ? Math.round(((double) nochesVendidas / estanciasValidas) * 10.0) / 10.0
+                : 0.0;
+        double anticipacionPromedioDias = conteoConAnticipacion > 0
+                ? Math.round(((double) sumaDiasAnticipacion / conteoConAnticipacion) * 10.0) / 10.0
+                : 0.0;
+
+        Map<String, Object> embudo = new LinkedHashMap<>();
+        embudo.put("totalSolicitudes", totalReservas);
+        embudo.put("confirmadas", estanciasValidas);
+        embudo.put("finalizadas", conteoFinalizadas);
+        embudo.put("canceladasNoShow", conteoCanceladas + conteoNoShow);
+        kpis.put("embudo", embudo);
+        kpis.put("estanciaPromedioNoches", estanciaPromedioNoches);
+        kpis.put("anticipacionPromedioDias", anticipacionPromedioDias);
+
+        // 6. Pulso Operativo de Hoy (tiempo real)
+        LocalDate hoy = LocalDate.now(clockActual());
+        java.time.LocalDateTime ahora = java.time.LocalDateTime.now(clockActual());
+        List<Reserva> reservasRecientes = filtrarReservasPorHotelYFechas(hoy.minusDays(30), hoy.plusDays(7), idHotel, incluirInactivos);
+        int llegadasHoy = 0;
+        int checkOutsHoy = 0;
+        BigDecimal saldoCheckOutsHoy = BigDecimal.ZERO;
+        int preReservasCriticas = 0;
+        for (Reserva rr : reservasRecientes) {
+            String est = rr.getEstado() != null ? rr.getEstado() : "";
+            if (hoy.equals(rr.getFechaEntrada()) && (Reserva.CONFIRMADA.equals(est) || Reserva.OCUPADA.equals(est))) {
+                llegadasHoy++;
+            }
+            if (hoy.equals(rr.getFechaSalida()) && (Reserva.OCUPADA.equals(est) || Reserva.CONFIRMADA.equals(est))) {
+                checkOutsHoy++;
+                saldoCheckOutsHoy = saldoCheckOutsHoy.add(rr.getSaldo() != null ? rr.getSaldo() : BigDecimal.ZERO);
+            }
+            if (Reserva.PRE_RESERVA.equals(est) && rr.getFechaExpiracion() != null && !rr.getFechaExpiracion().isAfter(ahora.plusHours(4))) {
+                preReservasCriticas++;
+            }
+        }
+        Map<String, Object> pulsoHoy = new LinkedHashMap<>();
+        pulsoHoy.put("llegadasHoy", llegadasHoy);
+        pulsoHoy.put("checkOutsHoy", checkOutsHoy);
+        pulsoHoy.put("saldoCheckOutsHoy", saldoCheckOutsHoy.setScale(2, RoundingMode.HALF_UP));
+        pulsoHoy.put("preReservasCriticas", preReservasCriticas);
+        kpis.put("pulsoHoy", pulsoHoy);
+
         return kpis;
+    }
+
+    private String normalizarMetodoPagoDashboard(String raw) {
+        if (raw == null || raw.isBlank()) return "EFECTIVO";
+        String up = raw.trim().toUpperCase(Locale.ROOT);
+        if (up.contains("CREDITO") || up.contains("CRÉDITO")) return "TARJETA_CREDITO";
+        if (up.contains("DEBITO") || up.contains("DÉBITO")) return "TARJETA_DEBITO";
+        if (up.contains("TRANSFER")) return "TRANSFERENCIA";
+        if (up.contains("EFECTIVO")) return "EFECTIVO";
+        return "TARJETA_CREDITO";
+    }
+
+    private String etiquetaMetodoPagoDashboard(String cod) {
+        return switch (cod) {
+            case "TARJETA_CREDITO" -> "Tarjeta de Crédito";
+            case "TRANSFERENCIA" -> "Transferencia";
+            case "TARJETA_DEBITO" -> "Tarjeta de Débito";
+            default -> "Efectivo";
+        };
     }
 
     /**

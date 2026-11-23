@@ -448,20 +448,27 @@ class Bloque4APaginacionInformesTest extends AbstractMysqlTestcontainerTest {
         assertThat((BigDecimal) kpis2026.get("ingresosHospedaje"))
                 .isEqualByComparingTo((BigDecimal) informe2026Activos.get("granTotalContratado"));
 
-        // Verificar paginación de endpoint /api/informes/financiero y 400 con size > 100
+        // Verificar paginación de endpoint /api/informes/financiero (exclusivo GERENTE; 403 para ADMIN) y 400 con size > 100
+        Usuario gerente = usuarioRepository.findByEmailIgnoreCase("gerente@hotelparaiso.com").orElseThrow();
+        String jwtGerente = jwtService.generateToken(gerente);
+
+        mockMvc.perform(get("/api/informes/financiero")
+                        .header("Authorization", "Bearer " + jwtAdmin))
+                .andExpect(status().isForbidden());
+
         mockMvc.perform(get("/api/informes/financiero")
                         .param("inicio", "2026-01-01")
                         .param("fin", "2026-12-31")
                         .param("page", "1")
                         .param("size", "10")
-                        .header("Authorization", "Bearer " + jwtAdmin))
+                        .header("Authorization", "Bearer " + jwtGerente))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page").value(1))
                 .andExpect(jsonPath("$.size").value(10))
                 .andExpect(jsonPath("$.filas.length()").value(10));
 
         mockMvc.perform(get("/api/informes/financiero?size=101")
-                        .header("Authorization", "Bearer " + jwtAdmin))
+                        .header("Authorization", "Bearer " + jwtGerente))
                 .andExpect(status().isBadRequest());
     }
 

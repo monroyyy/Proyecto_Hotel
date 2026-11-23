@@ -34,6 +34,20 @@ public class EmailService {
     @Value("${app.verification.expiration-minutes:30}")
     private int expirationMinutes;
 
+    @jakarta.annotation.PostConstruct
+    public void normalizarCredencialesSmtp() {
+        if (mailPassword != null) {
+            // Las contraseñas de aplicación de Gmail suelen copiarse en 4 bloques separados por espacios
+            String cleanPass = mailPassword.replaceAll("\\s+", "");
+            if (mailSender instanceof org.springframework.mail.javamail.JavaMailSenderImpl impl) {
+                impl.setPassword(cleanPass);
+                if (mailFrom != null && !mailFrom.isBlank()) {
+                    impl.setUsername(mailFrom.trim());
+                }
+            }
+        }
+    }
+
     public boolean enviarCorreoVerificacion(String destinatario, String nombreUsuario, String token) {
         String codigo = (token != null && token.contains("-"))
                 ? token.substring(0, token.indexOf("-"))

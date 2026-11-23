@@ -68,8 +68,10 @@ public class HotelAiConfig {
                 .defaultSystem(systemPrompt)
                 .defaultTools(hotelSearchTool, habitacionSearchTool, tipoHabitacionTool, hotelPolicyTool, reservaTool, estadisticasTool)
                 .defaultAdvisors(
-                        new OllamaToolCallingAdvisor(toolCallingManager),
-                        MessageChatMemoryAdvisor.builder(chatMemory).build()
+                        MessageChatMemoryAdvisor.builder(chatMemory)
+                                .order(org.springframework.core.Ordered.HIGHEST_PRECEDENCE + 50)
+                                .build(),
+                        new OllamaToolCallingAdvisor(toolCallingManager)
                 )
                 .build();
     }

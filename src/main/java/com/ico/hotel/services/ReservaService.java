@@ -1434,12 +1434,18 @@ public class ReservaService {
     }
 
     /**
-     * Genera avisos en tiempo real sobre habitaciones próximas a desocuparse y estancias recién concluidas.
+     * Genera el centro operativo de notificaciones en tiempo real:
+     * - Salidas (Check-out HOY / MAÑANA)
+     * - Llegadas pendientes de hoy (Solo Staff)
+     * - Pre-reservas próximas a vencer en <24h (Solo Staff)
+     * - Resumen de habitaciones en mantenimiento (Solo Staff)
      */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> obtenerNotificacionesDesocupacion(CustomUserDetails user) {
         LocalDateTime ahora = LocalDateTime.now(clockActual());
         LocalDate hoy = ahora.toLocalDate();
+        boolean esStaff = user != null && user.isStaff();
+        boolean ocultarMontos = user != null && user.getRol() == Rol.ADMINISTRADOR;
 
         List<Reserva> activas = reservaRepository.findAllActivasOrdenadas();
         enriquecerReservas(activas);
@@ -1449,9 +1455,9 @@ public class ReservaService {
         for (Reserva r : activas) {
             if (r.getHabitacion() == null || r.getFechaSalida() == null) continue;
             Habitacion hab = r.getHabitacion();
-            LocalDateTime checkoutDt = r.getFechaSalida().atTime(HORA_CHECKOUT);
-            long horasRestantes = Duration.between(ahora, checkoutDt).toHours();
-            long diasRestantes = java.time.temporal.ChronoUnit.DAYS.between(hoy, r.getFechaSalida());
+            String hotelNombre = hab.getHotel() != null ? hab.getHotel().getNombre() : "Hotel Paraíso";
+            String tipoHab = hab.getTipoHabitacion() != null ? hab.getTipoHabitacion().getNombre() : "Suite";
+            String huespedNombre = (esStaff && r.getHuesped() != null) ? r.getHuesped().getNombre() : null;
 
             boolean esMiReserva = user != null && (
                     (r.getUsuario() != null && Objects.equals(r.getUsuario().getIdUsuario(), user.getIdUsuario()))
@@ -1459,64 +1465,178 @@ public class ReservaService {
                         && user.getEmail() != null && r.getHuesped().getEmail().trim().equalsIgnoreCase(user.getEmail().trim()))
             );
 
-            // Solo generar avisos cuando la desocupación sea verdaderamente inminente (HOY o MAÑANA)
-            // Esto evita saturar el centro de notificaciones con estancias que apenas comienzan o vencen en muchos días
-            boolean venceHoy = r.getFechaSalida().isEqual(hoy) || (diasRestantes <= 0 && horasRestantes <= 18);
-            boolean venceManana = r.getFechaSalida().isEqual(hoy.plusDays(1)) || (diasRestantes == 1 && horasRestantes <= 36);
+            // Para huéspedes, solo mostrar sus propias reservaciones
+            if (!esStaff && !esMiReserva) continue;
 
-            if (venceHoy || venceManana || (esMiReserva && diasRestantes <= 2)) {
-                String nivel;
-                String titulo;
-                String mensaje;
+            // 1. SALIDAS (Check-out HOY / MAÑANA para estancias Ocupadas o propias por vencer)
+            if (Reserva.OCUPADA.equals(r.getEstado()) || (!esStaff && esMiReserva)) {
+                LocalDateTime checkoutDt = r.getFechaSalida().atTime(HORA_CHECKOUT);
+                long horasRestantes = Duration.between(ahora, checkoutDt).toHours();
+                long diasRestantes = java.time.temporal.ChronoUnit.DAYS.between(hoy, r.getFechaSalida());
 
-                if (venceHoy) {
-                    nivel = "HOY";
-                    titulo = "Check-out HOY · Hab. #" + hab.getNumero();
-                    mensaje = (hab.getHotel() != null ? hab.getHotel().getNombre() : "Hotel")
-                            + " · Desocupa hoy a las 12:00 hrs. "
-                            + (horasRestantes > 0 ? "(quedan " + horasRestantes + " h)" : "(horario de salida)")
-                            + ". Verificar entrega o solicitar +1 día si está disponible.";
-                } else if (venceManana) {
-                    nivel = "MANANA";
-                    titulo = "Desocupa MAÑANA · Hab. #" + hab.getNumero();
-                    mensaje = (hab.getHotel() != null ? hab.getHotel().getNombre() : "Hotel")
-                            + " · Salida programada para mañana " + r.getFechaSalida() + " a las 12:00 hrs. Preparar camaristas y recepción.";
-                } else {
-                    nivel = "PROXIMA";
-                    titulo = "Estancia por concluir · Hab. #" + hab.getNumero();
-                    mensaje = (hab.getHotel() != null ? hab.getHotel().getNombre() : "Hotel")
-                            + " · Fecha de salida: " + r.getFechaSalida() + " a las 12:00 hrs.";
+                boolean venceHoy = r.getFechaSalida().isEqual(hoy) || (diasRestantes <= 0 && horasRestantes <= 18);
+                boolean venceManana = !venceHoy && (r.getFechaSalida().isEqual(hoy.plusDays(1)) || (diasRestantes == 1 && horasRestantes <= 36));
+
+                if (venceHoy || venceManana || (esMiReserva && diasRestantes <= 2)) {
+                    String nivel = venceHoy ? "HOY" : venceManana ? "MANANA" : "PROXIMA";
+                    int prioridad = venceHoy ? 1 : venceManana ? 3 : 4;
+                    String titulo = venceHoy
+                            ? "Check-out HOY · Hab. #" + hab.getNumero()
+                            : venceManana
+                                ? "Desocupa MAÑANA · Hab. #" + hab.getNumero()
+                                : "Estancia por concluir · Hab. #" + hab.getNumero();
+                    String mensaje = venceHoy
+                            ? (horasRestantes > 0 ? "Salida a las 12:00 h (quedan " + horasRestantes + " h)." : "En horario límite de salida (12:00 h).")
+                            : "Salida programada a las 12:00 h.";
+
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("idNotificacion", "desocupacion-" + r.getIdReserva() + "-" + r.getFechaSalida());
+                    item.put("categoria", "SALIDAS");
+                    item.put("nivel", nivel);
+                    item.put("prioridad", prioridad);
+                    item.put("urgente", venceHoy);
+                    item.put("idReserva", r.getIdReserva());
+                    item.put("folio", r.getFolio());
+                    item.put("idHabitacion", hab.getIdHabitacion());
+                    item.put("numeroHabitacion", hab.getNumero());
+                    item.put("tipoHabitacion", tipoHab);
+                    item.put("idHotel", hab.getHotel() != null ? hab.getHotel().getIdHotel() : null);
+                    item.put("nombreHotel", hotelNombre);
+                    item.put("huespedNombre", huespedNombre);
+                    item.put("estadoReserva", r.getEstado());
+                    item.put("fechaEntrada", r.getFechaEntrada() != null ? r.getFechaEntrada().toString() : null);
+                    item.put("fechaSalida", r.getFechaSalida().toString());
+                    item.put("horaCheckout", "12:00 h");
+                    item.put("horasRestantes", Math.max(horasRestantes, 0));
+                    item.put("diasRestantes", Math.max(diasRestantes, 0));
+                    item.put("titulo", titulo);
+                    item.put("mensaje", mensaje);
+                    item.put("esMiReserva", esMiReserva);
+                    item.put("diaExtraDisponible", Boolean.TRUE.equals(r.getDiaExtraDisponible()));
+                    item.put("costoDiaExtra", ocultarMontos ? null : r.getCostoDiaExtra());
+                    item.put("nuevaFechaSalidaSugerida", r.getNuevaFechaSalidaSugerida() != null ? r.getNuevaFechaSalidaSugerida().toString() : null);
+                    notificaciones.add(item);
                 }
+            }
+
+            if (!esStaff) continue;
+
+            // 2. LLEGADAS DE HOY (Confirmadas listas para Check-In hoy o rezagadas)
+            if (Reserva.CONFIRMADA.equals(r.getEstado()) && r.getFechaEntrada() != null && !r.getFechaEntrada().isAfter(hoy)) {
+                boolean atrasada = r.getFechaEntrada().isBefore(hoy);
+                LocalDateTime checkinDt = r.getFechaEntrada().atTime(HORA_CHECKIN);
+                long horasParaCheckin = Duration.between(ahora, checkinDt).toHours();
 
                 Map<String, Object> item = new LinkedHashMap<>();
-                item.put("idNotificacion", "desocupacion-" + r.getIdReserva() + "-" + r.getFechaSalida());
+                item.put("idNotificacion", "llegada-" + r.getIdReserva() + "-" + r.getFechaEntrada());
+                item.put("categoria", "LLEGADAS");
+                item.put("nivel", "LLEGADA");
+                item.put("prioridad", 2);
+                item.put("urgente", true);
                 item.put("idReserva", r.getIdReserva());
                 item.put("folio", r.getFolio());
                 item.put("idHabitacion", hab.getIdHabitacion());
                 item.put("numeroHabitacion", hab.getNumero());
-                item.put("tipoHabitacion", hab.getTipoHabitacion() != null ? hab.getTipoHabitacion().getNombre() : "Suite");
+                item.put("tipoHabitacion", tipoHab);
                 item.put("idHotel", hab.getHotel() != null ? hab.getHotel().getIdHotel() : null);
-                item.put("nombreHotel", hab.getHotel() != null ? hab.getHotel().getNombre() : "Hotel Paraíso");
-                item.put("ciudadHotel", hab.getHotel() != null ? hab.getHotel().getCiudad() : "");
-                item.put("huespedNombre", (user != null && user.isStaff() && r.getHuesped() != null) ? r.getHuesped().getNombre() : null);
+                item.put("nombreHotel", hotelNombre);
+                item.put("huespedNombre", huespedNombre);
                 item.put("estadoReserva", r.getEstado());
                 item.put("fechaEntrada", r.getFechaEntrada().toString());
                 item.put("fechaSalida", r.getFechaSalida().toString());
-                item.put("horaCheckout", "12:00 hrs");
-                item.put("horasRestantes", Math.max(horasRestantes, 0));
-                item.put("diasRestantes", Math.max(diasRestantes, 0));
-                item.put("nivel", nivel);
-                item.put("titulo", titulo);
-                item.put("mensaje", mensaje);
-                item.put("esMiReserva", esMiReserva);
-                item.put("diaExtraDisponible", Boolean.TRUE.equals(r.getDiaExtraDisponible()));
-                item.put("costoDiaExtra", r.getCostoDiaExtra());
-                item.put("nuevaFechaSalidaSugerida", r.getNuevaFechaSalidaSugerida() != null ? r.getNuevaFechaSalidaSugerida().toString() : null);
+                item.put("horaCheckout", "15:00 h");
+                item.put("horasRestantes", Math.max(horasParaCheckin, 0));
+                item.put("diasRestantes", 0);
+                item.put("titulo", atrasada ? "Llegada pendiente · Hab. #" + hab.getNumero() : "Check-in HOY · Hab. #" + hab.getNumero());
+                item.put("mensaje", atrasada
+                        ? "Entrada prevista el " + r.getFechaEntrada() + ". Verificar No-Show o registrar ingreso."
+                        : "Llegada confirmada para hoy a partir de las 15:00 h.");
+                item.put("esMiReserva", false);
+                item.put("diaExtraDisponible", false);
+                item.put("costoDiaExtra", null);
+                notificaciones.add(item);
+            }
+
+            // 3. PRE-RESERVAS POR VENCER (< 24 horas o ya vencidas)
+            if (Reserva.PRE_RESERVA.equals(r.getEstado())) {
+                LocalDateTime exp = r.getFechaExpiracion();
+                long horasRestantes = exp != null ? Duration.between(ahora, exp).toHours() : 24;
+                boolean porVencer = (exp != null && horasRestantes <= 24)
+                        || (r.getFechaEntrada() != null && !r.getFechaEntrada().isAfter(hoy.plusDays(1)));
+
+                if (porVencer) {
+                    boolean vencida = exp != null && exp.isBefore(ahora);
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("idNotificacion", "prereserva-" + r.getIdReserva());
+                    item.put("categoria", "ALERTAS");
+                    item.put("nivel", "VENCIMIENTO");
+                    item.put("prioridad", 2);
+                    item.put("urgente", true);
+                    item.put("idReserva", r.getIdReserva());
+                    item.put("folio", r.getFolio());
+                    item.put("idHabitacion", hab.getIdHabitacion());
+                    item.put("numeroHabitacion", hab.getNumero());
+                    item.put("tipoHabitacion", tipoHab);
+                    item.put("idHotel", hab.getHotel() != null ? hab.getHotel().getIdHotel() : null);
+                    item.put("nombreHotel", hotelNombre);
+                    item.put("huespedNombre", huespedNombre);
+                    item.put("estadoReserva", r.getEstado());
+                    item.put("fechaEntrada", r.getFechaEntrada() != null ? r.getFechaEntrada().toString() : null);
+                    item.put("fechaSalida", r.getFechaSalida().toString());
+                    item.put("horaCheckout", vencida ? "Vencida" : (horasRestantes <= 1 ? "< 1 h" : horasRestantes + " h"));
+                    item.put("horasRestantes", Math.max(horasRestantes, 0));
+                    item.put("diasRestantes", 0);
+                    item.put("titulo", vencida ? "Pre-reserva vencida · " + r.getFolio() : "Pre-reserva por vencer · " + r.getFolio());
+                    item.put("mensaje", vencida
+                            ? "Sin anticipo registrado; lista para liberar inventario."
+                            : "Pendiente de anticipo (vence en " + Math.max(horasRestantes, 1) + " h).");
+                    item.put("esMiReserva", false);
+                    item.put("diaExtraDisponible", false);
+                    item.put("costoDiaExtra", null);
+                    notificaciones.add(item);
+                }
+            }
+        }
+
+        // 4. RESUMEN DE HABITACIONES EN MANTENIMIENTO (Solo Staff)
+        if (esStaff && habitacionRepository != null) {
+            Long enMantenimiento = habitacionRepository.countMantenimiento();
+            if (enMantenimiento != null && enMantenimiento > 0) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("idNotificacion", "mantenimiento-resumen-" + enMantenimiento);
+                item.put("categoria", "ALERTAS");
+                item.put("nivel", "MANTENIMIENTO");
+                item.put("prioridad", 4);
+                item.put("urgente", false);
+                item.put("idReserva", null);
+                item.put("folio", null);
+                item.put("idHabitacion", null);
+                item.put("numeroHabitacion", null);
+                item.put("tipoHabitacion", null);
+                item.put("idHotel", null);
+                item.put("nombreHotel", "Inventario Hotelero");
+                item.put("huespedNombre", null);
+                item.put("estadoReserva", "Mantenimiento");
+                item.put("fechaEntrada", null);
+                item.put("fechaSalida", null);
+                item.put("horaCheckout", enMantenimiento + " hab.");
+                item.put("horasRestantes", 999);
+                item.put("diasRestantes", 0);
+                item.put("titulo", enMantenimiento == 1
+                        ? "1 habitación en mantenimiento"
+                        : enMantenimiento + " habitaciones en mantenimiento");
+                item.put("mensaje", "Unidades temporalmente bloqueadas fuera de venta.");
+                item.put("cantidadMantenimiento", enMantenimiento);
+                item.put("esMiReserva", false);
+                item.put("diaExtraDisponible", false);
+                item.put("costoDiaExtra", null);
                 notificaciones.add(item);
             }
         }
 
-        notificaciones.sort(Comparator.comparingLong(m -> ((Number) m.get("horasRestantes")).longValue()));
+        notificaciones.sort(Comparator
+                .comparingInt((Map<String, Object> m) -> ((Number) m.getOrDefault("prioridad", 5)).intValue())
+                .thenComparingLong(m -> ((Number) m.getOrDefault("horasRestantes", 999)).longValue()));
         return notificaciones;
     }
 

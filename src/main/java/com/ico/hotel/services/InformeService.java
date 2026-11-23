@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
@@ -48,6 +49,13 @@ public class InformeService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> generarInformeFinanciero(LocalDate inicio, LocalDate fin, Integer idHotel, int page, int size) {
+        return generarInformeFinanciero(inicio, fin, idHotel, page, size, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> generarInformeFinanciero(
+            LocalDate inicio, LocalDate fin, Integer idHotel, int page, int size,
+            String estadoFiltro, String metodoPagoFiltro, String busqueda) {
         if (page < 0) {
             throw new IllegalArgumentException("El número de página no puede ser negativo.");
         }
@@ -98,14 +106,89 @@ public class InformeService {
             }
         }
 
-        PageRequest pageRequest = PageRequest.of(page, size);
-        Page<Integer> idsPage = (idHotel == null)
-                ? reservaRepository.findIdsFinanciero(fInicio, fFin, pageRequest)
-                : reservaRepository.findIdsFinancieroPorHotel(fInicio, fFin, idHotel, pageRequest);
+        String estF = (estadoFiltro != null && !estadoFiltro.isBlank() && !"TODOS".equalsIgnoreCase(estadoFiltro))
+                ? estadoFiltro.trim() : null;
+        String metF = (metodoPagoFiltro != null && !metodoPagoFiltro.isBlank() && !"TODOS".equalsIgnoreCase(metodoPagoFiltro))
+                ? metodoPagoFiltro.trim().toUpperCase() : null;
+        String qF = (busqueda != null && !busqueda.isBlank()) ? busqueda.trim().toLowerCase() : null;
+        boolean tieneFiltros = estF != null || metF != null || qF != null;
 
-        List<Reserva> reservasPagina = idsPage.isEmpty()
-                ? List.of()
-                : reordenarPorIds(idsPage.getContent(), reservaRepository.findAllByIdInWithDetails(idsPage.getContent()));
+        List<Reserva> reservasPagina;
+        long totalElements;
+        int totalPages;
+        int currentPage = page;
+
+        BigDecimal filtTotal = BigDecimal.ZERO;
+        BigDecimal filtCobrado = BigDecimal.ZERO;
+        BigDecimal filtPenal = BigDecimal.ZERO;
+        BigDecimal filtReembolso = BigDecimal.ZERO;
+
+        if (!tieneFiltros) {
+            PageRequest pageRequest = PageRequest.of(page, size);
+            Page<Integer> idsPage = (idHotel == null)
+                    ? reservaRepository.findIdsFinanciero(fInicio, fFin, pageRequest)
+                    : reservaRepository.findIdsFinancieroPorHotel(fInicio, fFin, idHotel, pageRequest);
+
+            reservasPagina = idsPage.isEmpty()
+                    ? List.of()
+                    : reordenarPorIds(idsPage.getContent(), reservaRepository.findAllByIdInWithDetails(idsPage.getContent()));
+            totalElements = idsPage.getTotalElements();
+            totalPages = idsPage.getTotalPages();
+            currentPage = idsPage.getNumber();
+        } else {
+            List<Reserva> filtradas = reservaRepository.findByFechaEntradaBetweenOrderByFechaEntradaAsc(fInicio, fFin).stream()
+                    .filter(r -> idHotel == null || (r.getHabitacion() != null
+                            && r.getHabitacion().getHotel() != null
+                            && Objects.equals(r.getHabitacion().getHotel().getIdHotel(), idHotel)))
+                    .filter(r -> {
+                        if (estF == null) return true;
+                        String est = r.getEstado() != null ? r.getEstado() : "";
+                        if ("RIESGO".equalsIgnoreCase(estF)) {
+                            return Reserva.CANCELADA.equals(est) || Reserva.NO_SHOW.equals(est);
+                        }
+                        return estF.equalsIgnoreCase(est);
+                    })
+                    .filter(r -> {
+                        if (metF == null) return true;
+                        String mp = r.getMetodoPago() != null ? r.getMetodoPago().trim().toUpperCase() : "";
+                        return metF.equals(mp);
+                    })
+                    .filter(r -> {
+                        if (qF == null) return true;
+                        String folio = r.getFolio() != null ? r.getFolio().toLowerCase() : "";
+                        String titular = r.getHuesped() != null && r.getHuesped().getNombre() != null
+                                ? r.getHuesped().getNombre().toLowerCase() : "";
+                        String hotel = r.getHabitacion() != null && r.getHabitacion().getHotel() != null
+                                && r.getHabitacion().getHotel().getNombre() != null
+                                ? r.getHabitacion().getHotel().getNombre().toLowerCase() : "";
+                        String hab = r.getHabitacion() != null && r.getHabitacion().getNumero() != null
+                                ? r.getHabitacion().getNumero().toLowerCase() : "";
+                        return folio.contains(qF) || titular.contains(qF) || hotel.contains(qF) || hab.contains(qF);
+                    })
+                    .toList();
+
+            for (Reserva r : filtradas) {
+                BigDecimal tot = r.getTotal() != null ? r.getTotal() : BigDecimal.ZERO;
+                BigDecimal ant = r.getAnticipo() != null ? r.getAnticipo() : BigDecimal.ZERO;
+                BigDecimal ree = r.getMontoReembolso() != null ? r.getMontoReembolso() : BigDecimal.ZERO;
+                String est = r.getEstado() != null ? r.getEstado() : "";
+                BigDecimal liq = Reserva.FINALIZADA.equals(est) ? tot.subtract(ant) : BigDecimal.ZERO;
+                BigDecimal pen = Reserva.CANCELADA.equals(est)
+                        ? (r.getSaldo() != null ? r.getSaldo() : BigDecimal.ZERO)
+                        : (Reserva.NO_SHOW.equals(est) ? ant : BigDecimal.ZERO);
+
+                filtTotal = filtTotal.add(tot);
+                filtCobrado = filtCobrado.add(ant).add(liq);
+                filtPenal = filtPenal.add(pen);
+                filtReembolso = filtReembolso.add(ree);
+            }
+
+            totalElements = filtradas.size();
+            totalPages = (int) Math.ceil((double) totalElements / size);
+            int fromIdx = Math.min(page * size, filtradas.size());
+            int toIdx = Math.min(fromIdx + size, filtradas.size());
+            reservasPagina = filtradas.subList(fromIdx, toIdx);
+        }
 
         List<Map<String, Object>> filas = new ArrayList<>(reservasPagina.size());
         for (Reserva r : reservasPagina) {
@@ -160,10 +243,17 @@ public class InformeService {
         informe.put("totalPenalizaciones", totalPenalizaciones.setScale(2, RoundingMode.HALF_UP));
         informe.put("totalReembolsos", totalReembolsos.setScale(2, RoundingMode.HALF_UP));
         informe.put("ingresosNetosCaja", ingresosNetosCaja.setScale(2, RoundingMode.HALF_UP));
-        informe.put("page", idsPage.getNumber());
-        informe.put("size", idsPage.getSize());
-        informe.put("totalElements", idsPage.getTotalElements());
-        informe.put("totalPages", idsPage.getTotalPages());
+        informe.put("filtrado", tieneFiltros);
+        if (tieneFiltros) {
+            informe.put("filtroTotal", filtTotal.setScale(2, RoundingMode.HALF_UP));
+            informe.put("filtroCobrado", filtCobrado.setScale(2, RoundingMode.HALF_UP));
+            informe.put("filtroPenalizaciones", filtPenal.setScale(2, RoundingMode.HALF_UP));
+            informe.put("filtroReembolsos", filtReembolso.setScale(2, RoundingMode.HALF_UP));
+        }
+        informe.put("page", currentPage);
+        informe.put("size", size);
+        informe.put("totalElements", totalElements);
+        informe.put("totalPages", totalPages);
         informe.put("filas", filas);
 
         return informe;
@@ -192,13 +282,21 @@ public class InformeService {
     }
 
     /**
-     * Informe de Ocupación por Habitación e Inventario para el año seleccionado.
+     * Informe de Ocupación por Habitación e Inventario para el año o rango seleccionado.
      */
     public Map<String, Object> generarInformeOcupacion(Integer ano, Integer idHotel) {
-        int year = (ano != null) ? ano : LocalDate.now().getYear();
-        LocalDate inicio = LocalDate.of(year, 1, 1);
-        LocalDate fin = LocalDate.of(year, 12, 31);
-        int diasAno = inicio.isLeapYear() ? 366 : 365;
+        return generarInformeOcupacion(ano, idHotel, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> generarInformeOcupacion(Integer ano, Integer idHotel, LocalDate inicioParam, LocalDate finParam) {
+        int year = (ano != null) ? ano : LocalDate.now(clockActual()).getYear();
+        LocalDate inicio = (inicioParam != null) ? inicioParam : LocalDate.of(year, 1, 1);
+        LocalDate fin = (finParam != null) ? finParam : LocalDate.of(year, 12, 31);
+        if (inicio.isAfter(fin)) {
+            throw new IllegalArgumentException("La fecha de inicio no puede ser posterior a la fecha fin.");
+        }
+        int diasAno = (int) Math.max(ChronoUnit.DAYS.between(inicio, fin) + 1, 1);
 
         List<Habitacion> habitaciones = habitacionRepository.findAll().stream()
                 .filter(h -> idHotel == null || (h.getHotel() != null && Objects.equals(h.getHotel().getIdHotel(), idHotel)))
@@ -266,9 +364,17 @@ public class InformeService {
      * Informe de Cancelaciones, Penalizaciones y Reembolsos Bancarios autorizados por Don Roberto.
      */
     public Map<String, Object> generarInformeCancelaciones(Integer ano, Integer idHotel) {
-        int year = (ano != null) ? ano : LocalDate.now().getYear();
-        LocalDate inicio = LocalDate.of(year, 1, 1);
-        LocalDate fin = LocalDate.of(year, 12, 31);
+        return generarInformeCancelaciones(ano, idHotel, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> generarInformeCancelaciones(Integer ano, Integer idHotel, LocalDate inicioParam, LocalDate finParam) {
+        int year = (ano != null) ? ano : LocalDate.now(clockActual()).getYear();
+        LocalDate inicio = (inicioParam != null) ? inicioParam : LocalDate.of(year, 1, 1);
+        LocalDate fin = (finParam != null) ? finParam : LocalDate.of(year, 12, 31);
+        if (inicio.isAfter(fin)) {
+            throw new IllegalArgumentException("La fecha de inicio no puede ser posterior a la fecha fin.");
+        }
 
         List<Reserva> canceladas = reservaRepository.findByFechaEntradaBetweenOrderByFechaEntradaAsc(inicio, fin).stream()
                 .filter(r -> Reserva.CANCELADA.equals(r.getEstado()) || Reserva.NO_SHOW.equals(r.getEstado()))
@@ -348,6 +454,98 @@ public class InformeService {
         informe.put("casosReembolso50", count50Reembolso);
         informe.put("casosPenalizacionTotal", countSinReembolso);
         informe.put("casosNoShow", countNoShow);
+        informe.put("filas", filas);
+
+        return informe;
+    }
+
+    /**
+     * Informe de Cuentas por Cobrar (Saldos Pendientes en Lobby) para reservaciones vigentes.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> generarInformeCuentasPorCobrar(Integer ano, Integer idHotel, LocalDate inicioParam, LocalDate finParam) {
+        LocalDate hoy = LocalDate.now(clockActual());
+        int year = (ano != null) ? ano : hoy.getYear();
+        LocalDate inicio = (inicioParam != null) ? inicioParam : LocalDate.of(year, 1, 1);
+        LocalDate fin = (finParam != null) ? finParam : LocalDate.of(year, 12, 31);
+        if (inicio.isAfter(fin)) {
+            throw new IllegalArgumentException("La fecha de inicio no puede ser posterior a la fecha fin.");
+        }
+
+        List<Reserva> vigentes = reservaRepository.findByFechaEntradaBetweenOrderByFechaEntradaAsc(inicio, fin).stream()
+                .filter(r -> Reserva.CONFIRMADA.equals(r.getEstado()) || Reserva.OCUPADA.equals(r.getEstado()))
+                .filter(r -> {
+                    if (idHotel == null) return true;
+                    return r.getHabitacion() != null
+                            && r.getHabitacion().getHotel() != null
+                            && Objects.equals(r.getHabitacion().getHotel().getIdHotel(), idHotel);
+                })
+                .toList();
+
+        BigDecimal totalSaldoPorCobrar = BigDecimal.ZERO;
+        BigDecimal totalAnticipoRecibido = BigDecimal.ZERO;
+        BigDecimal saldoProximos7Dias = BigDecimal.ZERO;
+        int cuentasProximas7Dias = 0;
+        int cuentasEnCasa = 0;
+
+        List<Map<String, Object>> filas = new ArrayList<>();
+        for (Reserva r : vigentes) {
+            BigDecimal total = r.getTotal() != null ? r.getTotal() : BigDecimal.ZERO;
+            BigDecimal anticipo = r.getAnticipo() != null ? r.getAnticipo() : BigDecimal.ZERO;
+            BigDecimal saldo = (r.getSaldo() != null && r.getSaldo().compareTo(BigDecimal.ZERO) > 0)
+                    ? r.getSaldo()
+                    : total.subtract(anticipo).max(BigDecimal.ZERO);
+
+            if (saldo.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            long diasParaLlegada = r.getFechaEntrada() != null
+                    ? ChronoUnit.DAYS.between(hoy, r.getFechaEntrada())
+                    : 0L;
+
+            totalSaldoPorCobrar = totalSaldoPorCobrar.add(saldo);
+            totalAnticipoRecibido = totalAnticipoRecibido.add(anticipo);
+
+            if (Reserva.OCUPADA.equals(r.getEstado())) {
+                cuentasEnCasa++;
+            }
+            if (diasParaLlegada <= 7) {
+                cuentasProximas7Dias++;
+                saldoProximos7Dias = saldoProximos7Dias.add(saldo);
+            }
+
+            Map<String, Object> f = new LinkedHashMap<>();
+            f.put("idReserva", r.getIdReserva());
+            f.put("folio", r.getFolio());
+            f.put("titular", r.getHuesped() != null ? r.getHuesped().getNombre() : "—");
+            f.put("hotel", r.getHabitacion() != null && r.getHabitacion().getHotel() != null
+                    ? r.getHabitacion().getHotel().getNombre() : "Hotel Paraíso");
+            f.put("habitacionNumero", r.getHabitacion() != null ? r.getHabitacion().getNumero() : "—");
+            f.put("fechaEntrada", r.getFechaEntrada());
+            f.put("fechaSalida", r.getFechaSalida());
+            f.put("noches", r.getNoches() != null ? r.getNoches() : 1);
+            f.put("total", total.setScale(2, RoundingMode.HALF_UP));
+            f.put("anticipo", anticipo.setScale(2, RoundingMode.HALF_UP));
+            f.put("saldoPendiente", saldo.setScale(2, RoundingMode.HALF_UP));
+            f.put("diasParaLlegada", diasParaLlegada);
+            f.put("estado", r.getEstado());
+            f.put("metodoPago", r.getMetodoPago());
+            filas.add(f);
+        }
+
+        Map<String, Object> informe = new LinkedHashMap<>();
+        informe.put("titulo", "Informe de Cuentas por Cobrar (Saldos Pendientes)");
+        informe.put("ano", year);
+        informe.put("periodoInicio", inicio);
+        informe.put("periodoFin", fin);
+        informe.put("idHotel", idHotel);
+        informe.put("totalCuentas", filas.size());
+        informe.put("totalSaldoPorCobrar", totalSaldoPorCobrar.setScale(2, RoundingMode.HALF_UP));
+        informe.put("totalAnticipoRecibido", totalAnticipoRecibido.setScale(2, RoundingMode.HALF_UP));
+        informe.put("cuentasProximas7Dias", cuentasProximas7Dias);
+        informe.put("saldoProximos7Dias", saldoProximos7Dias.setScale(2, RoundingMode.HALF_UP));
+        informe.put("cuentasEnCasa", cuentasEnCasa);
         informe.put("filas", filas);
 
         return informe;

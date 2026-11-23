@@ -439,14 +439,18 @@ class Bloque4CCatalogoPagoConsultasTest extends AbstractMysqlTestcontainerTest {
         hInacMant = habitacionRepository.save(hInacMant);
         habitacionesTempIds.add(hInacMant.getIdHabitacion());
 
-        // 1. Seguridad: /api/consultas/** es exclusivo de ADMINISTRADOR (403 para GERENTE, RECEPCIONISTA, HUESPED; 401 anónimo)
+        // 1. Seguridad: /api/consultas/** es exclusivo de GERENTE y ADMINISTRADOR (403 para RECEPCIONISTA y HUESPED; 401 anónimo)
         mockMvc.perform(get("/api/consultas/hoteles")).andExpect(status().isUnauthorized());
-        for (Rol rol : List.of(Rol.HUESPED, Rol.RECEPCIONISTA, Rol.GERENTE)) {
+        for (Rol rol : List.of(Rol.HUESPED, Rol.RECEPCIONISTA)) {
             Usuario u = crearUsuario("User " + rol.name(), rol.name().toLowerCase() + ".p25@test.com", rol);
             mockMvc.perform(get("/api/consultas/hoteles")
                             .header("Authorization", "Bearer " + jwtService.generateToken(u)))
                     .andExpect(status().isForbidden());
         }
+        // Y la consulta monetaria /api/consultas/habitaciones/ingreso-potencial es exclusiva de GERENTE (403 para ADMINISTRADOR)
+        mockMvc.perform(get("/api/consultas/habitaciones/ingreso-potencial")
+                        .header("Authorization", "Bearer " + jwtAdmin))
+                .andExpect(status().isForbidden());
 
         // 2. ConsultasController excluye el hotel inactivo y sus habitaciones por defecto
         mockMvc.perform(get("/api/consultas/hoteles")

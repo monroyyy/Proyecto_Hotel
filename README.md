@@ -109,23 +109,25 @@ npm run build
 
 ## 👥 Usuarios de Prueba para Evaluación
 
-El sistema incluye usuarios preconfigurados con diferentes niveles de autorización y permisos:
+El sistema incluye usuarios preconfigurados (`AdminSeeder`) para los 4 roles oficiales de la arquitectura hotelera:
 
 | Rol | Correo Electrónico | Contraseña | Permisos y Alcance |
 |---|---|---|---|
-| **ADMINISTRADOR** | `admin@hotelparaiso.com` | `Admin1234!` | Acceso irrestricto a la consola de gestión (`/reservas`, `/habitaciones`, `/hoteles`, `/tipos`, `/usuarios`, `/consultas`), confirmación de anticipos, cancelaciones con reembolso y cambios de disponibilidad. |
-| **HUESPED** | `huesped.prueba.test@gmail.com` | `Password123!` | Cuenta verificada para el portal (`/portal-huesped`). Permite explorar hoteles, crear pre-reservas, visualizar comprobantes digitales de reservación y simular solicitudes de cancelación. |
+| **GERENTE** | `gerente@hotelparaiso.com` | `Gerente1234!` | **Único rol con acceso directivo, financiero y de cuentas** (`/dashboard`, `/informes`, `/usuarios`, `/reservas`, `/habitaciones`, `/hoteles`, `/tipos`, `/consultas`), KPIs monetarios, ingresos, reversión de No-Show y administración de usuarios. |
+| **ADMINISTRADOR** | `admin@hotelparaiso.com` | `Admin1234!` | Gestión técnica y operativa de inventario e infraestructura (`/reservas`, `/habitaciones`, `/hoteles`, `/tipos`, `/consultas` no monetarias). **Sin acceso a `/dashboard`, `/informes`, `/usuarios` ni información monetaria del hotel.** |
+| **RECEPCIONISTA** | `recepcion@hotelparaiso.com` | `Recep1234!` | Operación de mostrador (`/reservas`, `/habitaciones`), confirmación de anticipos (50%), Check-in, Check-out, declaración de No-Show y cambio rápido de estado de habitaciones. |
+| **HUESPED** | `huesped@hotelparaiso.com` | `Huesped1234!` | Cuenta verificada para el portal comercial (`/portal-huesped`, `/mis-reservas`, `/experiencias`, `/mi-perfil`). Permite explorar hoteles, cotizar, crear pre-reservas, consultar itinerarios y cancelar bajo política escalonada. |
 
 > [!TIP]
-> También puedes registrar una nueva cuenta desde `/registro`. Las cuentas nuevas inician en estado no verificado hasta que se valide el correo mediante el enlace enviado o un administrador apruebe la cuenta.
+> También puedes registrar una nueva cuenta desde `/registro`. Las cuentas nuevas inician con rol `HUESPED` y estado `verificado = false` hasta que se valide el correo mediante el código de 4 dígitos o el enlace enviado por Gmail SMTP.
 
 ---
 
 ## 🔒 Arquitectura de Seguridad y Reglas de Negocio
 
-1. **Defensa en Profundidad (Role-Based Access Control):**
-   - **Backend:** Spring Security valida estrictamente en cada endpoint (`@PreAuthorize` o reglas `SecurityFilterChain`) que únicamente los tokens con rol `ADMINISTRADOR` pueden invocar operaciones como `POST /api/hoteles`, `PATCH /api/reservas/{id}/confirmar`, `DELETE /api/reservas/{id}`, y `/api/usuarios`. Si un huésped intenta invocarlos, el backend responde de inmediato con `403 Forbidden`.
-   - **Frontend:** La aplicación cuenta con un guardián de rutas URL. Si un huésped navega deliberadamente a rutas administrativas (`/reservas`, `/habitaciones`, `/usuarios`, etc.), el sistema bloquea el módulo y despliega una pantalla de acceso denegado con navegación segura de regreso al portal.
+1. **Defensa en Profundidad (Role-Based Access Control — 4 Roles):**
+   - **Backend:** Spring Security valida estrictamente en cada endpoint (`@PreAuthorize` y reglas `SecurityFilterChain`) los permisos de cada uno de los 4 roles (`ADMINISTRADOR`, `GERENTE`, `RECEPCIONISTA`, `HUESPED`). Por ejemplo, `/api/usuarios` y `/api/consultas` son exclusivos de `ADMINISTRADOR`; `/api/dashboard` y `/api/informes` permiten `GERENTE` y `ADMINISTRADOR`; el ciclo operativo de mostrador (`confirmar`, `check-in`, `check-out`, `no-show`) permite `RECEPCIONISTA`, `GERENTE` y `ADMINISTRADOR`. Cualquier intento sin privilegios responde `403 Forbidden`.
+   - **Frontend:** La aplicación cuenta con un guardián de rutas URL y navegación dinámica por rol. Si un usuario navega a una ruta fuera de su nivel de autorización, el sistema bloquea el módulo y despliega una pantalla de acceso restringido.
 
 2. **Garantía en el Ciclo de Reservación:**
    - Un huésped **jamás** puede marcar o crear una reservación confirmada por sí mismo. Toda reservación de huésped nace como `Pre-reserva` con vigencia temporal (24 o 48 horas).

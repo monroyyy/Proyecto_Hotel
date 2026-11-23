@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "8f2b9e41-5a12-4c9e-b178-9d234a567890",
-    "name": "Sistema Hotelero - Autenticación y Manejo de Sesiones",
-    "description": "Colección completa de pruebas para la práctica universitaria 'Autenticación y manejo de sesiones'. Incluye pruebas de registro, validación de contraseñas, verificación por correo (token de un solo uso), inicio y cierre de sesión con JWT + lista negra, control de acceso por roles (HUESPED y ADMINISTRADOR) y aislamiento de reservaciones e IA por rol.",
+    "name": "Sistema Hotelero - Autenticación, Sesiones y 4 Roles (RBAC)",
+    "description": "Colección completa de pruebas para la práctica 'Autenticación y manejo de sesiones' en Hotel Paraíso (Spring Boot + React + MySQL 8). Incluye pruebas de registro, validación de contraseñas, verificación por correo (código/token de un solo uso), inicio y cierre de sesión con JWT + lista negra (token_revocado), control de acceso para los 4 roles (ADMINISTRADOR, GERENTE, RECEPCIONISTA, HUESPED) y aislamiento de reservaciones e IA por rol.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -17,13 +17,23 @@
       "type": "string"
     },
     {
+      "key": "tokenRecepcionista",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tokenGerente",
+      "value": "",
+      "type": "string"
+    },
+    {
       "key": "tokenAdmin",
       "value": "",
       "type": "string"
     },
     {
       "key": "verificationToken",
-      "value": "REEMPLAZAR_CON_TOKEN_DEL_CORREO",
+      "value": "REEMPLAZAR_CON_CODIGO_O_TOKEN_DEL_CORREO",
       "type": "string"
     },
     {
@@ -48,8 +58,8 @@
                   "});",
                   "pm.test('Rol asignado es siempre HUESPED y verificado=false', function () {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.usuario.rol).to.eql('HUESPED');",
-                  "    pm.expect(jsonData.usuario.verificado).to.eql(false);",
+                  "    pm.expect(jsonData.rol).to.eql('HUESPED');",
+                  "    pm.expect(jsonData.verificado).to.eql(false);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -66,7 +76,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"Juan Pérez Huésped\",\n  \"email\": \"huesped.prueba@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
+              "raw": "{\n  \"nombre\": \"Juan Pérez Huésped\",\n  \"email\": \"huesped.nuevo.postman@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/registro",
@@ -101,7 +111,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"Otro Usuario\",\n  \"email\": \"huesped.prueba@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
+              "raw": "{\n  \"nombre\": \"Otro Usuario\",\n  \"email\": \"huesped@hotelparaiso.com\",\n  \"password\": \"Segura123\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/registro",
@@ -154,7 +164,7 @@
                   "pm.test('El servidor ignora el campo rol y asigna HUESPED', function () {",
                   "    if (pm.response.code === 201) {",
                   "        var jsonData = pm.response.json();",
-                  "        pm.expect(jsonData.usuario.rol).to.eql('HUESPED');",
+                  "        pm.expect(jsonData.rol).to.eql('HUESPED');",
                   "    }",
                   "});"
                 ],
@@ -172,7 +182,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"Intento Escalación\",\n  \"email\": \"escalacion@ejemplo.com\",\n  \"password\": \"Segura123\",\n  \"rol\": \"ADMINISTRADOR\"\n}"
+              "raw": "{\n  \"nombre\": \"Intento Escalación\",\n  \"email\": \"escalacion.postman@ejemplo.com\",\n  \"password\": \"Segura123\",\n  \"rol\": \"ADMINISTRADOR\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/registro",
@@ -195,6 +205,8 @@
                 "exec": [
                   "pm.test('Código de estado es 403 Forbidden por cuenta no verificada', function () {",
                   "    pm.response.to.have.status(403);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.requiereVerificacion).to.eql(true);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -211,7 +223,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"huesped.prueba@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
+              "raw": "{\n  \"email\": \"huesped.nuevo.postman@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -232,7 +244,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"huesped.prueba@ejemplo.com\"\n}"
+              "raw": "{\n  \"email\": \"huesped.nuevo.postman@ejemplo.com\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/reenviar-verificacion",
@@ -242,7 +254,7 @@
           }
         },
         {
-          "name": "2.3 Confirmar token de verificación (200 OK)",
+          "name": "2.3 Confirmar token o código de verificación (200 OK)",
           "event": [
             {
               "listen": "test",
@@ -260,17 +272,21 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/auth/verificar?token={{verificationToken}}",
+              "raw": "{{baseUrl}}/api/auth/verificar?token={{verificationToken}}&email=huesped.nuevo.postman@ejemplo.com",
               "host": ["{{baseUrl}}"],
               "path": ["api", "auth", "verificar"],
               "query": [
                 {
                   "key": "token",
                   "value": "{{verificationToken}}"
+                },
+                {
+                  "key": "email",
+                  "value": "huesped.nuevo.postman@ejemplo.com"
                 }
               ]
             },
-            "description": "Reemplaza la variable {{verificationToken}} con el token recibido en el correo electrónico."
+            "description": "Reemplaza la variable {{verificationToken}} con el código de 4 dígitos o el token recibido en el correo electrónico."
           }
         },
         {
@@ -307,7 +323,7 @@
       ]
     },
     {
-      "name": "3. Inicio de Sesión (JWT) y Errores de Credenciales",
+      "name": "3. Inicio de Sesión (JWT) para los 4 Roles y Errores de Credenciales",
       "item": [
         {
           "name": "3.1 Login con contraseña incorrecta (401 Unauthorized - Mensaje genérico)",
@@ -319,7 +335,7 @@
                   "pm.test('Código 401 y mensaje genérico que no revela cuál campo falló', function () {",
                   "    pm.response.to.have.status(401);",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.error).to.eql('Correo o contraseña incorrectos.');",
+                  "    pm.expect(jsonData.error).to.eql('Credenciales inválidas. Verifique su correo electrónico y contraseña.');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -336,7 +352,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"huesped.prueba@ejemplo.com\",\n  \"password\": \"ClaveIncorrecta999\"\n}"
+              "raw": "{\n  \"email\": \"huesped@hotelparaiso.com\",\n  \"password\": \"ClaveIncorrecta999\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -355,7 +371,7 @@
                   "pm.test('Código 401 y mismo mensaje genérico', function () {",
                   "    pm.response.to.have.status(401);",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.error).to.eql('Correo o contraseña incorrectos.');",
+                  "    pm.expect(jsonData.error).to.eql('Credenciales inválidas. Verifique su correo electrónico y contraseña.');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -410,7 +426,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@hotel.com\",\n  \"password\": \"AdminHotel2026!\"\n}"
+              "raw": "{\n  \"email\": \"admin@hotelparaiso.com\",\n  \"password\": \"Admin1234!\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -420,7 +436,83 @@
           }
         },
         {
-          "name": "3.4 Login exitoso como HUESPED verificado (Guarda tokenHuesped)",
+          "name": "3.4 Login exitoso como GERENTE (Guarda tokenGerente)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login Gerente 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.token).to.be.a('string');",
+                  "    pm.expect(jsonData.usuario.rol).to.eql('GERENTE');",
+                  "    pm.collectionVariables.set('tokenGerente', jsonData.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"gerente@hotelparaiso.com\",\n  \"password\": \"Gerente1234!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "3.5 Login exitoso como RECEPCIONISTA (Guarda tokenRecepcionista)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login Recepcionista 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.token).to.be.a('string');",
+                  "    pm.expect(jsonData.usuario.rol).to.eql('RECEPCIONISTA');",
+                  "    pm.collectionVariables.set('tokenRecepcionista', jsonData.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"recepcion@hotelparaiso.com\",\n  \"password\": \"Recep1234!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "3.6 Login exitoso como HUESPED verificado (Guarda tokenHuesped)",
           "event": [
             {
               "listen": "test",
@@ -448,7 +540,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"huesped.prueba@ejemplo.com\",\n  \"password\": \"Segura123\"\n}"
+              "raw": "{\n  \"email\": \"huesped@hotelparaiso.com\",\n  \"password\": \"Huesped1234!\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -458,7 +550,7 @@
           }
         },
         {
-          "name": "3.5 Obtener perfil de sesión actual (/api/auth/me)",
+          "name": "3.7 Obtener perfil de sesión actual (/api/auth/me)",
           "request": {
             "method": "GET",
             "header": [
@@ -477,7 +569,7 @@
       ]
     },
     {
-      "name": "4. Autorización por Roles y Propiedad de Reservaciones",
+      "name": "4. Autorización por Roles (4 Roles) y Propiedad de Reservaciones",
       "item": [
         {
           "name": "4.1 Acceso sin token a endpoint protegido (401 Unauthorized)",
@@ -511,7 +603,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Huésped recibe 403 Forbidden en ruta exclusiva de Administrador', function () {",
+                  "pm.test('Huésped recibe 403 Forbidden en ruta de gestión de hoteles', function () {",
                   "    pm.response.to.have.status(403);",
                   "});"
                 ],
@@ -533,7 +625,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"Hotel No Autorizado\",\n  \"ciudad\": \"Cancún\",\n  \"direccion\": \"Av. Kukulcán 100\",\n  \"telefono\": \"9981234567\",\n  \"estrellas\": 5,\n  \"activo\": true\n}"
+              "raw": "{\n  \"nombre\": \"Hotel No Autorizado\",\n  \"ciudad\": \"Cancún\",\n  \"direccion\": \"Av. Kukulcán 100\",\n  \"telefono\": \"9981234567\",\n  \"email\": \"noautorizado@hotel.com\",\n  \"activo\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/hoteles",
@@ -543,13 +635,13 @@
           }
         },
         {
-          "name": "4.3 HUESPED intenta listar todos los usuarios (403 Forbidden)",
+          "name": "4.3 RECEPCIONISTA intenta acceder al Dashboard financiero (403 Forbidden)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Huésped recibe 403 Forbidden al consultar /api/usuarios', function () {",
+                  "pm.test('Recepcionista recibe 403 Forbidden al consultar /api/dashboard/kpis', function () {",
                   "    pm.response.to.have.status(403);",
                   "});"
                 ],
@@ -562,7 +654,79 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{tokenHuesped}}"
+                "value": "Bearer {{tokenRecepcionista}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/kpis?year=2026",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "kpis"],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.4 GERENTE consulta el Dashboard financiero (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Gerente recibe 200 OK en /api/dashboard/kpis', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenGerente}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/kpis?year=2026",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "kpis"],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2026"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.5 GERENTE intenta listar usuarios de TI (403 Forbidden - Exclusivo ADMINISTRADOR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Gerente recibe 403 Forbidden en /api/usuarios', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenGerente}}"
               }
             ],
             "url": {
@@ -573,7 +737,7 @@
           }
         },
         {
-          "name": "4.4 ADMINISTRADOR lista todos los usuarios (200 OK)",
+          "name": "4.6 ADMINISTRADOR lista todos los usuarios (200 OK)",
           "event": [
             {
               "listen": "test",
@@ -603,7 +767,7 @@
           }
         },
         {
-          "name": "4.5 HUESPED consulta sus propias reservaciones (200 OK - Filtradas por usuario)",
+          "name": "4.7 HUESPED consulta sus propias reservaciones (200 OK - Filtradas por usuario)",
           "request": {
             "method": "GET",
             "header": [
@@ -620,7 +784,7 @@
           }
         },
         {
-          "name": "4.6 HUESPED intenta cancelar reservación de otro huésped (403 Forbidden)",
+          "name": "4.8 HUESPED intenta cancelar reservación de otro huésped (403 Forbidden)",
           "event": [
             {
               "listen": "test",
@@ -653,67 +817,55 @@
       ]
     },
     {
-      "name": "5. Asistente IA Diferenciado por Rol",
+      "name": "5. Asistente IA Diferenciado por Rol (Ollama llama3.1 / Gemini)",
       "item": [
         {
           "name": "5.1 Chat IA como HUESPED (No revela reportes internos ni habitaciones ocupadas)",
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
               {
                 "key": "Authorization",
                 "value": "Bearer {{tokenHuesped}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Dame el reporte operativo de habitaciones en mantenimiento y ocupadas\",\n  \"model\": \"ollama\",\n  \"conversationId\": \"test-huesped\"\n}"
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/ai/chat?prompt=Dame el reporte operativo de habitaciones en mantenimiento y ocupadas&provider=gemini&conversationId=test-huesped",
+              "raw": "{{baseUrl}}/api/v1/chat",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "ai", "chat"],
-              "query": [
-                {
-                  "key": "prompt",
-                  "value": "Dame el reporte operativo de habitaciones en mantenimiento y ocupadas"
-                },
-                {
-                  "key": "provider",
-                  "value": "gemini"
-                },
-                {
-                  "key": "conversationId",
-                  "value": "test-huesped"
-                }
-              ]
+              "path": ["api", "v1", "chat"]
             }
           }
         },
         {
           "name": "5.2 Chat IA como ADMINISTRADOR (Acceso completo a herramientas operativas)",
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
               {
                 "key": "Authorization",
                 "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Dame el resumen operativo del hotel y habitaciones en mantenimiento\",\n  \"model\": \"ollama\",\n  \"conversationId\": \"test-admin\"\n}"
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/ai/chat?prompt=Dame el resumen operativo del hotel y habitaciones en mantenimiento&provider=gemini&conversationId=test-admin",
+              "raw": "{{baseUrl}}/api/v1/chat",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "ai", "chat"],
-              "query": [
-                {
-                  "key": "prompt",
-                  "value": "Dame el resumen operativo del hotel y habitaciones en mantenimiento"
-                },
-                {
-                  "key": "provider",
-                  "value": "gemini"
-                },
-                {
-                  "key": "conversationId",
-                  "value": "test-admin"
-                }
-              ]
+              "path": ["api", "v1", "chat"]
             }
           }
         }

@@ -123,11 +123,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/recepcionistas")
                         .hasAnyRole("HUESPED", "RECEPCIONISTA", "GERENTE", "ADMINISTRADOR")
 
-                        // Dashboard de estadísticas e Informes ejecutivos (Gerente y Administrador)
+                        // Dashboard de estadísticas e Informes ejecutivos (Exclusivo de GERENTE)
                         .requestMatchers("/api/dashboard", "/api/dashboard/**")
-                        .hasAnyRole("GERENTE", "ADMINISTRADOR")
+                        .hasRole("GERENTE")
                         .requestMatchers("/api/informes", "/api/informes/**")
-                        .hasAnyRole("GERENTE", "ADMINISTRADOR")
+                        .hasRole("GERENTE")
 
                         // Reservaciones:
                         // - Confirmar anticipo 50% y ciclo operativo (Check-in, Check-out, No-Show): Recepcionista, Gerente y Administrador
@@ -172,11 +172,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/hoteles", "/api/hoteles/**", "/api/tipos-habitacion", "/api/tipos-habitacion/**")
                         .hasAnyRole("GERENTE", "ADMINISTRADOR")
 
-                        // Exclusivo de ADMINISTRADOR (TI / Backend):
+                        // Consultas de ingreso potencial monetario y Gestión de Usuarios: Exclusivo de GERENTE
+                        .requestMatchers("/api/consultas/habitaciones/ingreso-potencial")
+                        .hasRole("GERENTE")
                         .requestMatchers("/api/consultas", "/api/consultas/**")
-                        .hasRole("ADMINISTRADOR")
+                        .hasAnyRole("GERENTE", "ADMINISTRADOR")
                         .requestMatchers("/api/usuarios", "/api/usuarios/**")
-                        .hasRole("ADMINISTRADOR")
+                        .hasRole("GERENTE")
 
                         .anyRequest().authenticated()
                 )

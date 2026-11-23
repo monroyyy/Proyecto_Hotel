@@ -346,11 +346,15 @@ public class HabitacionSearchTool {
         return habitacionRepository.countMantenimientoActivos();
     }
 
-    @Tool(description = "Calcular el ingreso potencial máximo por noche si se rentan todas las habitaciones de la cadena. EXCLUSIVO PARA ADMINISTRADOR.")
+    @Tool(description = "Calcular el ingreso potencial máximo por noche si se rentan todas las habitaciones de la cadena. EXCLUSIVO PARA GERENTE.")
     public Object sumIngresoPotencial() {
         log.info("Tool invocada — sumIngresoPotencial");
-        if (esHuespedActual()) {
-            return respuestaRestringidaHuesped();
+        CustomUserDetails u = getAuthenticatedUser();
+        if (u == null || !u.isGerente()) {
+            return List.of(Map.of(
+                    "accesoRestringido", true,
+                    "mensaje", "Por políticas de confidencialidad, la información monetaria y de ingresos potenciales del hotel es exclusiva para el Gerente General."
+            ));
         }
         return habitacionRepository.sumIngresoPotencialActivos();
     }

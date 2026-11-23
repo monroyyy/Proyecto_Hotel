@@ -78,6 +78,10 @@ public class AdminSeeder implements ApplicationRunner {
                 u.setRol(rol);
                 changed = true;
             }
+            if (u.getPasswordHash() == null || !passwordEncoder.matches(password, u.getPasswordHash())) {
+                u.setPasswordHash(passwordEncoder.encode(password));
+                changed = true;
+            }
             if (u.getNombre() == null || u.getNombre().isBlank()
                     || (rol != Rol.ADMINISTRADOR && "Administrador General".equalsIgnoreCase(u.getNombre().trim()))) {
                 u.setNombre(nombre.trim());

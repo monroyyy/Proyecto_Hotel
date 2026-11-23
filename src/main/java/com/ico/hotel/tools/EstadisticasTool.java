@@ -38,16 +38,16 @@ public class EstadisticasTool {
 
     private boolean tienePermisoEjecutivo() {
         CustomUserDetails u = getAuthenticatedUser();
-        return u != null && (u.isGerente() || u.isAdmin());
+        return u != null && u.isGerente();
     }
 
-    @Tool(description = "Consultar el resumen financiero y métricas clave de un año (ingresos brutos, netos, ADR, RevPAR, tasa de ocupación, cancelaciones y reembolsos). EXCLUSIVO PARA GERENTE Y ADMINISTRADOR.")
+    @Tool(description = "Consultar el resumen financiero y métricas clave de un año (ingresos brutos, netos, ADR, RevPAR, tasa de ocupación, cancelaciones y reembolsos). EXCLUSIVO PARA GERENTE.")
     public Map<String, Object> consultarMetricasFinancierasAnuales(
             @ToolParam(description = "Año a consultar entre 2020 y 2026 (por defecto el año en curso)", required = false) Integer ano,
             @ToolParam(description = "ID del hotel específico a filtrar (opcional, null para toda la cadena)", required = false) Integer idHotel) {
         log.info("Tool invocada -> consultarMetricasFinancierasAnuales: ano={}, hotel={}", ano, idHotel);
         if (!tienePermisoEjecutivo()) {
-            return Map.of("accesoRestringido", true, "mensaje", "Por políticas de privacidad, las métricas financieras y estadísticas son exclusivas para el personal directivo (Gerente y Administrador).");
+            return Map.of("accesoRestringido", true, "mensaje", "Por políticas de confidencialidad, toda la información monetaria, métricas financieras y estadísticas del hotel son exclusivas para el Gerente General.");
         }
         return dashboardService.obtenerResumenKpis(ano, idHotel);
     }
