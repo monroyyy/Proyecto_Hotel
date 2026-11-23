@@ -109,6 +109,66 @@ function AppContent() {
             return <LoginPage />;
         }
 
+        const renderForbidden = (homeRoute) => (
+            <div style={{
+                minHeight: '62vh',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 24,
+                padding: '2rem'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{
+                        fontSize: 24,
+                        fontWeight: 600,
+                        letterSpacing: '-0.02em',
+                        paddingRight: 20,
+                        marginRight: 20,
+                        borderRight: '1px solid #e5e7eb',
+                        lineHeight: '44px',
+                        color: '#111827'
+                    }}>
+                        403
+                    </span>
+                    <span style={{ fontSize: 14, color: '#4b5563' }}>
+                        No tienes permiso para acceder a esta página.
+                    </span>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => navigate(homeRoute)}
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        borderBottom: '1px solid #16324f',
+                        padding: '0 0 2px',
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: '#16324f',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Volver al inicio
+                </button>
+            </div>
+        );
+
+        const isInternalRoute = routePath.startsWith('/dashboard')
+            || routePath.startsWith('/informes')
+            || routePath.startsWith('/usuarios')
+            || routePath.startsWith('/consultas')
+            || routePath.startsWith('/hoteles')
+            || routePath.startsWith('/tipos')
+            || routePath.startsWith('/reservas')
+            || routePath.startsWith('/habitaciones');
+
+        // Si un usuario no staff intenta entrar a una ruta interna, mostrar 403
+        if (!isStaff && isInternalRoute) {
+            return renderForbidden('/portal-huesped');
+        }
+
         // Si el usuario es HUESPED, Visitante sin sesión, o navega explícitamente a una ruta del portal de huéspedes
         const isExplicitGuestRoute = routePath.startsWith('/portal-huesped')
             || routePath.startsWith('/mis-reservas')
@@ -131,52 +191,16 @@ function AppContent() {
             routePath.startsWith('/hoteles') ||
             routePath.startsWith('/tipos')
         )) {
-            return (
-                <div className="page-container" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
-                    <div style={{
-                        maxWidth: 460, margin: '0 auto', background: 'var(--bg-surface)',
-                        border: '1px solid var(--color-error-border)', borderRadius: 16, padding: '2.2rem'
-                    }}>
-                        <ShieldAlert size={44} style={{ color: 'var(--color-error)', marginBottom: 12 }} />
-                        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>
-                            Módulo restringido para Recepción
-                        </h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: 20 }}>
-                            Esta sección es exclusiva para Gerencia y Administración.
-                        </p>
-                        <button type="button" className="btn btn-primary" onClick={() => navigate('/reservas')}>
-                            <ArrowLeft size={16} /> Ir a Control de Reservaciones
-                        </button>
-                    </div>
-                </div>
-            );
+            return renderForbidden('/reservas');
         }
 
-        // Control de permisos para ADMINISTRADOR (NO puede ver Dashboard, Informes, Usuarios ni información monetaria)
+        // Control de permisos para ADMINISTRADOR (NO puede ver Dashboard, Informes ni Usuarios)
         if (isAdmin && (
             routePath.startsWith('/dashboard') ||
             routePath.startsWith('/informes') ||
             routePath.startsWith('/usuarios')
         )) {
-            return (
-                <div className="page-container" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
-                    <div style={{
-                        maxWidth: 480, margin: '0 auto', background: 'var(--bg-surface)',
-                        border: '1px solid var(--color-error-border)', borderRadius: 16, padding: '2.2rem'
-                    }}>
-                        <ShieldAlert size={44} style={{ color: 'var(--color-error)', marginBottom: 12 }} />
-                        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>
-                            Módulo exclusivo de Gerencia General
-                        </h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: 20 }}>
-                            El Dashboard financiero, los Informes ejecutivos, la información monetaria del hotel y la Gestión de Usuarios son exclusivos para el Gerente General.
-                        </p>
-                        <button type="button" className="btn btn-primary" onClick={() => navigate('/reservas')}>
-                            <ArrowLeft size={16} /> Ir a Control Operativo
-                        </button>
-                    </div>
-                </div>
-            );
+            return renderForbidden('/reservas');
         }
 
         switch (activeTab) {
