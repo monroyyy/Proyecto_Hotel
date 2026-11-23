@@ -64,7 +64,7 @@ public class OllamaToolCallingAdvisor extends ToolCallingAdvisor {
         ToolCallingChatOptions newOptions;
         if (options instanceof OllamaChatOptions ollamaOptions) {
             newOptions = ollamaOptions.mutate()
-                    .model(ollamaOptions.getModel() != null ? ollamaOptions.getModel() : "llama3.1")
+                    .model(ollamaOptions.getModel() != null ? ollamaOptions.getModel() : "llama3.2:latest")
                     .toolCallbacks(List.of())
                     .build();
         } else if (options instanceof ToolCallingChatOptions toolOptions) {
@@ -73,7 +73,7 @@ public class OllamaToolCallingAdvisor extends ToolCallingAdvisor {
                     .build();
         } else {
             newOptions = OllamaChatOptions.builder()
-                    .model("llama3.1")
+                    .model("llama3.2:latest")
                     .toolCallbacks(List.of())
                     .build();
         }
@@ -97,7 +97,7 @@ public class OllamaToolCallingAdvisor extends ToolCallingAdvisor {
         ToolCallingChatOptions newOptions;
         if (options instanceof OllamaChatOptions ollamaOptions) {
             newOptions = ollamaOptions.mutate()
-                    .model(ollamaOptions.getModel() != null ? ollamaOptions.getModel() : "llama3.1")
+                    .model(ollamaOptions.getModel() != null ? ollamaOptions.getModel() : "llama3.2:latest")
                     .toolCallbacks(List.of())
                     .build();
         } else if (options instanceof ToolCallingChatOptions toolOptions) {
@@ -106,7 +106,7 @@ public class OllamaToolCallingAdvisor extends ToolCallingAdvisor {
                     .build();
         } else {
             newOptions = OllamaChatOptions.builder()
-                    .model("llama3.1")
+                    .model("llama3.2:latest")
                     .toolCallbacks(List.of())
                     .build();
         }
