@@ -141,7 +141,7 @@ public class HotelChatServiceImpl implements HotelChatService {
                    ". INVENTARIO REAL (cada hotel solo ofrece lo listado, NUNCA cruces hoteles con categorías): " + resumenCats +
                    ". Check-in: 15:00 hrs, Check-out: 12:00 hrs. Anticipo obligatorio: 50%. Vigencia pre-reserva: 24-48 hrs. " +
                    "Cancelación: >72h = 100% reembolso, 48-72h = 50% reembolso, <48h = 0% reembolso. No-Show: 22:00 hrs. " +
-                   "REGLA CRÍTICA: NUNCA cobres, proceses pagos ni pidas datos de tarjeta o cuenta bancaria; el asistente solo registra Pre-reservas. " +
+                   "REGLA CRÍTICA: NUNCA cobres, proceses pagos ni pidas datos de tarjeta o cuenta bancaria; el asistente solo registra Pre-reservas. NUNCA digas 'Reserva Confirmada' ni inventes folios. " +
                    "Responde directo al usuario en español sin usar encabezados como 'Respuesta al usuario:'.]";
         } catch (Exception e) {
             return "";
@@ -1023,6 +1023,129 @@ public class HotelChatServiceImpl implements HotelChatService {
         // 4. CONSULTAS DE INVENTARIO, HABITACIONES Y RESERVACIONES
 
         // 4-PRE. Flujos conversacionales con memoria de hotel/ciudad
+        // 4-PRE-RESERVA. Selección de habitación por número o flujo real de Pre-reserva desde el chat
+        String ctxHotelRes = resolverHotelEnContexto(prompt, scopedConvId);
+        if (ctxHotelRes != null && !norm.contains("mantenimiento") && !norm.contains("ocupada")
+                && !norm.contains("cancel") && !norm.contains("politic") && !norm.contains("folio")
+                && !norm.contains("disponib") && !norm.contains("que fechas") && !norm.contains("cuando")) {
+            List<Map<String, Object>> roomsCtx = habitacionesDeHotel(ctxHotelRes);
+            Map<String, Object> habMencionadaAhora = habitacionMencionada(prompt, roomsCtx);
+            Map<String, Object> habActiva = habitacionEnContexto(prompt, scopedConvId, roomsCtx);
+            LocalDate[] fechasAhora = extraerRangoFechas(norm);
+
+            boolean quiereReservar = norm.contains("reservar") || norm.contains("apartar")
+                    || norm.contains("pre reserva") || norm.contains("prereserva")
+                    || (fechasAhora != null && habActiva != null);
+
+            // Caso A: El usuario solo eligió una habitación (ej. "101", "habitacion 101", "villa 10")
+            if (habMencionadaAhora != null && !quiereReservar && norm.split(" ").length <= 5) {
+                String num = String.valueOf(habMencionadaAhora.get("numero"));
+                String tipo = String.valueOf(habMencionadaAhora.get("tipo"));
+                String precioTxt = esAdmin ? "" : " — **" + fmtMoneda(habMencionadaAhora.get("precioBase")) + "** / noche";
+                return "Seleccionó la **Habitación #" + num + "** (**" + tipo + "**) en **" + ctxHotelRes + "**" + precioTxt + ".\n\n" +
+                       "¿Desea registrar una **Pre-reserva** (apartado temporal por 24 horas sin cobro inmediato)?\n" +
+                       "Si es así, indíqueme:\n" +
+                       "- **Fechas de entrada y salida** (ej. `del 1 al 3 de diciembre` o `2026-12-01 al 2026-12-03`)\n" +
+                       "- **Teléfono celular a 10 dígitos** (ej. `5512345678`)\n" +
+                       "- **Número de adultos y niños** (opcional, por defecto 1 adulto)";
+            }
+
+            // Caso B: El usuario quiere reservar/apartar la habitación en contexto (o dio fechas para reservarla)
+            if (quiereReservar && habActiva != null) {
+                String num = String.valueOf(habActiva.get("numero"));
+                String tipo = String.valueOf(habActiva.get("tipo"));
+                LocalDate[] fechas = fechasAhora;
+                if (fechas == null) {
+                    // Buscar si dio fechas en turnos recientes del usuario
+                    try {
+                        List<Message> hist = chatMemory.get(scopedConvId);
+                        for (int i = hist.size() - 1; i >= 0; i--) {
+                            if (hist.get(i).getMessageType() != MessageType.USER) continue;
+                            fechas = extraerRangoFechas(normalizarTexto(hist.get(i).getText()));
+                            if (fechas != null) break;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                if (fechas == null) {
+                    String precioTxt = esAdmin ? "" : " (" + fmtMoneda(habActiva.get("precioBase")) + " / noche)";
+                    return "Con gusto registro su **Pre-reserva** para la **Habitación #" + num + "** (**" + tipo + "**) en **" + ctxHotelRes + "**" + precioTxt + ".\n\n" +
+                           "*(Desde el chat la reservación siempre queda en estado **Pre-reserva** por 24 horas; el pago del 50% de anticipo se registra posteriormente en Recepción).*\n\n" +
+                           "Para generarla ahora mismo, indíqueme:\n" +
+                           "1. **Fechas de entrada y salida** (ej. `del 1 al 3 de diciembre` o `2026-12-01 al 2026-12-03`)\n" +
+                           "2. **Teléfono celular a 10 dígitos**";
+                }
+
+                // Extraer teléfono (10 dígitos), adultos, niños y correo si los proporcionó
+                String tel = null;
+                Matcher mTel = Pattern.compile("\\b(\\d{10})\\b").matcher(prompt.replaceAll("[-\\s]", ""));
+                if (mTel.find()) tel = mTel.group(1);
+                if (tel == null) {
+                    try {
+                        List<Message> hist = chatMemory.get(scopedConvId);
+                        for (int i = hist.size() - 1; i >= 0; i--) {
+                            if (hist.get(i).getMessageType() != MessageType.USER) continue;
+                            Matcher mt = Pattern.compile("\\b(\\d{10})\\b").matcher(hist.get(i).getText().replaceAll("[-\\s]", ""));
+                            if (mt.find()) { tel = mt.group(1); break; }
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                int adultos = 1;
+                Matcher mAd = Pattern.compile("\\b(\\d+)\\s*adultos?\\b").matcher(norm);
+                if (mAd.find()) adultos = Math.max(1, Integer.parseInt(mAd.group(1)));
+                int ninos = 0;
+                Matcher mNi = Pattern.compile("\\b(\\d+)\\s*ninos?\\b").matcher(norm);
+                if (mNi.find()) ninos = Math.max(0, Integer.parseInt(mNi.group(1)));
+
+                String nombreTitular = user != null ? user.getNombre() : null;
+                String emailTitular = user != null ? user.getEmail() : null;
+                Matcher mEmail = Pattern.compile("[\\w.%+-]+@[\\w.-]+\\.[a-zA-Z]{2,}").matcher(prompt);
+                if (mEmail.find()) emailTitular = mEmail.group();
+
+                Map<String, Object> creada = reservaTool.crearReservacion(
+                        ctxHotelRes,
+                        num,
+                        fechas[0].toString(),
+                        fechas[1].toString(),
+                        nombreTitular,
+                        tel,
+                        emailTitular,
+                        adultos,
+                        ninos,
+                        "PRE_RESERVA",
+                        null,
+                        null,
+                        false,
+                        false,
+                        false,
+                        "Registrada desde Asistente Virtual"
+                );
+
+                if (creada.containsKey("error")) {
+                    return "No fue posible registrar la Pre-reserva: **" + creada.get("error") + "**\n\n" +
+                           "Por favor verifique el dato e inténtelo nuevamente.";
+                }
+
+                StringBuilder sb = new StringBuilder();
+                sb.append("### Pre-reserva Registrada con Éxito\n\n");
+                sb.append("| Campo | Detalle |\n| :--- | :--- |\n");
+                sb.append("| **Folio Oficial** | **").append(creada.get("folio")).append("** |\n");
+                sb.append("| **Estado** | **").append(creada.get("estado")).append("** (vigencia 24 horas) |\n");
+                sb.append("| **Propiedad** | ").append(creada.get("hotel")).append(" (").append(creada.get("ciudad")).append(") |\n");
+                sb.append("| **Habitación** | #").append(creada.get("habitacion")).append(" — ").append(creada.get("tipoHabitacion")).append(" |\n");
+                sb.append("| **Titular** | ").append(creada.get("titular")).append(" |\n");
+                sb.append("| **Estancia** | ").append(creada.get("fechaEntrada")).append(" → ").append(creada.get("fechaSalida")).append(" (").append(creada.get("noches")).append(" noches) |\n");
+                if (!esAdmin) {
+                    if (creada.get("total") != null) sb.append("| **Total de Estancia** | **").append(creada.get("total")).append("** |\n");
+                    if (creada.get("anticipoMinimoRequerido") != null) sb.append("| **Anticipo requerido (50%)** | **").append(creada.get("anticipoMinimoRequerido")).append("** |\n");
+                }
+                sb.append("\nEnviamos el comprobante en **PDF** al correo **").append(creada.get("email")).append("**. ")
+                  .append("El pago del 50% de anticipo para confirmarla se registra posteriormente en Recepción o en el portal administrativo.");
+                return sb.toString();
+            }
+        }
+
         // 4-PRE-FECHAS. Consulta de disponibilidad para una fecha o rango específico (ej. "¿hay algo el 5 de diciembre?")
         LocalDate[] rangoFechas = extraerRangoFechas(norm);
         if (rangoFechas != null && !requiereHerramientasEscritura(prompt)
