@@ -58,6 +58,8 @@ public class ReservaService {
     @Autowired
     private ReservaRepository reservaRepository;
     @Autowired
+    private EmailService emailService;
+    @Autowired
     private HabitacionRepository habitacionRepository;
     @Autowired
     private HuespedRepository huespedRepository;
@@ -918,6 +920,9 @@ public class ReservaService {
         registrarEvento(r.getIdReserva(), "CREACION", null, r.getEstado(),
                 confirmada ? "Reservación confirmada al crear." : "Pre-reserva creada.");
         sincronizarEstadoHabitacion(hab);
+        if (Reserva.PRE_RESERVA.equals(r.getEstado())) {
+            emailService.enviarCorreoPreReservaConPdf(r);
+        }
         return r;
     }
 

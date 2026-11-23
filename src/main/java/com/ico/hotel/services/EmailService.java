@@ -1,9 +1,11 @@
 package com.ico.hotel.services;
 
+import com.ico.hotel.models.Reserva;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
@@ -21,6 +23,7 @@ import java.util.concurrent.CompletableFuture;
 public class EmailService {
 
     private final JavaMailSender mailSender;
+    private final PreReservaPdfService preReservaPdfService;
 
     @Value("${spring.mail.username:}")
     private String mailFrom;
@@ -46,6 +49,69 @@ public class EmailService {
                 }
             }
         }
+    }
+
+    /**
+     * Envía de forma asíncrona el correo de confirmación de Pre-reserva con su comprobante PDF adjunto.
+     */
+    public void enviarCorreoPreReservaConPdf(Reserva r) {
+        if (r == null || r.getHuesped() == null || r.getHuesped().getEmail() == null || r.getHuesped().getEmail().isBlank()) {
+            return;
+        }
+        String destinatario = r.getHuesped().getEmail().trim();
+        String nombre = r.getHuesped().getNombre() != null ? r.getHuesped().getNombre() : "Huésped";
+        String folio = r.getFolio() != null ? r.getFolio() : "PRE-RESERVA";
+        String hotelNombre = (r.getHabitacion() != null && r.getHabitacion().getHotel() != null)
+                ? r.getHabitacion().getHotel().getNombre() : "Hotel Paraíso";
+        String habNum = r.getHabitacion() != null ? "#" + r.getHabitacion().getNumero() : "";
+        String entrada = r.getFechaEntrada() != null ? r.getFechaEntrada().toString() : "";
+        String salida = r.getFechaSalida() != null ? r.getFechaSalida().toString() : "";
+
+        // Generar PDF antes del hilo asíncrono para evitar LazyInitializationException
+        final byte[] pdfBytes;
+        try {
+            pdfBytes = preReservaPdfService.generarPdfPreReserva(r);
+        } catch (Exception e) {
+            log.error("No se pudo generar el PDF de pre-reserva {}: {}", folio, e.getMessage());
+            return;
+        }
+
+        if (mailFrom == null || mailFrom.isBlank() || mailFrom.contains("tu_correo@")
+                || mailPassword == null || mailPassword.isBlank() || mailPassword.contains("xxxx")) {
+            log.warn("[MODO DESARROLLO - SMTP NO CONFIGURADO] PDF de Pre-reserva {} generado ({} bytes) para {}.",
+                    folio, pdfBytes.length, destinatario);
+            return;
+        }
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                MimeMessage message = mailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
+                helper.setFrom(mailFrom, "Hotel Paraíso - Reservaciones");
+                helper.setTo(destinatario);
+                helper.setSubject("Comprobante de Pre-reserva " + folio + " — " + hotelNombre);
+
+                String html = "<div style=\"font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#1e293b;\">"
+                        + "<div style=\"background:#16324f;color:#ffffff;padding:20px 24px;border-radius:8px 8px 0 0;\">"
+                        + "<h2 style=\"margin:0;font-size:18px;\">Hotel Paraíso</h2>"
+                        + "<p style=\"margin:4px 0 0;font-size:12px;color:#cbd5e1;\">Comprobante de Pre-reserva · Folio " + folio + "</p>"
+                        + "</div>"
+                        + "<div style=\"border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 8px 8px;\">"
+                        + "<p>Hola <strong>" + nombre + "</strong>,</p>"
+                        + "<p>Tu pre-reserva en <strong>" + hotelNombre + "</strong> (Habitación " + habNum
+                        + ", del <strong>" + entrada + "</strong> al <strong>" + salida + "</strong>) ha sido registrada.</p>"
+                        + "<p>Adjuntamos el comprobante oficial en PDF con el desglose de tarifa, anticipo del 50% y vigencia de apartado.</p>"
+                        + "<p style=\"font-size:12px;color:#64748b;margin-top:20px;\">Este correo es informativo; por seguridad no solicitamos datos de tarjeta por chat ni por correo.</p>"
+                        + "</div></div>";
+
+                helper.setText(html, true);
+                helper.addAttachment("PreReserva_" + folio + ".pdf", new ByteArrayResource(pdfBytes), "application/pdf");
+                mailSender.send(message);
+                log.info("Correo de Pre-reserva {} con PDF adjunto ({} bytes) enviado a {}", folio, pdfBytes.length, destinatario);
+            } catch (Exception e) {
+                log.error("Error al enviar correo de Pre-reserva {} a {}: {}", folio, destinatario, e.getMessage());
+            }
+        });
     }
 
     public boolean enviarCorreoVerificacion(String destinatario, String nombreUsuario, String token) {
