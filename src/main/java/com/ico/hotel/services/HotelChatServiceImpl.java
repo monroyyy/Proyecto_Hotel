@@ -281,6 +281,96 @@ public class HotelChatServiceImpl implements HotelChatService {
         return sb.toString();
     }
 
+    private static final Map<String, Integer> MESES_ES = Map.ofEntries(
+            Map.entry("enero", 1), Map.entry("febrero", 2), Map.entry("marzo", 3), Map.entry("abril", 4),
+            Map.entry("mayo", 5), Map.entry("junio", 6), Map.entry("julio", 7), Map.entry("agosto", 8),
+            Map.entry("septiembre", 9), Map.entry("setiembre", 9), Map.entry("octubre", 10),
+            Map.entry("noviembre", 11), Map.entry("diciembre", 12)
+    );
+
+    private LocalDate[] extraerRangoFechas(String norm) {
+        if (norm == null) return null;
+        // 1. ISO: 2026 12 05
+        List<LocalDate> isos = new ArrayList<>();
+        Matcher mIso = Pattern.compile("\\b(202[5-9])\\s+(\\d{1,2})\\s+(\\d{1,2})\\b").matcher(norm);
+        while (mIso.find()) {
+            try {
+                isos.add(LocalDate.of(Integer.parseInt(mIso.group(1)), Integer.parseInt(mIso.group(2)), Integer.parseInt(mIso.group(3))));
+            } catch (Exception ignored) {}
+        }
+        if (!isos.isEmpty()) {
+            LocalDate ini = isos.get(0);
+            LocalDate fin = isos.size() > 1 && isos.get(1).isAfter(ini) ? isos.get(1) : ini.plusDays(1);
+            return new LocalDate[]{ini, fin};
+        }
+        // 2. Rango en español: "del 10 al 15 de diciembre [2026]"
+        Matcher mRango = Pattern.compile("\\b(\\d{1,2})\\s+al\\s+(\\d{1,2})\\s+de\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\\s+(?:de\\s+)?(202[5-9]))?\\b").matcher(norm);
+        if (mRango.find()) {
+            int d1 = Integer.parseInt(mRango.group(1)), d2 = Integer.parseInt(mRango.group(2));
+            int mes = MESES_ES.get(mRango.group(3));
+            int ano = mRango.group(4) != null ? Integer.parseInt(mRango.group(4)) : LocalDate.now().getYear();
+            try {
+                LocalDate ini = LocalDate.of(ano, mes, d1);
+                if (mRango.group(4) == null && ini.isBefore(LocalDate.now())) ini = ini.plusYears(1);
+                LocalDate fin = LocalDate.of(ini.getYear(), mes, d2);
+                if (!fin.isAfter(ini)) fin = ini.plusMonths(1);
+                return new LocalDate[]{ini, fin};
+            } catch (Exception ignored) {}
+        }
+        // 3. Fecha única en español: "5 de diciembre [2026]"
+        Matcher mUnica = Pattern.compile("\\b(\\d{1,2})\\s+de\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\\s+(?:de\\s+)?(202[5-9]))?\\b").matcher(norm);
+        if (mUnica.find()) {
+            int d = Integer.parseInt(mUnica.group(1));
+            int mes = MESES_ES.get(mUnica.group(2));
+            int ano = mUnica.group(3) != null ? Integer.parseInt(mUnica.group(3)) : LocalDate.now().getYear();
+            try {
+                LocalDate ini = LocalDate.of(ano, mes, d);
+                if (mUnica.group(3) == null && ini.isBefore(LocalDate.now())) ini = ini.plusYears(1);
+                return new LocalDate[]{ini, ini.plusDays(1)};
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
+
+    private String disponibilidadEnRango(String hotelFiltro, LocalDate entrada, LocalDate salida, boolean esAdmin) {
+        java.time.format.DateTimeFormatter f = java.time.format.DateTimeFormatter.ofPattern("d 'de' MMMM yyyy", Locale.forLanguageTag("es-MX"));
+        habitacionSearchTool.resetCallTracker();
+        List<Map<String, Object>> todas = habitacionSearchTool.findHabitacionesPorHotel(null);
+        habitacionSearchTool.resetCallTracker();
+        List<Map<String, Object>> candidatas = todas.stream()
+                .filter(r -> r.get("numero") != null)
+                .filter(r -> !"Mantenimiento".equalsIgnoreCase(String.valueOf(r.get("estado"))))
+                .filter(r -> hotelFiltro == null || normalizarTexto(String.valueOf(r.get("hotel"))).equals(normalizarTexto(hotelFiltro)))
+                .toList();
+        List<Map<String, Object>> libres = new ArrayList<>();
+        for (Map<String, Object> r : candidatas) {
+            String hNom = String.valueOf(r.get("hotel"));
+            String num = String.valueOf(r.get("numero"));
+            boolean traslape = reservaRepository.findActivasPorHabitacionYHotel(num, hNom).stream()
+                    .filter(res -> res.getHabitacion() != null && res.getHabitacion().getHotel() != null
+                            && hNom.equalsIgnoreCase(res.getHabitacion().getHotel().getNombre()))
+                    .anyMatch(res -> res.getFechaEntrada() != null && res.getFechaSalida() != null
+                            && res.getFechaEntrada().isBefore(salida) && res.getFechaSalida().isAfter(entrada));
+            if (!traslape) libres.add(r);
+        }
+        String titulo = hotelFiltro != null ? hotelFiltro : "Toda la cadena";
+        StringBuilder sb = new StringBuilder();
+        sb.append("### Disponibilidad del ").append(entrada.format(f)).append(" al ").append(salida.format(f))
+          .append(" — ").append(titulo).append("\n\n");
+        if (libres.isEmpty()) {
+            return sb.append("No hay habitaciones disponibles para esas fechas en **").append(titulo).append("**.").toString();
+        }
+        sb.append(esAdmin ? "| Propiedad | Habitación | Piso | Categoría |\n| :--- | :---: | :---: | :--- |\n"
+                          : "| Propiedad | Habitación | Piso | Categoría | Tarifa / Noche |\n| :--- | :---: | :---: | :--- | ---: |\n");
+        for (Map<String, Object> r : libres) {
+            sb.append("| **").append(r.get("hotel")).append("** | #").append(r.get("numero"))
+              .append(" | ").append(r.get("piso")).append(" | ").append(r.get("tipo"));
+            if (!esAdmin) sb.append(" | **").append(fmtMoneda(r.get("precioBase"))).append("**");
+            sb.append(" |\n");
+        }
+        return sb.append("\n¿Desea apartar alguna de estas opciones?").toString();
+    }
+
     private String aislarConversationIdPorUsuario(CustomUserDetails user, String conversationId) {
         String baseId = (conversationId != null && !conversationId.isBlank()) ? conversationId : DEFAULT_CONVERSATION_ID;
         if (user == null) {
@@ -920,6 +1010,17 @@ public class HotelChatServiceImpl implements HotelChatService {
         // 4. CONSULTAS DE INVENTARIO, HABITACIONES Y RESERVACIONES
 
         // 4-PRE. Flujos conversacionales con memoria de hotel/ciudad
+        // 4-PRE-FECHAS. Consulta de disponibilidad para una fecha o rango específico (ej. "¿hay algo el 5 de diciembre?")
+        LocalDate[] rangoFechas = extraerRangoFechas(norm);
+        if (rangoFechas != null && !requiereHerramientasEscritura(prompt)
+                && !norm.contains("reservar") && !norm.contains("cotizar") && !norm.contains("folio")
+                && (norm.contains("disponib") || norm.contains("libre") || norm.contains("hay algo")
+                || norm.contains("habitacion") || norm.contains("cuarto") || norm.contains("tienen"))) {
+            String hotelFecha = (norm.contains("todos los hoteles") || norm.contains("cadena"))
+                    ? null : resolverHotelEnContexto(prompt, scopedConvId);
+            return disponibilidadEnRango(hotelFecha, rangoFechas[0], rangoFechas[1], esAdmin);
+        }
+
         boolean sinFechas = !requiereHerramientasEscritura(prompt);
         boolean ambitoCadena = norm.contains("cada hotel") || norm.contains("por hotel") || norm.contains("cadena")
                 || norm.contains("todos los hoteles") || norm.contains("otro hotel") || norm.contains("otros hoteles");
