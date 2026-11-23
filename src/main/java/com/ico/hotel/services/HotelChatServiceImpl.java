@@ -198,11 +198,21 @@ public class HotelChatServiceImpl implements HotelChatService {
         return null;
     }
 
+    private List<Map<String, Object>> habitacionesDeHotel(String hotel) {
+        habitacionSearchTool.resetCallTracker();
+        // Se filtra por nombre EXACTO: "Hotel Paraíso" es subcadena de "Hotel Paraíso Ejecutivo"
+        List<Map<String, Object>> rooms = habitacionSearchTool.findHabitacionesPorHotel(null);
+        habitacionSearchTool.resetCallTracker();
+        String objetivo = normalizarTexto(hotel);
+        return rooms.stream().filter(r -> r.get("numero") != null
+                && normalizarTexto(String.valueOf(r.get("hotel"))).equals(objetivo)).toList();
+    }
+
     private String tablaHabitacionesHotel(String hotel, boolean esAdmin, String intro) {
-        habitacionSearchTool.resetCallTracker();
-        List<Map<String, Object>> rooms = habitacionSearchTool.findHabitacionesPorHotel(hotel);
-        habitacionSearchTool.resetCallTracker();
-        rooms = rooms.stream().filter(r -> r.get("numero") != null).toList();
+        return tablaHabitacionesHotel(hotel, esAdmin, intro, habitacionesDeHotel(hotel));
+    }
+
+    private String tablaHabitacionesHotel(String hotel, boolean esAdmin, String intro, List<Map<String, Object>> rooms) {
         String nombre = rooms.isEmpty() ? hotel : String.valueOf(rooms.get(0).get("hotel"));
         String ciudad = rooms.isEmpty() ? "" : String.valueOf(rooms.get(0).get("ciudad"));
         StringBuilder sb = new StringBuilder(intro).append("\n\n");
@@ -859,6 +869,37 @@ public class HotelChatServiceImpl implements HotelChatService {
         // 4. CONSULTAS DE INVENTARIO, HABITACIONES Y RESERVACIONES
 
         // 4-PRE. Flujos conversacionales con memoria de hotel/ciudad
+        boolean sinFechas = !requiereHerramientasEscritura(prompt);
+        boolean ambitoCadena = norm.contains("cada hotel") || norm.contains("por hotel") || norm.contains("cadena")
+                || norm.contains("todos los hoteles") || norm.contains("otro hotel") || norm.contains("otros hoteles");
+        String ctxHotel = (sinFechas && !ambitoCadena) ? resolverHotelEnContexto(prompt, scopedConvId) : null;
+        if (ctxHotel != null && !norm.contains("mantenimiento") && !norm.contains("ocupada")
+                && !norm.contains("cancel") && !norm.contains("politic")) {
+            // Pregunta por una categoría concreta dentro del hotel en contexto
+            String[] claves = {"individual", "doble", "matrimonial", "familiar", "suite", "master", "estudiante", "villa"};
+            String clave = null;
+            for (String c : claves) if (norm.contains(c)) { clave = c; break; }
+            if (clave != null) {
+                final String k = clave;
+                List<Map<String, Object>> todas = habitacionesDeHotel(ctxHotel);
+                List<Map<String, Object>> coinciden = todas.stream()
+                        .filter(r -> normalizarTexto(String.valueOf(r.get("tipo"))).contains(k)).toList();
+                if (!coinciden.isEmpty()) {
+                    return tablaHabitacionesHotel(ctxHotel, esAdmin,
+                            "Sí, **" + ctxHotel + "** cuenta con esta categoría:", coinciden);
+                }
+                return tablaHabitacionesHotel(ctxHotel, esAdmin,
+                        "**" + ctxHotel + "** no cuenta con habitaciones de la categoría solicitada. Estas son las únicas habitaciones de ese hotel:", todas);
+            }
+            // Preguntas tipo "¿es la única?", "¿cuántas habitaciones tiene?", "¿qué más tienen?"
+            if (norm.contains("unica") || norm.contains("solo cuenta") || norm.contains("solo tiene") || norm.contains("solo hay")
+                    || norm.contains("cuantas habitaciones") || norm.contains("que mas") || norm.contains("otras habitaciones")
+                    || norm.contains("mas habitaciones") || norm.contains("otra habitacion")) {
+                List<Map<String, Object>> todas = habitacionesDeHotel(ctxHotel);
+                return tablaHabitacionesHotel(ctxHotel, esAdmin,
+                        "**" + ctxHotel + "** cuenta con " + todas.size() + (todas.size() == 1 ? " habitación registrada:" : " habitaciones registradas:"), todas);
+            }
+        }
         boolean temaOtro = norm.contains("mantenimiento") || norm.contains("ocupada") || norm.contains("planta baja")
                 || norm.contains("4 personas") || norm.contains("mas cara") || norm.contains("categoria")
                 || norm.contains("tipos de") || norm.contains("cotiz") || norm.contains("reserv")
@@ -886,7 +927,9 @@ public class HotelChatServiceImpl implements HotelChatService {
             }
             // El usuario elige hotel/ciudad
             String hotelPrompt = detectarHotelEnTexto(norm);
-            boolean eligeHotel = hotelPrompt != null && (norm.contains("hospedar") || norm.contains("alojar")
+            boolean soloNombre = hotelPrompt != null && norm.split(" ").length <= 4
+                    && !norm.contains("precio") && !norm.contains("cuesta");
+            boolean eligeHotel = hotelPrompt != null && (soloNombre || norm.contains("hospedar") || norm.contains("alojar")
                     || norm.contains("quedar") || norm.contains("busco") || norm.startsWith("en ")
                     || norm.contains("quiero ir") || norm.contains("hotel en") || norm.contains("habitaciones en")
                     || norm.contains("habitaciones del") || norm.contains("habitaciones de "));
