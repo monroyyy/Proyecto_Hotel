@@ -240,14 +240,32 @@ public class HotelChatServiceImpl implements HotelChatService {
         return null;
     }
 
+    private Map<String, Object> habitacionPorCategoria(String texto, List<Map<String, Object>> rooms) {
+        String norm = normalizarTexto(texto);
+        String[] claves = {"individual", "doble", "matrimonial", "familiar", "master", "suite", "estudiante", "villa"};
+        for (String c : claves) {
+            if (norm.contains(c)) {
+                for (Map<String, Object> r : rooms) {
+                    if (normalizarTexto(String.valueOf(r.get("tipo"))).contains(c)) return r;
+                }
+            }
+        }
+        return null;
+    }
+
     private Map<String, Object> habitacionEnContexto(String prompt, String convId, List<Map<String, Object>> rooms) {
         Map<String, Object> m = habitacionMencionada(prompt, rooms);
+        if (m != null) return m;
+        m = habitacionPorCategoria(prompt, rooms);
         if (m != null) return m;
         try {
             List<Message> hist = chatMemory.get(convId);
             for (int i = hist.size() - 1; i >= 0; i--) {
                 if (hist.get(i).getMessageType() != MessageType.USER) continue;
-                m = habitacionMencionada(hist.get(i).getText(), rooms);
+                String t = hist.get(i).getText();
+                m = habitacionMencionada(t, rooms);
+                if (m != null) return m;
+                m = habitacionPorCategoria(t, rooms);
                 if (m != null) return m;
             }
         } catch (Exception ignored) {}
@@ -329,6 +347,19 @@ public class HotelChatServiceImpl implements HotelChatService {
                 if (mUnica.group(3) == null && ini.isBefore(LocalDate.now())) ini = ini.plusYears(1);
                 return new LocalDate[]{ini, ini.plusDays(1)};
             } catch (Exception ignored) {}
+        }
+        // 4. Fechas relativas en español: "hoy", "mañana", "pasado mañana" + "en X dias" / "por X noches"
+        boolean tieneRelativa = norm.contains("pasado manana") || norm.contains("manana") || norm.contains("hoy");
+        if (tieneRelativa) {
+            LocalDate hoy = LocalDate.now();
+            LocalDate ini = norm.contains("pasado manana") ? hoy.plusDays(2)
+                    : norm.contains("manana") ? hoy.plusDays(1) : hoy;
+            int noches = 1;
+            Matcher mDur = Pattern.compile("\\b(?:en|por|durante)?\\s*(\\d{1,2})\\s*(?:dias?|noches?)\\b").matcher(norm);
+            if (mDur.find()) {
+                noches = Math.max(1, Math.min(30, Integer.parseInt(mDur.group(1))));
+            }
+            return new LocalDate[]{ini, ini.plusDays(noches)};
         }
         return null;
     }
@@ -1033,9 +1064,13 @@ public class HotelChatServiceImpl implements HotelChatService {
             Map<String, Object> habActiva = habitacionEnContexto(prompt, scopedConvId, roomsCtx);
             LocalDate[] fechasAhora = extraerRangoFechas(norm);
 
+            boolean esConfirmacion = norm.equals("si") || norm.equals("ok") || norm.equals("claro")
+                    || norm.equals("confirmo") || norm.equals("adelante") || norm.equals("dale")
+                    || norm.equals("si por favor") || norm.equals("confirmar");
             boolean quiereReservar = norm.contains("reservar") || norm.contains("apartar")
                     || norm.contains("pre reserva") || norm.contains("prereserva")
-                    || (fechasAhora != null && habActiva != null);
+                    || (fechasAhora != null && habActiva != null)
+                    || (esConfirmacion && habActiva != null);
 
             // Caso A: El usuario solo eligió una habitación (ej. "101", "habitacion 101", "villa 10")
             if (habMencionadaAhora != null && !quiereReservar && norm.split(" ").length <= 5) {
@@ -1103,24 +1138,54 @@ public class HotelChatServiceImpl implements HotelChatService {
                 Matcher mEmail = Pattern.compile("[\\w.%+-]+@[\\w.-]+\\.[a-zA-Z]{2,}").matcher(prompt);
                 if (mEmail.find()) emailTitular = mEmail.group();
 
-                Map<String, Object> creada = reservaTool.crearReservacion(
-                        ctxHotelRes,
-                        num,
-                        fechas[0].toString(),
-                        fechas[1].toString(),
-                        nombreTitular,
-                        tel,
-                        emailTitular,
-                        adultos,
-                        ninos,
-                        "PRE_RESERVA",
-                        null,
-                        null,
-                        false,
-                        false,
-                        false,
-                        "Registrada desde Asistente Virtual"
-                );
+                // Paso 1: Si aún no confirma explícitamente, mostrar Resumen de Pre-reserva y pedir confirmación (SIN pedir pago)
+                if (!esConfirmacion) {
+                    long noches = Math.max(1, java.time.temporal.ChronoUnit.DAYS.between(fechas[0], fechas[1]));
+                    double tarifa = habActiva.get("precioBase") instanceof Number n ? n.doubleValue() : 0.0;
+                    double totalEst = tarifa * noches;
+                    double anticipoEst = totalEst * 0.5;
+                    StringBuilder res = new StringBuilder();
+                    res.append("### Resumen de Pre-reserva\n\n");
+                    res.append("| Campo | Detalle |\n| :--- | :--- |\n");
+                    res.append("| **Propiedad** | ").append(ctxHotelRes).append(" |\n");
+                    res.append("| **Habitación** | #").append(num).append(" — ").append(tipo).append(" |\n");
+                    res.append("| **Entrada (Check-in 15:00 h)** | ").append(fechas[0]).append(" |\n");
+                    res.append("| **Salida (Check-out 12:00 h)** | ").append(fechas[1]).append(" (").append(noches).append(noches == 1 ? " noche" : " noches").append(") |\n");
+                    res.append("| **Modalidad** | **Pre-reserva** (apartado temporal 24 h; el pago se registra después en Recepción) |\n");
+                    if (!esAdmin && tarifa > 0) {
+                        res.append("| **Total estimado** | **").append(fmtMoneda(totalEst)).append("** |\n");
+                        res.append("| **Anticipo del 50% (en Recepción)** | ").append(fmtMoneda(anticipoEst)).append(" |\n");
+                    }
+                    res.append("\n¿Confirma que desea registrar esta **Pre-reserva**? Responda **Sí** para generar su folio y recibir el comprobante en PDF.");
+                    return res.toString();
+                }
+
+                // Paso 2: El usuario confirmó ("sí" / "confirmo") → registrar Pre-reserva real en BD
+                String prevPrompt = HabitacionSearchTool.CURRENT_USER_PROMPT.get();
+                HabitacionSearchTool.CURRENT_USER_PROMPT.set("confirmo proceder con la pre-reserva");
+                Map<String, Object> creada;
+                try {
+                    creada = reservaTool.crearReservacion(
+                            ctxHotelRes,
+                            num,
+                            fechas[0].toString(),
+                            fechas[1].toString(),
+                            nombreTitular,
+                            tel,
+                            emailTitular,
+                            adultos,
+                            ninos,
+                            "PRE_RESERVA",
+                            null,
+                            null,
+                            false,
+                            false,
+                            false,
+                            "Registrada desde Asistente Virtual"
+                    );
+                } finally {
+                    HabitacionSearchTool.CURRENT_USER_PROMPT.set(prevPrompt);
+                }
 
                 if (creada.containsKey("error")) {
                     return "No fue posible registrar la Pre-reserva: **" + creada.get("error") + "**\n\n" +
