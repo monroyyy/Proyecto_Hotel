@@ -45,14 +45,15 @@ public class UsuarioController {
     public ResponseEntity<?> crearUsuarioDesdeAdmin(@RequestBody Map<String, Object> body) {
         String nombre = body.get("nombre") != null ? String.valueOf(body.get("nombre")).trim() : "";
         String email = body.get("email") != null ? String.valueOf(body.get("email")).trim().toLowerCase() : "";
+        String telefono = body.get("telefono") != null ? String.valueOf(body.get("telefono")).replaceAll("\\D", "") : "";
         String password = body.get("password") != null ? String.valueOf(body.get("password")) : "";
         String rolStr = body.get("rol") != null ? String.valueOf(body.get("rol")).trim().toUpperCase() : "HUESPED";
         boolean verificado = body.get("verificado") == null || Boolean.parseBoolean(String.valueOf(body.get("verificado")));
         boolean activo = body.get("activo") == null || Boolean.parseBoolean(String.valueOf(body.get("activo")));
 
-        if (nombre.isBlank() || email.isBlank() || password.length() < 8) {
+        if (nombre.isBlank() || email.isBlank() || telefono.length() != 10 || password.length() < 8) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "error", "Nombre, correo válido y contraseña de al menos 8 caracteres son obligatorios."
+                    "error", "Nombre, correo válido, teléfono de 10 dígitos y contraseña de al menos 8 caracteres son obligatorios."
             ));
         }
 
@@ -72,6 +73,7 @@ public class UsuarioController {
         Usuario nuevo = Usuario.builder()
                 .nombre(nombre)
                 .email(email)
+                .telefono(telefono)
                 .passwordHash(passwordEncoder.encode(password))
                 .rol(rol)
                 .verificado(verificado)
@@ -114,6 +116,15 @@ public class UsuarioController {
                 ));
             }
             u.setEmail(nuevoEmail);
+        }
+
+        // Actualizar teléfono obligatorio de 10 dígitos cuando se envía en la edición
+        if (body.containsKey("telefono") && body.get("telefono") != null) {
+            String nuevoTel = String.valueOf(body.get("telefono")).replaceAll("\\D", "");
+            if (nuevoTel.length() != 10) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El teléfono debe tener exactamente 10 dígitos numéricos."));
+            }
+            u.setTelefono(nuevoTel);
         }
 
         if (body.containsKey("rol") && body.get("rol") != null) {

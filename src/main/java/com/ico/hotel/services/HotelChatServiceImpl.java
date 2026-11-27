@@ -2,10 +2,12 @@ package com.ico.hotel.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ico.hotel.config.ClientResolver;
+import com.ico.hotel.models.Habitacion;
 import com.ico.hotel.models.Hotel;
 import com.ico.hotel.models.Reserva;
 import com.ico.hotel.models.Rol;
 import com.ico.hotel.models.Usuario;
+import com.ico.hotel.repository.HabitacionRepository;
 import com.ico.hotel.repository.HuespedRepository;
 import com.ico.hotel.repository.ReservaRepository;
 import com.ico.hotel.repository.UsuarioRepository;
@@ -49,6 +51,9 @@ public class HotelChatServiceImpl implements HotelChatService {
     private final HotelPolicyTool hotelPolicyTool;
     private final ReservaTool reservaTool;
     private final DashboardService dashboardService;
+    @org.springframework.context.annotation.Lazy
+    private final ReservaService reservaService;
+    private final HabitacionRepository habitacionRepository;
     private final UsuarioRepository usuarioRepository;
     private final HuespedRepository huespedRepository;
     private final ReservaRepository reservaRepository;
@@ -110,7 +115,7 @@ public class HotelChatServiceImpl implements HotelChatService {
                    resumenRapido + "\n\nPregunta de recepción: " + promptOriginal;
         }
         return "[SESIÓN: ADMINISTRADOR | Usuario: " + user.getNombre() +
-               " | Acceso técnico a inventario de hoteles, habitaciones y estados. PROHIBIDO mostrar montos monetarios, precios, ingresos o usuarios.]\n" +
+               " | Acceso a inventario de hoteles, habitaciones, tarifas públicas por noche y reservaciones. El Dashboard financiero, reportes globales y directorio de usuarios son exclusivos del Gerente General.]\n" +
                resumenRapido + "\n\nPregunta del administrador: " + promptOriginal;
     }
 
@@ -120,7 +125,8 @@ public class HotelChatServiceImpl implements HotelChatService {
      */
     private String construirSnapshotCompacto(CustomUserDetails user) {
         try {
-            boolean ocultarPrecios = user != null && user.getRol() == Rol.ADMINISTRADOR;
+            // Todos los roles (incluyendo Administrador, Recepcionista, Gerente y Huésped) pueden ver tarifas por noche
+            boolean ocultarPrecios = false;
             List<Hotel> hoteles = hotelSearchTool.getHotelesActivos();
             String nombresHoteles = hoteles.stream()
                     .map(h -> h.getNombre() + " (" + h.getCiudad() + ")")
@@ -418,6 +424,25 @@ public class HotelChatServiceImpl implements HotelChatService {
         return sb.append("\n¿Desea apartar alguna de estas opciones?").toString();
     }
 
+    private String obtenerTelefonoUsuario(CustomUserDetails user) {
+        if (user == null) return null;
+        if (user.getIdUsuario() != null) {
+            var uDb = usuarioRepository.findById(user.getIdUsuario());
+            if (uDb.isPresent() && uDb.get().getTelefono() != null) {
+                String t = uDb.get().getTelefono().replaceAll("\\D", "");
+                if (t.length() == 10) return t;
+            }
+        }
+        if (user.getEmail() != null) {
+            var hPrev = huespedRepository.findFirstByEmailIgnoreCase(user.getEmail());
+            if (hPrev.isPresent() && hPrev.get().getTelefono() != null) {
+                String t = hPrev.get().getTelefono().replaceAll("\\D", "");
+                if (t.length() == 10) return t;
+            }
+        }
+        return null;
+    }
+
     private String aislarConversationIdPorUsuario(CustomUserDetails user, String conversationId) {
         String baseId = (conversationId != null && !conversationId.isBlank()) ? conversationId : DEFAULT_CONVERSATION_ID;
         if (user == null) {
@@ -548,7 +573,8 @@ public class HotelChatServiceImpl implements HotelChatService {
         String norm = normalizarTexto(prompt);
         Rol rol = user != null ? user.getRol() : null;
         boolean esGerente = rol == Rol.GERENTE;
-        boolean esAdmin = rol == Rol.ADMINISTRADOR;
+        // El Administrador ahora puede consultar precios y tarifas por noche al igual que Recepción, Gerente y Huésped
+        boolean esAdmin = false;
         boolean esHuesped = rol == Rol.HUESPED;
 
         // 0. Flujo guiado de nueva reservación
@@ -1090,6 +1116,7 @@ public class HotelChatServiceImpl implements HotelChatService {
                     || ((esConfirmacion || tieneTelAhora) && habActiva != null);
 
             // Caso A: El usuario solo eligió una habitación (ej. "101", "habitacion 101", "villa 10")
+            String telCuenta = obtenerTelefonoUsuario(user);
             if (habMencionadaAhora != null && !quiereReservar && norm.split(" ").length <= 5) {
                 String num = String.valueOf(habMencionadaAhora.get("numero"));
                 String tipo = String.valueOf(habMencionadaAhora.get("tipo"));
@@ -1098,7 +1125,7 @@ public class HotelChatServiceImpl implements HotelChatService {
                        "¿Desea registrar una **Pre-reserva** (apartado temporal por 24 horas sin cobro inmediato)?\n" +
                        "Si es así, indíqueme:\n" +
                        "- **Fechas de entrada y salida** (ej. `del 1 al 3 de diciembre` o `2026-12-01 al 2026-12-03`)\n" +
-                       "- **Teléfono celular a 10 dígitos** (ej. `5512345678`)\n" +
+                       (telCuenta == null ? "- **Teléfono celular a 10 dígitos** (ej. `5512345678`)\n" : "") +
                        "- **Número de adultos y niños** (opcional, por defecto 1 adulto)";
             }
 
@@ -1123,12 +1150,17 @@ public class HotelChatServiceImpl implements HotelChatService {
                     String precioTxt = esAdmin ? "" : " (" + fmtMoneda(habActiva.get("precioBase")) + " / noche)";
                     return "Con gusto registro su **Pre-reserva** para la **Habitación #" + num + "** (**" + tipo + "**) en **" + ctxHotelRes + "**" + precioTxt + ".\n\n" +
                            "*(Desde el chat la reservación siempre queda en estado **Pre-reserva** por 24 horas; el pago del 50% de anticipo se registra posteriormente en Recepción).*\n\n" +
-                           "Para generarla ahora mismo, indíqueme:\n" +
-                           "1. **Fechas de entrada y salida** (ej. `del 1 al 3 de diciembre` o `2026-12-01 al 2026-12-03`)\n" +
-                           "2. **Teléfono celular a 10 dígitos**";
+                           "Para generarla ahora mismo, indíqueme" +
+                           (telCuenta == null ? ":\n1. **Fechas de entrada y salida** (ej. `del 1 al 3 de diciembre`)\n2. **Teléfono celular a 10 dígitos**"
+                                              : " las **fechas de entrada y salida** (ej. `del 1 al 3 de diciembre` o `2026-12-01 al 2026-12-03`).");
                 }
 
-                // Extraer teléfono (10 dígitos) del mensaje actual, memoria del chat o perfil del huésped/usuario
+                // Validar explícitamente que las fechas no estén en el pasado antes de mostrar resumen o reservar
+                if (fechas[0].isBefore(LocalDate.now())) {
+                    return "La fecha de entrada (**" + fechas[0] + "**) no puede estar en el pasado. Por favor indíqueme fechas a partir de hoy (**" + LocalDate.now() + "**).";
+                }
+
+                // Extraer teléfono (10 dígitos) del mensaje actual, memoria del chat o cuenta/perfil del usuario
                 String tel = null;
                 Matcher mTel = Pattern.compile("\\b(\\d{10})\\b").matcher(prompt.replaceAll("[-\\s]", ""));
                 if (mTel.find()) tel = mTel.group(1);
@@ -1142,12 +1174,8 @@ public class HotelChatServiceImpl implements HotelChatService {
                         }
                     } catch (Exception ignored) {}
                 }
-                if (tel == null && user != null && user.getEmail() != null) {
-                    var hPrev = huespedRepository.findFirstByEmailIgnoreCase(user.getEmail());
-                    if (hPrev.isPresent() && hPrev.get().getTelefono() != null
-                            && hPrev.get().getTelefono().replaceAll("\\D", "").length() == 10) {
-                        tel = hPrev.get().getTelefono().replaceAll("\\D", "");
-                    }
+                if (tel == null) {
+                    tel = telCuenta;
                 }
 
                 int adultos = 1;
@@ -1162,12 +1190,24 @@ public class HotelChatServiceImpl implements HotelChatService {
                 Matcher mEmail = Pattern.compile("[\\w.%+-]+@[\\w.-]+\\.[a-zA-Z]{2,}").matcher(prompt);
                 if (mEmail.find()) emailTitular = mEmail.group();
 
-                // Paso 1: Si aún no confirma explícitamente ni envió el teléfono tras el resumen, mostrar Resumen de Pre-reserva
+                // Paso 1: Mostrar Resumen con la tarifa EXACTA de ReservaService.calcularTarifa (incluyendo temporada alta +25%)
                 if (!esConfirmacion && !tieneTelAhora) {
                     long noches = Math.max(1, java.time.temporal.ChronoUnit.DAYS.between(fechas[0], fechas[1]));
                     double tarifa = habActiva.get("precioBase") instanceof Number n ? n.doubleValue() : 0.0;
                     double totalEst = tarifa * noches;
                     double anticipoEst = totalEst * 0.5;
+                    long nochesTemporadaAlta = 0;
+                    try {
+                        List<Habitacion> habsDb = habitacionRepository.findByNumeroAndHotelNombreActivos(num, ctxHotelRes);
+                        if (!habsDb.isEmpty()) {
+                            Map<String, Object> calc = reservaService.calcularTarifa(habsDb.get(0), fechas[0], fechas[1], false, false);
+                            totalEst = ((Number) calc.get("total")).doubleValue();
+                            anticipoEst = ((Number) calc.get("anticipoRequerido")).doubleValue();
+                            nochesTemporadaAlta = ((Number) calc.getOrDefault("nochesTemporadaAlta", 0)).longValue();
+                        }
+                    } catch (Exception e) {
+                        log.warn("No se pudo calcular tarifa exacta en resumen: {}", e.getMessage());
+                    }
                     StringBuilder res = new StringBuilder();
                     res.append("### Resumen de Pre-reserva\n\n");
                     res.append("| Campo | Detalle |\n| :--- | :--- |\n");
@@ -1176,8 +1216,9 @@ public class HotelChatServiceImpl implements HotelChatService {
                     res.append("| **Entrada (Check-in 15:00 h)** | ").append(fechas[0]).append(" |\n");
                     res.append("| **Salida (Check-out 12:00 h)** | ").append(fechas[1]).append(" (").append(noches).append(noches == 1 ? " noche" : " noches").append(") |\n");
                     res.append("| **Modalidad** | **Pre-reserva** (apartado temporal 24 h; el pago se registra después en Recepción) |\n");
-                    if (!esAdmin && tarifa > 0) {
-                        res.append("| **Total estimado** | **").append(fmtMoneda(totalEst)).append("** |\n");
+                    if (!esAdmin && totalEst > 0) {
+                        String notaTemp = nochesTemporadaAlta > 0 ? " *(incluye temporada alta +25%)*" : "";
+                        res.append("| **Total estimado** | **").append(fmtMoneda(totalEst)).append("**").append(notaTemp).append(" |\n");
                         res.append("| **Anticipo del 50% (en Recepción)** | ").append(fmtMoneda(anticipoEst)).append(" |\n");
                     }
                     if (tel == null) {

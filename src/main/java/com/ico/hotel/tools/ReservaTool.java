@@ -33,6 +33,7 @@ public class ReservaTool {
     private final ReservaRepository reservaRepository;
     private final HotelRepository hotelRepository;
     private final com.ico.hotel.repository.HuespedRepository huespedRepository;
+    private final com.ico.hotel.repository.UsuarioRepository usuarioRepository;
 
     private boolean perteneceAHuespedActual(Reserva r, CustomUserDetails user) {
         if (user == null) return false;
@@ -81,17 +82,29 @@ public class ReservaTool {
             String observaciones) {
 
         CustomUserDetails authUser = HabitacionSearchTool.getAuthenticatedUser();
-        if (authUser != null && authUser.getRol() == Rol.HUESPED) {
-            // Si quien usa el chat es un HUESPED, siempre usa su propio correo verificado y su nombre por defecto
-            email = authUser.getEmail();
-            if (nombreHuesped == null || nombreHuesped.isBlank()) {
-                nombreHuesped = authUser.getNombre();
+        if (authUser != null) {
+            // Recuperar automáticamente el teléfono desde la cuenta de Usuario o perfil de Huésped si no se envió en el prompt
+            if (telefono == null || telefono.replaceAll("\\D", "").length() != 10) {
+                if (authUser.getIdUsuario() != null) {
+                    var usrOpt = usuarioRepository.findById(authUser.getIdUsuario());
+                    if (usrOpt.isPresent() && usrOpt.get().getTelefono() != null
+                            && usrOpt.get().getTelefono().replaceAll("\\D", "").length() == 10) {
+                        telefono = usrOpt.get().getTelefono().replaceAll("\\D", "");
+                    }
+                }
+                if ((telefono == null || telefono.replaceAll("\\D", "").length() != 10) && authUser.getEmail() != null) {
+                    var prevHuesped = huespedRepository.findFirstByEmailIgnoreCase(authUser.getEmail());
+                    if (prevHuesped.isPresent() && prevHuesped.get().getTelefono() != null
+                            && prevHuesped.get().getTelefono().replaceAll("\\D", "").length() == 10) {
+                        telefono = prevHuesped.get().getTelefono().replaceAll("\\D", "");
+                    }
+                }
             }
-            if ((telefono == null || telefono.replaceAll("\\D", "").length() != 10)) {
-                // Intentar recuperar el teléfono previamente registrado del huésped si existe
-                var prevHuesped = huespedRepository.findFirstByEmailIgnoreCase(authUser.getEmail());
-                if (prevHuesped.isPresent() && prevHuesped.get().getTelefono() != null && prevHuesped.get().getTelefono().replaceAll("\\D", "").length() == 10) {
-                    telefono = prevHuesped.get().getTelefono();
+            if (authUser.getRol() == Rol.HUESPED) {
+                // Si quien usa el chat es un HUESPED, siempre usa su propio correo verificado y su nombre por defecto
+                email = authUser.getEmail();
+                if (nombreHuesped == null || nombreHuesped.isBlank()) {
+                    nombreHuesped = authUser.getNombre();
                 }
             }
         }

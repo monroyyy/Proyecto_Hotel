@@ -695,9 +695,10 @@ public class ReservaService {
         LocalDateTime momentoCheckout = salidaActual.atTime(HORA_CHECKOUT);
         long horasRestantes = Duration.between(ahora, momentoCheckout).toHours();
         r.setHorasParaDesocupar(horasRestantes);
-        r.setPorDesocuparse(horasRestantes >= 0 && horasRestantes <= 72);
-
+        // Solo marcar "porDesocuparse" si la estancia está físicamente OCUPADA y sale hoy (evita falsos "Desocupa hoy" en reservas futuras)
         LocalDate hoy = ahora.toLocalDate();
+        r.setPorDesocuparse(Reserva.OCUPADA.equals(r.getEstado()) && salidaActual.isEqual(hoy));
+
         boolean salidaVencida = Reserva.OCUPADA.equals(r.getEstado()) && (
                 salidaActual.isBefore(hoy)
                 || (salidaActual.isEqual(hoy) && !ahora.toLocalTime().isBefore(HORA_CHECKOUT))
@@ -1490,8 +1491,8 @@ public class ReservaService {
             // Para huéspedes, solo mostrar sus propias reservaciones
             if (!esStaff && !esMiReserva) continue;
 
-            // 1. SALIDAS (Check-out HOY / MAÑANA para estancias Ocupadas o propias por vencer)
-            if (Reserva.OCUPADA.equals(r.getEstado()) || (!esStaff && esMiReserva)) {
+            // 1. SALIDAS (Check-out HOY / MAÑANA únicamente para estancias físicamente OCUPADAS)
+            if (Reserva.OCUPADA.equals(r.getEstado())) {
                 LocalDateTime checkoutDt = r.getFechaSalida().atTime(HORA_CHECKOUT);
                 long horasRestantes = Duration.between(ahora, checkoutDt).toHours();
                 long diasRestantes = java.time.temporal.ChronoUnit.DAYS.between(hoy, r.getFechaSalida());

@@ -243,6 +243,7 @@ export default function UsuariosPage() {
             idUsuario: null,
             nombre: '',
             email: '',
+            telefono: '',
             password: '',
             rol: 'HUESPED',
             verificado: true,
@@ -257,6 +258,7 @@ export default function UsuariosPage() {
             idUsuario: u.idUsuario,
             nombre: limpiarNombre(u.nombre),
             email: u.email || '',
+            telefono: u.telefono || '',
             password: '',
             rol: u.rol || 'HUESPED',
             verificado: Boolean(u.verificado),
@@ -270,6 +272,12 @@ export default function UsuariosPage() {
         e.preventDefault();
         if (!formUser.nombre.trim() || !formUser.email.trim()) {
             mostrarNotificacion('error', 'El nombre y el correo electrónico son obligatorios.');
+            return;
+        }
+        // Teléfono obligatorio de 10 dígitos para todos los tipos de usuario
+        const telLimpio = (formUser.telefono || '').replace(/\D/g, '');
+        if (telLimpio.length !== 10) {
+            mostrarNotificacion('error', 'El número telefónico es obligatorio y debe tener exactamente 10 dígitos.');
             return;
         }
         if (!modoEdicion && formUser.password.length < 8) {
@@ -297,6 +305,7 @@ export default function UsuariosPage() {
                         const payload = {
                             nombre: formUser.nombre.trim(),
                             email: formUser.email.trim(),
+                            telefono: telLimpio,
                             rol: formUser.rol,
                             verificado: formUser.verificado,
                             activo: formUser.activo
@@ -308,6 +317,7 @@ export default function UsuariosPage() {
                         await crearUsuarioAdmin({
                             nombre: formUser.nombre.trim(),
                             email: formUser.email.trim(),
+                            telefono: telLimpio,
                             password: formUser.password,
                             rol: formUser.rol,
                             verificado: formUser.verificado,
@@ -816,6 +826,19 @@ export default function UsuariosPage() {
                             value={formUser.email}
                             onChange={(e) => setFormUser({ ...formUser, email: e.target.value })}
                             placeholder="usuario@hotelparaiso.com"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">Teléfono (10 dígitos) *</label>
+                        <input
+                            type="tel"
+                            required
+                            maxLength={10}
+                            className="form-input"
+                            value={formUser.telefono || ''}
+                            onChange={(e) => setFormUser({ ...formUser, telefono: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                            placeholder="5512345678"
                         />
                     </div>
 

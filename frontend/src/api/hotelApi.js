@@ -127,6 +127,8 @@ export async function registrarUsuario(datos) {
         body: JSON.stringify({
             nombre: datos.nombre,
             email: datos.email,
+            // Enviar teléfono obligatorio de 10 dígitos en el registro público
+            telefono: datos.telefono,
             password: datos.password,
         }),
     });

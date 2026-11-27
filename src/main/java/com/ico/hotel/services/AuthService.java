@@ -79,6 +79,11 @@ public class AuthService {
     public Map<String, Object> registrar(RegistroRequest req) {
         String email = req.getEmail().trim().toLowerCase();
         String nombre = req.getNombre().trim();
+        // Normalizar teléfono a 10 dígitos numéricos
+        String telefono = req.getTelefono() != null ? req.getTelefono().replaceAll("\\D", "") : "";
+        if (telefono.length() != 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El teléfono debe tener exactamente 10 dígitos.");
+        }
         LocalDateTime ahora = LocalDateTime.now(clockActual());
 
         Usuario existente = usuarioRepository.findByEmailIgnoreCase(email).orElse(null);
@@ -117,6 +122,7 @@ public class AuthService {
                 tokenRecuperacionRepository.invalidarActivosPorUsuario(existente.getIdUsuario());
             }
             existente.setNombre(nombre);
+            existente.setTelefono(telefono);
             existente.setPasswordHash(passwordEncoder.encode(req.getPassword()));
             existente.setActivo(true);
             existente.setTokenVersion(0);
@@ -129,6 +135,7 @@ public class AuthService {
             Usuario nuevo = new Usuario();
             nuevo.setNombre(nombre);
             nuevo.setEmail(email);
+            nuevo.setTelefono(telefono);
             nuevo.setPasswordHash(passwordEncoder.encode(req.getPassword()));
             nuevo.setRol(Rol.HUESPED);
             nuevo.setVerificado(false);
@@ -137,13 +144,14 @@ public class AuthService {
             usuario = usuarioRepository.save(nuevo);
         }
 
-        // Sincronizar o vincular perfil básico en tabla huesped (sin sobrescribir un huésped presencial con teléfono)
+        // Sincronizar o vincular perfil en tabla huesped con el teléfono obligatorio del registro
         Huesped huesped = huespedRepository.findFirstByEmailIgnoreCase(email).orElseGet(Huesped::new);
         if (huesped.getNombre() == null || huesped.getNombre().isBlank()
                 || (reemplazandoNoVerificada && (huesped.getTelefono() == null || huesped.getTelefono().isBlank()))) {
             huesped.setNombre(nombre);
         }
         huesped.setEmail(email);
+        huesped.setTelefono(telefono);
         huespedRepository.save(huesped);
 
         TokenVerificacion tokenVerificacion = crearNuevoToken(usuario);
@@ -302,9 +310,11 @@ public class AuthService {
         }
 
         String jwt = jwtService.generateToken(usuario);
-        String telefono = huespedRepository.findFirstByEmailIgnoreCase(usuario.getEmail())
-                .map(Huesped::getTelefono)
-                .orElse(null);
+        String telefono = (usuario.getTelefono() != null && !usuario.getTelefono().isBlank())
+                ? usuario.getTelefono()
+                : huespedRepository.findFirstByEmailIgnoreCase(usuario.getEmail())
+                        .map(Huesped::getTelefono)
+                        .orElse(null);
         log.info("Inicio de sesión exitoso: usuario={}, rol={}", usuario.getEmail(), usuario.getRol());
 
         return AuthResponse.builder()
@@ -407,6 +417,7 @@ public class AuthService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado."));
 
         usuario.setNombre(nombreLimpio);
+        usuario.setTelefono(telefonoLimpio);
         usuario = usuarioRepository.save(usuario);
 
         String emailUsuario = usuario.getEmail();
