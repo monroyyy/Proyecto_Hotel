@@ -215,11 +215,19 @@ function obtenerAmenidadesHabitacion(hab) {
     return base;
 }
 
-// Helper para sumar días a una fecha YYYY-MM-DD
+// Helper para formatear una fecha Date a YYYY-MM-DD en zona horaria LOCAL (evita salto de día en UTC después de las 18:00)
+function obtenerFechaLocalIso(date = new Date()) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+// Helper para sumar días a una fecha YYYY-MM-DD en hora local
 function sumarDiasFecha(fechaStr, dias) {
     const base = fechaStr ? new Date(fechaStr + 'T12:00:00') : new Date();
     base.setDate(base.getDate() + Number(dias));
-    return base.toISOString().split('T')[0];
+    return obtenerFechaLocalIso(base);
 }
 
 // Formatea fecha YYYY-MM-DD en formato legible corto ("04 Nov" o "04 Nov 2026")
@@ -296,8 +304,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
     const [loading, setLoading] = useState(true);
     const [alertMsg, setAlertMsg] = useState({ type: '', text: '' });
 
-    // Fechas por defecto (hoy y +2 noches)
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Fechas por defecto en zona horaria local (hoy y +2 noches)
+    const todayStr = obtenerFechaLocalIso();
     const defaultCheckoutStr = sumarDiasFecha(todayStr, 2);
 
     const [filtroHotel, setFiltroHotel] = useState('TODOS');

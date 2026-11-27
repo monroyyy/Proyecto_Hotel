@@ -48,8 +48,13 @@ public interface ReservaRepository extends JpaRepository<Reserva, Integer> {
     List<Integer> findHabitacionesOcupadas(@Param("entrada") LocalDate entrada,
                                            @Param("salida") LocalDate salida);
 
-    @Query("SELECT r FROM Reserva r WHERE r.estado = 'Pre-reserva' AND (r.fechaExpiracion < :ahora OR r.fechaSalida <= :hoy)")
+    // Incluye pre-reservas cuya fecha de entrada ya pasó para no dejar pendientes de días anteriores
+    @Query("SELECT r FROM Reserva r WHERE r.estado = 'Pre-reserva' AND (r.fechaExpiracion < :ahora OR r.fechaSalida <= :hoy OR r.fechaEntrada < :hoy)")
     List<Reserva> findPreReservasVencidas(@Param("ahora") LocalDateTime ahora, @Param("hoy") LocalDate hoy);
+
+    // Reservaciones en curso (Ocupada) cuya fecha de salida ya se cumplió para cierre automático
+    @Query("SELECT r FROM Reserva r WHERE r.estado = 'Ocupada' AND r.fechaSalida <= :hoy")
+    List<Reserva> findOcupadasParaFinalizar(@Param("hoy") LocalDate hoy);
 
     @Query("SELECT r FROM Reserva r WHERE r.estado = 'Confirmada' AND r.fechaEntrada <= :hoy")
     List<Reserva> findConfirmadasParaNoShow(@Param("hoy") LocalDate hoy);

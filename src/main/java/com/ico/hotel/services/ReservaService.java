@@ -77,8 +77,9 @@ public class ReservaService {
     @PersistenceContext
     private EntityManager entityManager;
 
-    @Value("${app.jobs.expiracion-dry-run:true}")
-    private boolean expiracionDryRun = true;
+    // Por defecto el job ejecuta cambios reales en BD (no dry-run)
+    @Value("${app.jobs.expiracion-dry-run:false}")
+    private boolean expiracionDryRun = false;
 
     public static final String ESTADO_PENDIENTE = "Pendiente";
     public static final String ESTADO_OCUPADA = "Ocupada";
@@ -375,6 +376,7 @@ public class ReservaService {
             LocalDate salidaDesde,
             LocalDate salidaHasta,
             String q,
+            Boolean soloHoy,
             CustomUserDetails principal) {
         if (page < 0) {
             throw new IllegalArgumentException("El número de página (page) no puede ser negativo.");
@@ -408,7 +410,7 @@ public class ReservaService {
         CriteriaQuery<Long> countCq = cb.createQuery(Long.class);
         Root<Reserva> countRoot = countCq.from(Reserva.class);
         List<Predicate> countPreds = construirPredicados(
-                cb, countRoot, estado, hotelId, entradaDesde, entradaHasta, salidaDesde, salidaHasta, q, principal);
+                cb, countRoot, estado, hotelId, entradaDesde, entradaHasta, salidaDesde, salidaHasta, q, soloHoy, principal);
         countCq.select(cb.count(countRoot));
         if (!countPreds.isEmpty()) {
             countCq.where(countPreds.toArray(new Predicate[0]));
@@ -430,7 +432,7 @@ public class ReservaService {
         CriteriaQuery<Integer> idCq = cb.createQuery(Integer.class);
         Root<Reserva> idRoot = idCq.from(Reserva.class);
         List<Predicate> idPreds = construirPredicados(
-                cb, idRoot, estado, hotelId, entradaDesde, entradaHasta, salidaDesde, salidaHasta, q, principal);
+                cb, idRoot, estado, hotelId, entradaDesde, entradaHasta, salidaDesde, salidaHasta, q, soloHoy, principal);
         idCq.select(idRoot.get("idReserva"));
         if (!idPreds.isEmpty()) {
             idCq.where(idPreds.toArray(new Predicate[0]));
@@ -439,11 +441,8 @@ public class ReservaService {
         Order principalOrder = asc ? cb.asc(sortExpr) : cb.desc(sortExpr);
         if ("idReserva".equals(sortField)) {
             idCq.orderBy(principalOrder);
-        } else if ("fechaCreacion".equals(sortField)) {
-            // InnoDB añade la PK id_reserva ASC al índice (fecha_creacion DESC)
-            Order tieBreaker = asc ? cb.desc(idRoot.get("idReserva")) : cb.asc(idRoot.get("idReserva"));
-            idCq.orderBy(principalOrder, tieBreaker);
         } else {
+            // Desempate consistente: cuando ordenamos descendente (ej. fechaCreacion,desc), idReserva también descendente
             Order tieBreaker = asc ? cb.asc(idRoot.get("idReserva")) : cb.desc(idRoot.get("idReserva"));
             idCq.orderBy(principalOrder, tieBreaker);
         }
@@ -497,6 +496,7 @@ public class ReservaService {
             LocalDate salidaDesde,
             LocalDate salidaHasta,
             String q,
+            Boolean soloHoy,
             CustomUserDetails principal) {
         List<Predicate> preds = new ArrayList<>();
         Join<Object, Object> hueJoin = null;
@@ -517,6 +517,23 @@ public class ReservaService {
         if (hotelId != null) {
             Join<Object, Object> habJoin = root.join("habitacion", JoinType.INNER);
             preds.add(cb.equal(habJoin.get("hotel").get("idHotel"), hotelId));
+        }
+        if (Boolean.TRUE.equals(soloHoy)) {
+            // Filtro "Hoy" en recepción: llegadas de hoy, estancias activas hoy o reservas creadas hoy (incluso tras las 12pm)
+            LocalDate hoyLocal = LocalDate.now(clockActual());
+            LocalDateTime inicioDia = hoyLocal.atStartOfDay();
+            LocalDateTime finDia = hoyLocal.plusDays(1).atStartOfDay();
+            Predicate entradaHoy = cb.equal(root.get("fechaEntrada"), hoyLocal);
+            Predicate estanciaVigenteHoy = cb.and(
+                    root.get("estado").in(Reserva.OCUPADA, Reserva.CONFIRMADA, Reserva.PRE_RESERVA),
+                    cb.lessThanOrEqualTo(root.get("fechaEntrada"), hoyLocal),
+                    cb.greaterThan(root.get("fechaSalida"), hoyLocal)
+            );
+            Predicate creadaHoy = cb.and(
+                    cb.greaterThanOrEqualTo(root.get("fechaCreacion"), inicioDia),
+                    cb.lessThan(root.get("fechaCreacion"), finDia)
+            );
+            preds.add(cb.or(entradaHoy, estanciaVigenteHoy, creadaHoy));
         }
         if (entradaDesde != null) {
             preds.add(cb.greaterThanOrEqualTo(root.get("fechaEntrada"), entradaDesde));
@@ -1745,6 +1762,18 @@ public class ReservaService {
             }
         }
 
+        // Finalizar automáticamente estancias Ocupadas cuya fecha de salida ya venció
+        List<Integer> idsOcupadasSalida = reservaRepository.findOcupadasParaFinalizar(hoy).stream()
+                .map(Reserva::getIdReserva)
+                .filter(Objects::nonNull)
+                .toList();
+        for (Integer idRes : idsOcupadasSalida) {
+            Boolean hecha = ejecutarEnTransaccion(() -> procesarCheckoutAutomatico(idRes));
+            if (Boolean.TRUE.equals(hecha)) {
+                procesadas++;
+            }
+        }
+
         ejecutarEnTransaccion(() -> {
             for (Habitacion h : habitacionRepository.findAll()) {
                 sincronizarEstadoHabitacion(h);
@@ -1770,7 +1799,8 @@ public class ReservaService {
             return false;
         }
         boolean sigueVencida = (r.getFechaExpiracion() != null && r.getFechaExpiracion().isBefore(ahora))
-                || (r.getFechaSalida() != null && !r.getFechaSalida().isAfter(hoy));
+                || (r.getFechaSalida() != null && !r.getFechaSalida().isAfter(hoy))
+                || (r.getFechaEntrada() != null && r.getFechaEntrada().isBefore(hoy));
         if (!sigueVencida) {
             return false;
         }
@@ -1817,6 +1847,38 @@ public class ReservaService {
 
         registrarEvento(r.getIdReserva(), "NO_SHOW", estadoActual.getValor(), Reserva.NO_SHOW,
                 "SISTEMA", ahora, "No-Show automático declarado por el sistema a partir de las 22:00 hrs.");
+        sincronizarEstadoHabitacion(r.getHabitacion());
+        return true;
+    }
+
+    /**
+     * Cierra automáticamente estancias Ocupadas cuya fecha de salida ya pasó
+     * (o cuyo día de salida es hoy a partir de las 14:00 hrs tras tolerancia de check-out),
+     * liberando de inmediato la habitación.
+     */
+    private boolean procesarCheckoutAutomatico(Integer idReserva) {
+        LocalDateTime ahora = LocalDateTime.now(clockActual());
+        LocalDate hoy = ahora.toLocalDate();
+        Reserva r = reservaRepository.findByIdForUpdate(idReserva).orElse(null);
+        if (r == null || !Reserva.OCUPADA.equals(r.getEstado()) || r.getFechaSalida() == null) {
+            return false;
+        }
+        boolean salidaCumplida = r.getFechaSalida().isBefore(hoy)
+                || (r.getFechaSalida().isEqual(hoy) && !ahora.toLocalTime().isBefore(LocalTime.of(14, 0)));
+        if (!salidaCumplida) {
+            return false;
+        }
+
+        EstadoReserva estadoActual = EstadoReserva.desdeTexto(r.getEstado());
+        estadoActual.validarTransicion(EstadoReserva.FINALIZADA);
+
+        r.setEstado(Reserva.FINALIZADA);
+        String obs = r.getObservaciones() == null || r.getObservaciones().isBlank() ? "" : r.getObservaciones() + " | ";
+        r.setObservaciones(obs + "Finalizada automáticamente por cumplimiento de fecha de salida.");
+        reservaRepository.save(r);
+
+        registrarEvento(r.getIdReserva(), "CHECKOUT_AUTO", estadoActual.getValor(), Reserva.FINALIZADA,
+                "SISTEMA", ahora, "Check-out automático por vencimiento de fecha de salida.");
         sincronizarEstadoHabitacion(r.getHabitacion());
         return true;
     }

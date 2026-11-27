@@ -68,11 +68,12 @@ public class ReservaController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate salidaDesde,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate salidaHasta,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) Boolean soloHoy,
             @AuthenticationPrincipal CustomUserDetails principal) {
         Integer filtroHotel = hotelId != null ? hotelId : idHotel;
         return service.listarPaginado(
                 page, size, sort, estado, filtroHotel,
-                entradaDesde, entradaHasta, salidaDesde, salidaHasta, q, principal
+                entradaDesde, entradaHasta, salidaDesde, salidaHasta, q, soloHoy, principal
         );
     }
 

@@ -6,6 +6,7 @@ import com.ico.hotel.models.Hotel;
 import com.ico.hotel.models.Reserva;
 import com.ico.hotel.models.Rol;
 import com.ico.hotel.models.Usuario;
+import com.ico.hotel.repository.HuespedRepository;
 import com.ico.hotel.repository.ReservaRepository;
 import com.ico.hotel.repository.UsuarioRepository;
 import com.ico.hotel.security.CustomUserDetails;
@@ -49,6 +50,7 @@ public class HotelChatServiceImpl implements HotelChatService {
     private final ReservaTool reservaTool;
     private final DashboardService dashboardService;
     private final UsuarioRepository usuarioRepository;
+    private final HuespedRepository huespedRepository;
     private final ReservaRepository reservaRepository;
     private final ChatMemory chatMemory;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -320,6 +322,19 @@ public class HotelChatServiceImpl implements HotelChatService {
         if (!isos.isEmpty()) {
             LocalDate ini = isos.get(0);
             LocalDate fin = isos.size() > 1 && isos.get(1).isAfter(ini) ? isos.get(1) : ini.plusDays(1);
+            return new LocalDate[]{ini, fin};
+        }
+        // 1B. Formato numérico dd/mm/yyyy o dd-mm-yyyy (normalizado con espacios)
+        List<LocalDate> dmys = new ArrayList<>();
+        Matcher mDmy = Pattern.compile("\\b(\\d{1,2})\\s+(\\d{1,2})\\s+(202[5-9])\\b").matcher(norm);
+        while (mDmy.find()) {
+            try {
+                dmys.add(LocalDate.of(Integer.parseInt(mDmy.group(3)), Integer.parseInt(mDmy.group(2)), Integer.parseInt(mDmy.group(1))));
+            } catch (Exception ignored) {}
+        }
+        if (!dmys.isEmpty()) {
+            LocalDate ini = dmys.get(0);
+            LocalDate fin = dmys.size() > 1 && dmys.get(1).isAfter(ini) ? dmys.get(1) : ini.plusDays(1);
             return new LocalDate[]{ini, fin};
         }
         // 2. Rango en español: "del 10 al 15 de diciembre [2026]"
@@ -1064,13 +1079,15 @@ public class HotelChatServiceImpl implements HotelChatService {
             Map<String, Object> habActiva = habitacionEnContexto(prompt, scopedConvId, roomsCtx);
             LocalDate[] fechasAhora = extraerRangoFechas(norm);
 
+            boolean tieneTelAhora = Pattern.compile("\\b\\d{10}\\b").matcher(prompt.replaceAll("[-\\s]", "")).find();
             boolean esConfirmacion = norm.equals("si") || norm.equals("ok") || norm.equals("claro")
                     || norm.equals("confirmo") || norm.equals("adelante") || norm.equals("dale")
-                    || norm.equals("si por favor") || norm.equals("confirmar");
+                    || norm.equals("si por favor") || norm.equals("confirmar")
+                    || (norm.startsWith("si ") && norm.length() <= 35);
             boolean quiereReservar = norm.contains("reservar") || norm.contains("apartar")
                     || norm.contains("pre reserva") || norm.contains("prereserva")
                     || (fechasAhora != null && habActiva != null)
-                    || (esConfirmacion && habActiva != null);
+                    || ((esConfirmacion || tieneTelAhora) && habActiva != null);
 
             // Caso A: El usuario solo eligió una habitación (ej. "101", "habitacion 101", "villa 10")
             if (habMencionadaAhora != null && !quiereReservar && norm.split(" ").length <= 5) {
@@ -1111,7 +1128,7 @@ public class HotelChatServiceImpl implements HotelChatService {
                            "2. **Teléfono celular a 10 dígitos**";
                 }
 
-                // Extraer teléfono (10 dígitos), adultos, niños y correo si los proporcionó
+                // Extraer teléfono (10 dígitos) del mensaje actual, memoria del chat o perfil del huésped/usuario
                 String tel = null;
                 Matcher mTel = Pattern.compile("\\b(\\d{10})\\b").matcher(prompt.replaceAll("[-\\s]", ""));
                 if (mTel.find()) tel = mTel.group(1);
@@ -1124,6 +1141,13 @@ public class HotelChatServiceImpl implements HotelChatService {
                             if (mt.find()) { tel = mt.group(1); break; }
                         }
                     } catch (Exception ignored) {}
+                }
+                if (tel == null && user != null && user.getEmail() != null) {
+                    var hPrev = huespedRepository.findFirstByEmailIgnoreCase(user.getEmail());
+                    if (hPrev.isPresent() && hPrev.get().getTelefono() != null
+                            && hPrev.get().getTelefono().replaceAll("\\D", "").length() == 10) {
+                        tel = hPrev.get().getTelefono().replaceAll("\\D", "");
+                    }
                 }
 
                 int adultos = 1;
@@ -1138,8 +1162,8 @@ public class HotelChatServiceImpl implements HotelChatService {
                 Matcher mEmail = Pattern.compile("[\\w.%+-]+@[\\w.-]+\\.[a-zA-Z]{2,}").matcher(prompt);
                 if (mEmail.find()) emailTitular = mEmail.group();
 
-                // Paso 1: Si aún no confirma explícitamente, mostrar Resumen de Pre-reserva y pedir confirmación (SIN pedir pago)
-                if (!esConfirmacion) {
+                // Paso 1: Si aún no confirma explícitamente ni envió el teléfono tras el resumen, mostrar Resumen de Pre-reserva
+                if (!esConfirmacion && !tieneTelAhora) {
                     long noches = Math.max(1, java.time.temporal.ChronoUnit.DAYS.between(fechas[0], fechas[1]));
                     double tarifa = habActiva.get("precioBase") instanceof Number n ? n.doubleValue() : 0.0;
                     double totalEst = tarifa * noches;
@@ -1156,8 +1180,17 @@ public class HotelChatServiceImpl implements HotelChatService {
                         res.append("| **Total estimado** | **").append(fmtMoneda(totalEst)).append("** |\n");
                         res.append("| **Anticipo del 50% (en Recepción)** | ").append(fmtMoneda(anticipoEst)).append(" |\n");
                     }
-                    res.append("\n¿Confirma que desea registrar esta **Pre-reserva**? Responda **Sí** para generar su folio y recibir el comprobante en PDF.");
+                    if (tel == null) {
+                        res.append("\nPara confirmar esta **Pre-reserva**, responda **Sí** junto con su **teléfono celular a 10 dígitos** (ej. `Sí, 5512345678`).");
+                    } else {
+                        res.append("\n¿Confirma que desea registrar esta **Pre-reserva**? Responda **Sí** para generar su folio y recibir el comprobante en PDF.");
+                    }
                     return res.toString();
+                }
+
+                // Si confirmó ("sí") pero su cuenta nueva aún no tiene teléfono registrado, pedir solo el teléfono sin perder el contexto
+                if (tel == null) {
+                    return "Para registrar su **Pre-reserva** de la **Habitación #" + num + "** en **" + ctxHotelRes + "** (" + fechas[0] + " → " + fechas[1] + "), solo indíqueme su **teléfono celular a 10 dígitos** (ej. `5512345678`).";
                 }
 
                 // Paso 2: El usuario confirmó ("sí" / "confirmo") → registrar Pre-reserva real en BD

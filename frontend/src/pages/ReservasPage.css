@@ -632,10 +632,46 @@
 
 @media (max-width: 600px) {
     .res-view {
-        padding: 1rem 1rem 2.5rem;
+        padding: 1rem 0.85rem 2.5rem;
     }
+    /* En móvil mostramos 2x2 KPIs para aprovechar el espacio vertical */
     .res-kpi-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.65rem;
+    }
+    .res-kpi-card {
+        padding: 0.85rem 0.9rem;
+    }
+    /* Barra de filtros apilable y sin desbordamiento horizontal en pantallas de 390px */
+    .res-filter-bar {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding: 0.65rem;
+    }
+    .res-search-box {
+        flex: 1 1 100%;
+        min-width: 100%;
+    }
+    .res-select-wrap {
+        flex: 1 1 calc(50% - 0.25rem);
+        min-width: 135px;
+    }
+    .res-select {
+        width: 100%;
+    }
+    .res-fechas-btn {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+    .res-table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .res-pagination {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.6rem;
+        text-align: center;
     }
 }
 

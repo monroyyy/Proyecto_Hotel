@@ -721,6 +721,8 @@ function ListaReservas({ onNueva }) {
     const [hotelFiltro, setHotelFiltro] = useState('');
     const [entradaDesde, setEntradaDesde] = useState('');
     const [entradaHasta, setEntradaHasta] = useState('');
+    // Filtro dedicado "Hoy": incluye llegadas de hoy, estancias activas hoy y reservas registradas hoy
+    const [soloHoy, setSoloHoy] = useState(false);
     const [sort, setSort] = useState('fechaCreacion,desc');
     const [page, setPage] = useState(0);
     const [size, setSize] = useState(20);
@@ -800,8 +802,9 @@ function ListaReservas({ onNueva }) {
                     sort,
                     estado: filtro || undefined,
                     hotelId: hotelFiltro ? Number(hotelFiltro) : undefined,
-                    entradaDesde: entradaDesde || undefined,
-                    entradaHasta: entradaHasta || undefined,
+                    entradaDesde: soloHoy ? undefined : (entradaDesde || undefined),
+                    entradaHasta: soloHoy ? undefined : (entradaHasta || undefined),
+                    soloHoy: soloHoy || undefined,
                     q: busquedaDebounced || undefined,
                 }),
                 getResumenEstadosReservas()
@@ -825,7 +828,7 @@ function ListaReservas({ onNueva }) {
                 setCargando(false);
             }
         }
-    }, [page, size, sort, filtro, hotelFiltro, entradaDesde, entradaHasta, busquedaDebounced]);
+    }, [page, size, sort, filtro, hotelFiltro, entradaDesde, entradaHasta, soloHoy, busquedaDebounced]);
 
     useEffect(() => {
         cargar();
@@ -882,19 +885,19 @@ function ListaReservas({ onNueva }) {
         }
     };
 
-    const hoyIso = hoy();
-    const filtroHoyActivo = entradaDesde === hoyIso && entradaHasta === hoyIso;
-    const hayFiltrosActivos = Boolean(filtro || hotelFiltro || entradaDesde || entradaHasta || busqueda.trim());
+    const filtroHoyActivo = soloHoy;
+    const hayFiltrosActivos = Boolean(filtro || hotelFiltro || soloHoy || entradaDesde || entradaHasta || busqueda.trim());
     const inicioRango = totalElements === 0 ? 0 : page * size + 1;
     const finRango = Math.min(inicioRango + visibles.length - 1, totalElements);
 
+    // Activa o desactiva el filtro "Hoy" sin depender de un rango estricto entradaDesde=entradaHasta
     const toggleFiltroHoy = () => {
-        if (filtroHoyActivo) {
+        if (soloHoy) {
+            setSoloHoy(false);
+        } else {
+            setSoloHoy(true);
             setEntradaDesde('');
             setEntradaHasta('');
-        } else {
-            setEntradaDesde(hoyIso);
-            setEntradaHasta(hoyIso);
         }
         setPage(0);
     };
@@ -902,6 +905,7 @@ function ListaReservas({ onNueva }) {
     const limpiarFiltrosLista = () => {
         setFiltro('');
         setHotelFiltro('');
+        setSoloHoy(false);
         setEntradaDesde('');
         setEntradaHasta('');
         setBusqueda('');
