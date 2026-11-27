@@ -174,12 +174,9 @@ public class ReservaService {
         List<Reserva> activas = reservaRepository.findActivasByHabitacion(h.getIdHabitacion());
         LocalDate hoy = LocalDate.now(clockActual());
 
-        boolean ocupadaAhora = activas.stream().anyMatch(r ->
-                Reserva.OCUPADA.equals(r.getEstado())
-                || (Reserva.CONFIRMADA.equals(r.getEstado())
-                    && r.getFechaEntrada() != null && r.getFechaSalida() != null
-                    && !hoy.isBefore(r.getFechaEntrada()) && hoy.isBefore(r.getFechaSalida()))
-        );
+        // Una habitación solo pasa a estado físico "Ocupada" cuando tiene Check-In activo (estado Ocupada),
+        // nunca antes del Check-In aunque tenga una reserva Confirmada para hoy.
+        boolean ocupadaAhora = activas.stream().anyMatch(r -> Reserva.OCUPADA.equals(r.getEstado()));
 
         boolean pendienteAhora = !ocupadaAhora && activas.stream().anyMatch(r ->
                 Reserva.PRE_RESERVA.equals(r.getEstado())
@@ -1275,6 +1272,26 @@ public class ReservaService {
         }
 
         validarFechas(req.getFechaEntrada(), req.getFechaSalida());
+
+        // Heredar datos de contacto del huésped existente cuando el cliente solo envía nuevas fechas (reprogramación)
+        Huesped huespedActual = r.getHuesped();
+        if (req.getNombre() == null || req.getNombre().isBlank()) {
+            if (huespedActual != null && huespedActual.getNombre() != null && !huespedActual.getNombre().isBlank()) {
+                req.setNombre(huespedActual.getNombre());
+            } else if (actual != null && actual.getNombre() != null) {
+                req.setNombre(actual.getNombre());
+            }
+        }
+        if ((req.getTelefono() == null || req.getTelefono().isBlank()) && huespedActual != null) {
+            req.setTelefono(huespedActual.getTelefono());
+        }
+        if (req.getEmail() == null || req.getEmail().isBlank()) {
+            if (huespedActual != null && huespedActual.getEmail() != null) {
+                req.setEmail(huespedActual.getEmail());
+            } else if (actual != null) {
+                req.setEmail(actual.getEmail());
+            }
+        }
 
         if (req.getNombre() == null || req.getNombre().trim().length() < 3) {
             throw new IllegalArgumentException("El nombre completo del huésped es obligatorio.");

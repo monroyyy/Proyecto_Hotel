@@ -205,7 +205,13 @@ function NuevaReserva({ irALista, preseleccion = null }) {
 
     const buscar = async (e) => {
         e?.preventDefault();
-        setError(''); setSeleccion(null); setBuscando(true);
+        setError(''); setSeleccion(null);
+        // Validar fechas de forma visible antes de consultar disponibilidad
+        if (!busq.fechaEntrada || !busq.fechaSalida || busq.fechaSalida <= busq.fechaEntrada) {
+            setError('La fecha de salida debe ser posterior a la fecha de llegada.');
+            return;
+        }
+        setBuscando(true);
         try {
             const data = await buscarDisponibilidad({ ...busq, idHotel: busq.idHotel || undefined });
             setResultados(data);

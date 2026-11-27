@@ -215,6 +215,38 @@ function obtenerAmenidadesHabitacion(hab) {
     return base;
 }
 
+// Calcula tarifa exacta del portal replicando la regla del backend (temporada alta +25% en Jul, Ago y Dic)
+function calcularTarifaPortal(precioBase, entradaStr, salidaStr, cuna = false, camaExtra = false) {
+    const base = Number(precioBase || 0);
+    if (!entradaStr || !salidaStr || base <= 0) {
+        return { noches: 1, nochesTemporadaAlta: 0, total: base, anticipo: Number((base * 0.5).toFixed(2)) };
+    }
+    const dIni = new Date(entradaStr + 'T12:00:00');
+    const dFin = new Date(salidaStr + 'T12:00:00');
+    let noches = 0;
+    let nochesTemporadaAlta = 0;
+    let subtotal = 0;
+    for (let d = new Date(dIni); d < dFin; d.setDate(d.getDate() + 1)) {
+        noches++;
+        const mes = d.getMonth() + 1;
+        if (mes === 7 || mes === 8 || mes === 12) {
+            nochesTemporadaAlta++;
+            subtotal += base * 1.25;
+        } else {
+            subtotal += base;
+        }
+    }
+    if (noches === 0) {
+        noches = 1;
+        subtotal = base;
+    }
+    let extras = 0;
+    if (cuna) extras += 100 * noches;
+    if (camaExtra) extras += 250 * noches;
+    const total = Number((subtotal + extras).toFixed(2));
+    return { noches, nochesTemporadaAlta, total, anticipo: Number((total * 0.5).toFixed(2)) };
+}
+
 // Helper para formatear una fecha Date a YYYY-MM-DD en zona horaria LOCAL (evita salto de día en UTC después de las 18:00)
 function obtenerFechaLocalIso(date = new Date()) {
     const y = date.getFullYear();
@@ -347,10 +379,11 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
     const [notasReserva, setNotasReserva] = useState('');
     const [procesandoReserva, setProcesandoReserva] = useState(false);
 
-    // Modal para reprogramar fechas
+    // Modal para reprogramar fechas y su error inline
     const [reservaReprogramar, setReservaReprogramar] = useState(null);
     const [nuevaEntrada, setNuevaEntrada] = useState('');
     const [nuevaSalida, setNuevaSalida] = useState('');
+    const [errorReprogramar, setErrorReprogramar] = useState('');
     const [extendiendoReservaId, setExtendiendoReservaId] = useState(null);
 
     // Modal para cancelar reservación con desglose de reembolso
@@ -766,9 +799,21 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
     const handleGuardarNuevasFechas = async (e) => {
         e.preventDefault();
         if (!reservaReprogramar) return;
+        setErrorReprogramar('');
+        if (!nuevaEntrada || !nuevaSalida || nuevaEntrada < todayStr) {
+            setErrorReprogramar('La nueva fecha de llegada no puede estar en el pasado.');
+            return;
+        }
+        if (nuevaSalida <= nuevaEntrada) {
+            setErrorReprogramar('La fecha de salida debe ser posterior a la fecha de llegada.');
+            return;
+        }
         try {
             await actualizarReserva(reservaReprogramar.idReserva, {
                 idHabitacion: reservaReprogramar.habitacion?.idHabitacion,
+                nombre: reservaReprogramar.huesped?.nombre || user?.nombre || 'Cliente',
+                telefono: reservaReprogramar.huesped?.telefono || telefonoHuesped || '',
+                email: reservaReprogramar.huesped?.email || user?.email || '',
                 fechaEntrada: nuevaEntrada,
                 fechaSalida: nuevaSalida,
                 adultos: reservaReprogramar.adultos || 1,
@@ -781,7 +826,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             setReservaReprogramar(null);
             cargarDatos();
         } catch (err) {
-            showAlert('error', err.message);
+            setErrorReprogramar(err.message || 'No se pudieron actualizar las fechas.');
         }
     };
 
@@ -1812,7 +1857,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                         fontWeight: 600,
                                                         lineHeight: 1.3
                                                     }}>
-                                                        {r.observaciones ? r.observaciones : 'Reservación cancelada por administración'}
+                                                        {r.observaciones ? r.observaciones : 'Reservación cancelada'}
                                                     </div>
                                                 ) : (
                                                     <div className="hp-boarding-finance-detail">
@@ -2659,18 +2704,25 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                             })()}
                         </div>
 
-                        {/* Desglose Financiero con .num */}
+                        {/* Desglose Financiero con .num (incluye recargo de temporada alta +25% en Jul, Ago y Dic) */}
                         {(() => {
                             const precioNoche = Number(habitacionSeleccionada.tipoHabitacion?.precioBase || 0);
-                            const totalEstimado = precioNoche * nochesSeleccionadas;
-                            const anticipo = totalEstimado * 0.5;
+                            const calc = calcularTarifaPortal(precioNoche, fechaEntrada, fechaSalida, cunaExtra, camaExtra);
+                            const totalEstimado = calc.total;
+                            const anticipo = calc.anticipo;
 
                             return (
                                 <div className="hp-reserva-pricing-breakdown">
                                     <div className="hp-reserva-price-row">
-                                        <span>Tarifa por noche ({nochesSeleccionadas} {nochesSeleccionadas === 1 ? 'noche' : 'noches'})</span>
+                                        <span>Tarifa por noche ({calc.noches} {calc.noches === 1 ? 'noche' : 'noches'})</span>
                                         <span className="num">${precioNoche.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN</span>
                                     </div>
+                                    {calc.nochesTemporadaAlta > 0 && (
+                                        <div className="hp-reserva-price-row">
+                                            <span>Recargo temporada alta (+25% · {calc.nochesTemporadaAlta} {calc.nochesTemporadaAlta === 1 ? 'noche' : 'noches'})</span>
+                                            <span className="hp-reserva-included-tag">Aplicado</span>
+                                        </div>
+                                    )}
                                     <div className="hp-reserva-price-row">
                                         <span>Impuestos y servicios hoteleros</span>
                                         <span className="hp-reserva-included-tag">Incluidos</span>
@@ -3003,7 +3055,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                ================================================================= */}
             <Modal
                 isOpen={Boolean(reservaReprogramar)}
-                onClose={() => setReservaReprogramar(null)}
+                onClose={() => { setReservaReprogramar(null); setErrorReprogramar(''); }}
                 title={reservaReprogramar ? `Cambiar fechas (${reservaReprogramar.folio || '#' + reservaReprogramar.idReserva})` : ''}
                 subtitle="Selecciona tus nuevas fechas de llegada y salida"
                 icon={Calendar}
@@ -3011,6 +3063,12 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             >
                 {reservaReprogramar && (
                     <form onSubmit={handleGuardarNuevasFechas} className="modal-form">
+                        {errorReprogramar && (
+                            <div className="alert alert-error">
+                                <Info size={16} />
+                                <span>{errorReprogramar}</span>
+                            </div>
+                        )}
                         <div className="form-group">
                             <label className="form-label">Nueva Fecha de Llegada *</label>
                             <input

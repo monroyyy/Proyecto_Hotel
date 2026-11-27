@@ -315,6 +315,23 @@ public class HotelChatServiceImpl implements HotelChatService {
             Map.entry("noviembre", 11), Map.entry("diciembre", 12)
     );
 
+    /** Detecta si el usuario escribió una fecha de calendario imposible (ej. "30 de febrero"). */
+    private boolean contieneFechaImposible(String norm) {
+        if (norm == null) return false;
+        Matcher m = Pattern.compile("\\b(\\d{1,2})\\s+de\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\\s+(?:de\\s+)?(202[5-9]))?\\b").matcher(norm);
+        while (m.find()) {
+            int d = Integer.parseInt(m.group(1));
+            int mes = MESES_ES.get(m.group(2));
+            int ano = m.group(3) != null ? Integer.parseInt(m.group(3)) : LocalDate.now().getYear();
+            try {
+                LocalDate.of(ano, mes, d);
+            } catch (Exception e) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private LocalDate[] extraerRangoFechas(String norm) {
         if (norm == null) return null;
         // 1. ISO: 2026 12 05
@@ -1101,9 +1118,32 @@ public class HotelChatServiceImpl implements HotelChatService {
                 && !norm.contains("cancel") && !norm.contains("politic") && !norm.contains("folio")
                 && !norm.contains("disponib") && !norm.contains("que fechas") && !norm.contains("cuando")) {
             List<Map<String, Object>> roomsCtx = habitacionesDeHotel(ctxHotelRes);
+            // Revisar inventario completo del hotel (incluyendo Mantenimiento) para bloquear cuartos en mantenimiento sin alucinar
+            List<Habitacion> todasHotelDb = habitacionRepository.findByHotelNombreActivos(ctxHotelRes);
+            Habitacion habMantenimiento = null;
+            for (Habitacion hDb : todasHotelDb) {
+                String numDb = normalizarTexto(hDb.getNumero());
+                if (!numDb.isBlank() && Pattern.compile("(^| )" + Pattern.quote(numDb) + "( |$)").matcher(norm).find()
+                        && "Mantenimiento".equalsIgnoreCase(hDb.getEstado())) {
+                    habMantenimiento = hDb;
+                    break;
+                }
+            }
+            if (habMantenimiento != null) {
+                return tablaHabitacionesHotel(ctxHotelRes, esAdmin,
+                        "La **Habitación #" + habMantenimiento.getNumero() + "** (" +
+                        (habMantenimiento.getTipoHabitacion() != null ? habMantenimiento.getTipoHabitacion().getNombre() : "Suite") +
+                        ") en **" + ctxHotelRes + "** se encuentra actualmente en **Mantenimiento** y no puede reservarse. Estas son las habitaciones disponibles:");
+            }
+
             Map<String, Object> habMencionadaAhora = habitacionMencionada(prompt, roomsCtx);
             Map<String, Object> habActiva = habitacionEnContexto(prompt, scopedConvId, roomsCtx);
             LocalDate[] fechasAhora = extraerRangoFechas(norm);
+
+            // Si escribió una fecha inexistente en el calendario (ej. 30 de febrero), rechazarla claramente
+            if (fechasAhora == null && contieneFechaImposible(norm)) {
+                return "La fecha indicada no existe en el calendario (por ejemplo, febrero no tiene 30 días). Por favor ingrese una fecha válida.";
+            }
 
             boolean tieneTelAhora = Pattern.compile("\\b\\d{10}\\b").matcher(prompt.replaceAll("[-\\s]", "")).find();
             boolean esConfirmacion = norm.equals("si") || norm.equals("ok") || norm.equals("claro")
@@ -1178,12 +1218,57 @@ public class HotelChatServiceImpl implements HotelChatService {
                     tel = telCuenta;
                 }
 
+                // Extraer adultos y niños del mensaje actual O de turnos recientes (para no perder "50 adultos" al responder "sí")
                 int adultos = 1;
                 Matcher mAd = Pattern.compile("\\b(\\d+)\\s*adultos?\\b").matcher(norm);
-                if (mAd.find()) adultos = Math.max(1, Integer.parseInt(mAd.group(1)));
+                if (mAd.find()) {
+                    adultos = Math.max(1, Integer.parseInt(mAd.group(1)));
+                } else {
+                    try {
+                        List<Message> hist = chatMemory.get(scopedConvId);
+                        for (int i = hist.size() - 1; i >= 0; i--) {
+                            if (hist.get(i).getMessageType() != MessageType.USER) continue;
+                            Matcher mAdHist = Pattern.compile("\\b(\\d+)\\s*adultos?\\b").matcher(normalizarTexto(hist.get(i).getText()));
+                            if (mAdHist.find()) {
+                                adultos = Math.max(1, Integer.parseInt(mAdHist.group(1)));
+                                break;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
                 int ninos = 0;
                 Matcher mNi = Pattern.compile("\\b(\\d+)\\s*ninos?\\b").matcher(norm);
-                if (mNi.find()) ninos = Math.max(0, Integer.parseInt(mNi.group(1)));
+                if (mNi.find()) {
+                    ninos = Math.max(0, Integer.parseInt(mNi.group(1)));
+                } else {
+                    try {
+                        List<Message> hist = chatMemory.get(scopedConvId);
+                        for (int i = hist.size() - 1; i >= 0; i--) {
+                            if (hist.get(i).getMessageType() != MessageType.USER) continue;
+                            Matcher mNiHist = Pattern.compile("\\b(\\d+)\\s*ninos?\\b").matcher(normalizarTexto(hist.get(i).getText()));
+                            if (mNiHist.find()) {
+                                ninos = Math.max(0, Integer.parseInt(mNiHist.group(1)));
+                                break;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // Validar capacidad máxima y traslapes ANTES de mostrar el Resumen de Pre-reserva
+                List<Habitacion> habsDbCheck = habitacionRepository.findByNumeroAndHotelNombreActivos(num, ctxHotelRes);
+                if (!habsDbCheck.isEmpty()) {
+                    Habitacion habDb = habsDbCheck.get(0);
+                    int capMax = habDb.getTipoHabitacion() != null ? habDb.getTipoHabitacion().getCapacidad() : 2;
+                    if (adultos + ninos > capMax) {
+                        return "La **Habitación #" + num + "** (**" + tipo + "**) admite máximo **" + capMax
+                                + (capMax == 1 ? " ocupante" : " ocupantes") + "** y solicitó **" + (adultos + ninos)
+                                + "**. Por favor indique menos ocupantes o seleccione una categoría de mayor capacidad.";
+                    }
+                    if (!reservaRepository.findTraslapes(habDb.getIdHabitacion(), fechas[0], fechas[1]).isEmpty()) {
+                        return "La **Habitación #" + num + "** en **" + ctxHotelRes + "** ya se encuentra reservada u ocupada del **"
+                                + fechas[0] + "** al **" + fechas[1] + "**. Por favor elija otras fechas o consulte otra habitación.";
+                    }
+                }
 
                 String nombreTitular = user != null ? user.getNombre() : null;
                 String emailTitular = user != null ? user.getEmail() : null;
