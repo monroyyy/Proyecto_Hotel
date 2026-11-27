@@ -201,6 +201,13 @@ public class HotelChatServiceImpl implements HotelChatService {
                 String d = detectarHotelEnTexto(t);
                 if (d != null) return d;
             }
+            // Respaldo en hilos largos: si el mensaje inicial del usuario salió de la ventana, revisar respuestas recientes del asistente
+            for (int i = hist.size() - 1; i >= 0; i--) {
+                Message m = hist.get(i);
+                if (m.getMessageType() != MessageType.ASSISTANT) continue;
+                String d = detectarHotelEnTexto(normalizarTexto(m.getText()));
+                if (d != null) return d;
+            }
         } catch (Exception e) {
             log.warn("No se pudo leer memoria: {}", e.getMessage());
         }
@@ -1218,12 +1225,12 @@ public class HotelChatServiceImpl implements HotelChatService {
                     tel = telCuenta;
                 }
 
-                // Extraer adultos y niños del mensaje actual O de turnos recientes (para no perder "50 adultos" al responder "sí")
+                // Extraer adultos y niños del mensaje actual; solo heredar del último turno si el usuario está confirmando ("sí")
                 int adultos = 1;
                 Matcher mAd = Pattern.compile("\\b(\\d+)\\s*adultos?\\b").matcher(norm);
                 if (mAd.find()) {
                     adultos = Math.max(1, Integer.parseInt(mAd.group(1)));
-                } else {
+                } else if (esConfirmacion || tieneTelAhora) {
                     try {
                         List<Message> hist = chatMemory.get(scopedConvId);
                         for (int i = hist.size() - 1; i >= 0; i--) {
@@ -1231,8 +1238,8 @@ public class HotelChatServiceImpl implements HotelChatService {
                             Matcher mAdHist = Pattern.compile("\\b(\\d+)\\s*adultos?\\b").matcher(normalizarTexto(hist.get(i).getText()));
                             if (mAdHist.find()) {
                                 adultos = Math.max(1, Integer.parseInt(mAdHist.group(1)));
-                                break;
                             }
+                            break;
                         }
                     } catch (Exception ignored) {}
                 }
@@ -1240,7 +1247,7 @@ public class HotelChatServiceImpl implements HotelChatService {
                 Matcher mNi = Pattern.compile("\\b(\\d+)\\s*ninos?\\b").matcher(norm);
                 if (mNi.find()) {
                     ninos = Math.max(0, Integer.parseInt(mNi.group(1)));
-                } else {
+                } else if (esConfirmacion || tieneTelAhora) {
                     try {
                         List<Message> hist = chatMemory.get(scopedConvId);
                         for (int i = hist.size() - 1; i >= 0; i--) {
@@ -1248,8 +1255,8 @@ public class HotelChatServiceImpl implements HotelChatService {
                             Matcher mNiHist = Pattern.compile("\\b(\\d+)\\s*ninos?\\b").matcher(normalizarTexto(hist.get(i).getText()));
                             if (mNiHist.find()) {
                                 ninos = Math.max(0, Integer.parseInt(mNiHist.group(1)));
-                                break;
                             }
+                            break;
                         }
                     } catch (Exception ignored) {}
                 }
