@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-    Hotel, Compass, CalendarCheck, Sparkles, User, LogOut,
+    Hotel, Compass, CalendarCheck, BookOpen, User, LogOut,
     CheckCircle2, LogIn, UserPlus, ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -32,6 +32,7 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
     const { user, isAuthenticated, logout, navigate, routePath } = useAuth();
     const [menuAbierto, setMenuAbierto] = useState(false);
     const [cuentaAbierta, setCuentaAbierta] = useState(false);
+    const [conScroll, setConScroll] = useState(false);
     const headerRef = useRef(null);
     const cuentaRef = useRef(null);
 
@@ -57,7 +58,7 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
             path: '/experiencias',
             label: 'Guía y Políticas',
             desc: 'Horarios de estancia, garantías y políticas de reembolso',
-            icon: Sparkles,
+            icon: BookOpen,
             publico: true
         },
         {
@@ -82,11 +83,16 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                 setCuentaAbierta(false);
             }
         };
+        const handleScroll = () => {
+            setConScroll(window.scrollY > 8);
+        };
         document.addEventListener('keydown', handleKeyDown);
         document.addEventListener('mousedown', handleClickOutside);
+        window.addEventListener('scroll', handleScroll, { passive: true });
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
             document.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('scroll', handleScroll);
         };
     }, []);
 
@@ -97,7 +103,10 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
         navigate(item.path);
     };
 
-    const nombreMostrar = limpiarTextoCorrupto(user?.nombre) || 'Huésped';
+    // Mostrar nombre limpio sin sufijos entre paréntesis como "(Huésped)"
+    const nombreMostrar = (limpiarTextoCorrupto(user?.nombre) || 'Huésped')
+        .replace(/\s*\([^)]*\)/g, '')
+        .trim() || 'Huésped';
 
     const isAuthScreen = ['/login', '/registro', '/verificar-correo', '/recuperar-password'].includes(routePath);
 
@@ -120,7 +129,7 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
             {/* Cabecera Boutique Editorial de 62px (Opción 1) */}
             <header
                 ref={headerRef}
-                className={`guest-navbar ${menuAbierto ? 'is-open' : ''}`}
+                className={`guest-navbar ${menuAbierto ? 'is-open' : ''} ${conScroll ? 'is-scrolled' : ''}`}
             >
                 <div className="guest-navbar-inner">
                     {/* Izquierda: Monograma HP + Marca */}
@@ -146,10 +155,10 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                         </button>
                     </div>
 
-                    {/* Centro: Pestañas directas en escritorio */}
+                    {/* Centro: Cápsula agrupada de 3 pestañas principales en escritorio */}
                     <nav className="guest-navbar-desktop-nav" aria-label="Navegación principal">
                         {huespedNavItems
-                            .filter(item => isAuthenticated || item.publico)
+                            .filter(item => item.id !== 'mi-perfil' && (isAuthenticated || item.publico))
                             .map((item) => {
                                 const Icon = item.icon;
                                 const isActive = activeTab === item.id;
@@ -175,7 +184,7 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                                 <div ref={cuentaRef} className="guest-account-dropdown-wrap">
                                     <button
                                         type="button"
-                                        className={`guest-user-chip ${cuentaAbierta ? 'is-open' : ''}`}
+                                        className={`guest-user-chip ${cuentaAbierta ? 'is-open' : ''} ${activeTab === 'mi-perfil' ? 'is-profile-active' : ''}`}
                                         onClick={() => setCuentaAbierta((prev) => !prev)}
                                         aria-expanded={cuentaAbierta}
                                         aria-haspopup="menu"
