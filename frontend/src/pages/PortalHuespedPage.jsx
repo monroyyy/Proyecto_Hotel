@@ -960,7 +960,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             {activeSection === 'explorar' && (
                 <>
                     {/* =========================================================
-                        ENCABEZADO EDITORIAL COMPACTO (SIN BANNER FOTOGRÁFICO)
+                        ENCABEZADO EDITORIAL LIMPIO (DIRECTO SOBRE EL LIENZO)
                        ========================================================= */}
                     <section className="hp-hero">
                         <div className="hp-hero-content">
@@ -973,119 +973,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                         </div>
                     </section>
 
-                    {/* =========================================================
-                        BUSCADOR DE DISPONIBILIDAD COMPACTO (SOLAPADO)
-                       ========================================================= */}
-                    <div className="hp-search-dock" id="hp-search-dock">
-                        {/* Fila táctil móvil */}
-                        <div
-                            className="hp-search-mobile-bar"
-                            onClick={() => setPanelBusquedaMovil(prev => !prev)}
-                            role="button"
-                            tabIndex={0}
-                            aria-expanded={panelBusquedaMovil}
-                            aria-label="Modificar fechas y huéspedes"
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setPanelBusquedaMovil(prev => !prev); }}
-                        >
-                            <div className="hp-search-mobile-summary-text">
-                                <span className="hp-mobile-pill-item">
-                                    <Calendar size={14} /> {fechaEntrada} &rarr; {fechaSalida}
-                                </span>
-                                <span className="hp-mobile-pill-item">
-                                    <Users size={14} /> {filtroCapacidad} {filtroCapacidad === 1 ? 'huésped' : 'huéspedes'}
-                                </span>
-                            </div>
-                            <span className="btn btn-ghost hp-mobile-toggle-tag">
-                                {panelBusquedaMovil ? 'Cerrar' : 'Ajustar'}
-                            </span>
-                        </div>
-
-                        {/* Campos de búsqueda */}
-                        <div className={`hp-search-grid ${panelBusquedaMovil ? 'mobile-expanded' : ''}`}>
-                            <div className="hp-search-field">
-                                <label htmlFor="hp-search-llegada">
-                                    <Calendar size={14} /> Llegada
-                                </label>
-                                <input
-                                    id="hp-search-llegada"
-                                    type="date"
-                                    className="hp-search-input"
-                                    value={fechaEntrada}
-                                    min={todayStr}
-                                    onChange={(e) => {
-                                        const nuevaLlegada = e.target.value;
-                                        setFechaEntrada(nuevaLlegada);
-                                        if (fechaSalida <= nuevaLlegada) {
-                                            setFechaSalida(sumarDiasFecha(nuevaLlegada, nochesSeleccionadas));
-                                        }
-                                    }}
-                                />
-                            </div>
-
-                            <div className="hp-search-field">
-                                <label htmlFor="hp-search-salida">
-                                    <Calendar size={14} /> Salida
-                                </label>
-                                <input
-                                    id="hp-search-salida"
-                                    type="date"
-                                    className="hp-search-input"
-                                    value={fechaSalida}
-                                    min={sumarDiasFecha(fechaEntrada || todayStr, 1)}
-                                    onChange={(e) => setFechaSalida(e.target.value)}
-                                />
-                            </div>
-
-                            <div className="hp-search-field">
-                                <label htmlFor="hp-search-huespedes">
-                                    <Users size={14} /> Huéspedes
-                                </label>
-                                <select
-                                    id="hp-search-huespedes"
-                                    className="hp-search-select"
-                                    value={filtroCapacidad}
-                                    onChange={(e) => setFiltroCapacidad(Number(e.target.value))}
-                                >
-                                    {[1, 2, 3, 4, 5, 6].map(n => (
-                                        <option key={n} value={n}>{n} {n === 1 ? 'huésped' : 'huéspedes'}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="hp-search-field">
-                                <label htmlFor="hp-search-destino">
-                                    <MapPin size={14} /> Destino
-                                </label>
-                                <select
-                                    id="hp-search-destino"
-                                    className="hp-search-select"
-                                    value={filtroHotel}
-                                    onChange={(e) => setFiltroHotel(e.target.value)}
-                                >
-                                    <option value="TODOS">Todos los destinos ({hotelesUnicos.length} propiedades)</option>
-                                    {hotelesUnicos.map(h => (
-                                        <option key={h.idHotel} value={h.idHotel}>
-                                            {h.nombre} — {h.ciudad}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="hp-search-summary-row">
-                            <div className="hp-search-summary-tags">
-                                <span className="hp-summary-chip num">
-                                    <Clock size={13} /> {nochesSeleccionadas} {nochesSeleccionadas === 1 ? 'noche' : 'noches'} de estancia
-                                </span>
-                                <span className="hp-summary-chip num">
-                                    {habitacionesDisponibles.length} {habitacionesDisponibles.length === 1 ? 'suite disponible' : 'suites disponibles'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
                     {alertMsg.text && (
-                        <div className={`alert ${alertMsg.type === 'error' ? 'alert-error' : 'alert-success'}`} style={{ marginTop: '1.5rem', marginBottom: '1.5rem' }}>
+                        <div className={`alert ${alertMsg.type === 'error' ? 'alert-error' : 'alert-success'}`} style={{ marginTop: '1rem', marginBottom: '1.5rem' }}>
                             <span>{alertMsg.text}</span>
                         </div>
                     )}
@@ -1304,6 +1193,115 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         'Tarifas por noche con impuestos incluidos, cancelaciones claras y servicios de autor.'
                                     )}
                                 </p>
+                            </div>
+                        </div>
+
+                        {/* Buscador de disponibilidad integrado directamente sobre el catálogo de suites */}
+                        <div className="hp-search-dock" id="hp-search-dock">
+                            {/* Fila táctil móvil */}
+                            <div
+                                className="hp-search-mobile-bar"
+                                onClick={() => setPanelBusquedaMovil(prev => !prev)}
+                                role="button"
+                                tabIndex={0}
+                                aria-expanded={panelBusquedaMovil}
+                                aria-label="Modificar fechas y huéspedes"
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setPanelBusquedaMovil(prev => !prev); }}
+                            >
+                                <div className="hp-search-mobile-summary-text">
+                                    <span className="hp-mobile-pill-item">
+                                        <Calendar size={14} /> {fechaEntrada} &rarr; {fechaSalida}
+                                    </span>
+                                    <span className="hp-mobile-pill-item">
+                                        <Users size={14} /> {filtroCapacidad} {filtroCapacidad === 1 ? 'huésped' : 'huéspedes'}
+                                    </span>
+                                </div>
+                                <span className="btn btn-ghost hp-mobile-toggle-tag">
+                                    {panelBusquedaMovil ? 'Cerrar' : 'Ajustar'}
+                                </span>
+                            </div>
+
+                            {/* Campos de búsqueda */}
+                            <div className={`hp-search-grid ${panelBusquedaMovil ? 'mobile-expanded' : ''}`}>
+                                <div className="hp-search-field">
+                                    <label htmlFor="hp-search-llegada">
+                                        <Calendar size={14} /> Llegada
+                                    </label>
+                                    <input
+                                        id="hp-search-llegada"
+                                        type="date"
+                                        className="hp-search-input"
+                                        value={fechaEntrada}
+                                        min={todayStr}
+                                        onChange={(e) => {
+                                            const nuevaLlegada = e.target.value;
+                                            setFechaEntrada(nuevaLlegada);
+                                            if (fechaSalida <= nuevaLlegada) {
+                                                setFechaSalida(sumarDiasFecha(nuevaLlegada, nochesSeleccionadas));
+                                            }
+                                        }}
+                                    />
+                                </div>
+
+                                <div className="hp-search-field">
+                                    <label htmlFor="hp-search-salida">
+                                        <Calendar size={14} /> Salida
+                                    </label>
+                                    <input
+                                        id="hp-search-salida"
+                                        type="date"
+                                        className="hp-search-input"
+                                        value={fechaSalida}
+                                        min={sumarDiasFecha(fechaEntrada || todayStr, 1)}
+                                        onChange={(e) => setFechaSalida(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="hp-search-field">
+                                    <label htmlFor="hp-search-huespedes">
+                                        <Users size={14} /> Huéspedes
+                                    </label>
+                                    <select
+                                        id="hp-search-huespedes"
+                                        className="hp-search-select"
+                                        value={filtroCapacidad}
+                                        onChange={(e) => setFiltroCapacidad(Number(e.target.value))}
+                                    >
+                                        {[1, 2, 3, 4, 5, 6].map(n => (
+                                            <option key={n} value={n}>{n} {n === 1 ? 'huésped' : 'huéspedes'}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="hp-search-field">
+                                    <label htmlFor="hp-search-destino">
+                                        <MapPin size={14} /> Destino
+                                    </label>
+                                    <select
+                                        id="hp-search-destino"
+                                        className="hp-search-select"
+                                        value={filtroHotel}
+                                        onChange={(e) => setFiltroHotel(e.target.value)}
+                                    >
+                                        <option value="TODOS">Todos los destinos ({hotelesUnicos.length} propiedades)</option>
+                                        {hotelesUnicos.map(h => (
+                                            <option key={h.idHotel} value={h.idHotel}>
+                                                {h.nombre} — {h.ciudad}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="hp-search-summary-row">
+                                <div className="hp-search-summary-tags">
+                                    <span className="hp-summary-chip num">
+                                        <Clock size={13} /> {nochesSeleccionadas} {nochesSeleccionadas === 1 ? 'noche' : 'noches'} de estancia
+                                    </span>
+                                    <span className="hp-summary-chip num">
+                                        {habitacionesDisponibles.length} {habitacionesDisponibles.length === 1 ? 'suite disponible' : 'suites disponibles'}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
