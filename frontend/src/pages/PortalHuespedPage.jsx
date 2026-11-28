@@ -1955,11 +1955,16 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                     </strong>
                                                 </div>
                                                 {esCancelada ? (
-                                                    r.observaciones ? (
-                                                        <div className="hp-boarding-cancel-note">
-                                                            {r.observaciones}
-                                                        </div>
-                                                    ) : null
+                                                    r.observaciones ? (() => {
+                                                        const partesObs = String(r.observaciones).split('|').map(s => s.trim()).filter(Boolean);
+                                                        const motivoLimpio = partesObs.length > 1 ? partesObs[partesObs.length - 1] : partesObs[0];
+                                                        return (
+                                                            <div className="hp-boarding-cancel-note">
+                                                                <span className="hp-boarding-cancel-label">Motivo</span>
+                                                                <span>{motivoLimpio}</span>
+                                                            </div>
+                                                        );
+                                                    })() : null
                                                 ) : (
                                                     <div className="hp-boarding-finance-detail">
                                                         <span>Restante al Check-in:</span>
