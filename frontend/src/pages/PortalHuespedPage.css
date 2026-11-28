@@ -34,7 +34,7 @@
     justify-content: flex-end;
     padding: clamp(1.5rem, 3vw, 2.25rem) clamp(1.5rem, 3.5vw, 2.75rem) 3.4rem;
     margin-bottom: 1.5rem;
-    box-shadow: var(--shadow-lg, 0 18px 42px rgba(18, 19, 22, 0.14));
+    box-shadow: var(--shadow-lg, 0 18px 42px rgba(15, 35, 56, 0.18));
     color: #ffffff;
 }
 
@@ -46,14 +46,15 @@
     z-index: 0;
 }
 
+/* Degradado azul océano profundo unificado con el panel visual de /login */
 .hp-hero-overlay {
     position: absolute;
     inset: 0;
     background: linear-gradient(
         180deg,
-        rgba(18, 19, 22, 0.12) 0%,
-        rgba(18, 19, 22, 0.38) 45%,
-        rgba(18, 19, 22, 0.82) 100%
+        rgba(15, 35, 56, 0.34) 0%,
+        rgba(15, 35, 56, 0.50) 45%,
+        rgba(15, 35, 56, 0.88) 100%
     );
     z-index: 1;
 }
@@ -123,8 +124,8 @@
     -webkit-backdrop-filter: blur(20px);
     border-radius: var(--radius-lg, 14px);
     padding: 1rem 1.25rem 0.9rem;
-    box-shadow: 0 14px 36px rgba(18, 19, 22, 0.09);
-    border: 1px solid var(--border-subtle);
+    box-shadow: 0 14px 36px rgba(15, 35, 56, 0.10);
+    border: 1px solid var(--border-default, #e2d9cc);
     color: var(--text-primary);
 }
 
@@ -143,7 +144,7 @@
 }
 
 .hp-search-mobile-bar:hover {
-    background: #f4f4f6;
+    background: var(--brand-sand-base, #f5f0e8);
 }
 
 .hp-search-mobile-bar:active {
@@ -621,19 +622,19 @@
 .hp-clear-filter-inline {
     background: none;
     border: none;
-    color: var(--brand-terracotta, #c4553a);
+    color: var(--brand-terracotta, #b85d38);
     font-size: 0.86rem;
     font-weight: 600;
     text-decoration: underline;
     cursor: pointer;
     padding: 0 4px;
     margin-left: 6px;
-    display: inline-inline;
+    display: inline-block;
     transition: color 150ms ease;
 }
 
 .hp-clear-filter-inline:hover {
-    color: var(--brand-terracotta-hover, #a8432a);
+    color: var(--brand-terracotta-hover, #9e4e2d);
 }
 
 /* Distribución Ergonómica y Editorial del Modal de Autenticación para Reservar */
@@ -642,8 +643,8 @@
     align-items: center;
     gap: 14px;
     padding: 12px 14px;
-    background: #fdfbf7;
-    border: 1px solid #ebd9c8;
+    background: var(--brand-sand-light, #fcfaf7);
+    border: 1px solid var(--border-default, #e2d9cc);
     border-radius: 14px;
 }
 
@@ -653,7 +654,7 @@
     border-radius: 10px;
     object-fit: cover;
     flex-shrink: 0;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 10px rgba(22, 50, 79, 0.10);
 }
 
 .hp-auth-modal-suite-info {
@@ -664,10 +665,10 @@
 }
 
 .hp-auth-modal-suite-name {
-    font-family: var(--font-serif, "Playfair Display", Georgia, serif);
+    font-family: var(--font-serif, "Fraunces", Georgia, serif);
     font-size: 1.05rem;
     font-weight: 700;
-    color: var(--brand-ocean, #1a2a3a);
+    color: var(--brand-ocean, #16324f);
     line-height: 1.25;
 }
 
@@ -676,30 +677,30 @@
     align-items: center;
     gap: 4px;
     font-size: 0.76rem;
-    color: var(--brand-terracotta, #c4553a);
+    color: var(--brand-terracotta, #b85d38);
     font-weight: 500;
 }
 
 .hp-auth-modal-suite-price {
     font-size: 0.88rem;
     font-weight: 700;
-    color: var(--brand-terracotta, #c4553a);
+    color: var(--brand-terracotta, #b85d38);
     margin-top: 2px;
 }
 
 .hp-auth-modal-suite-price .hp-price-unit {
     font-size: 0.74rem;
     font-weight: 400;
-    color: #64748b;
+    color: var(--text-muted, #627d98);
 }
 
 .hp-auth-modal-guarantees-card {
     padding: 14px 16px;
     border-radius: 12px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: var(--brand-sand-light, #fcfaf7);
+    border: 1px solid var(--border-subtle, #ede4d5);
     font-size: 0.82rem;
-    color: #475569;
+    color: var(--text-secondary, #486581);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1032,11 +1033,12 @@
     transform: scale(1.03);
 }
 
+/* Etiqueta de ubicación en azul océano coherente con tarjetas de destinos */
 .hp-room-location-tag {
     position: absolute;
     bottom: 10px;
     left: 12px;
-    background: rgba(18, 19, 22, 0.72);
+    background: rgba(15, 35, 56, 0.78);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     color: #ffffff;
@@ -1686,13 +1688,13 @@
 .hp-perk-title {
     font-size: 1.05rem;
     font-weight: 800;
-    color: #0f172a;
+    color: var(--brand-ocean, #16324f);
     margin: 0 0 6px 0;
 }
 
 .hp-perk-text {
     font-size: 0.85rem;
-    color: #475569;
+    color: var(--text-secondary, #486581);
     line-height: 1.5;
     margin: 0;
 }
@@ -1707,19 +1709,19 @@
 }
 
 .hp-itinerary-card {
-    background: #ffffff;
+    background: var(--bg-surface, #ffffff);
     border-radius: 20px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border-default, #e2d9cc);
     overflow: hidden;
     display: grid;
     grid-template-columns: 240px 1fr;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    box-shadow: 0 8px 24px rgba(22, 50, 79, 0.06);
     transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .hp-itinerary-card:hover {
     transform: translateY(-3px);
-    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.11);
+    box-shadow: 0 14px 32px rgba(22, 50, 79, 0.11);
 }
 
 @media (max-width: 768px) {
@@ -1930,7 +1932,7 @@
 
 .hp-profile-block-desc {
     font-size: 0.84rem;
-    color: #64748b;
+    color: var(--text-muted, #627d98);
     margin: 2px 0 0 0;
 }
 
@@ -2258,7 +2260,7 @@
     align-items: center;
     gap: 4px;
     font-size: 0.72rem;
-    color: #64748b;
+    color: var(--text-muted, #627d98);
     font-weight: 600;
 }
 
@@ -2301,7 +2303,7 @@
 .hp-itin-weekday {
     font-size: 0.74rem;
     font-weight: 600;
-    color: #64748b;
+    color: var(--text-muted, #627d98);
     text-transform: capitalize;
 }
 
@@ -2385,7 +2387,7 @@
     align-items: center;
     gap: 14px;
     font-size: 0.8rem;
-    color: #475569;
+    color: var(--text-secondary, #486581);
     flex-wrap: wrap;
 }
 
@@ -2433,7 +2435,7 @@
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.06em;
-    color: #64748b;
+    color: var(--text-muted, #627d98);
     text-transform: uppercase;
 }
 
@@ -2452,7 +2454,7 @@
 
 .hp-boarding-finance-detail {
     font-size: 0.78rem;
-    color: #64748b;
+    color: var(--text-muted, #627d98);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -2597,7 +2599,7 @@
 .hp-editorial-chapter-text {
     font-size: 0.95rem;
     line-height: 1.65;
-    color: #475569;
+    color: var(--text-secondary, #486581);
     margin-bottom: 1.25rem;
 }
 
@@ -2618,7 +2620,7 @@
 
 .hp-editorial-figure-caption {
     font-size: 0.76rem;
-    color: #64748b;
+    color: var(--text-muted, #627d98);
     padding: 8px 12px;
     background: var(--brand-sand-light, #fcfaf7);
     border-top: 1px solid var(--border-subtle, #ede4d5);
@@ -2691,13 +2693,13 @@
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #64748b;
+    color: var(--text-muted, #627d98);
 }
 
 .hp-refund-desc {
     font-size: 0.85rem;
     line-height: 1.5;
-    color: #475569;
+    color: var(--text-secondary, #486581);
 }
 
 /* Acordeón Editorial FAQ */
@@ -2755,7 +2757,7 @@
     font-family: var(--font-sans, 'Plus Jakarta Sans', sans-serif);
     font-size: 0.92rem;
     line-height: 1.6;
-    color: #475569;
+    color: var(--text-secondary, #486581);
     animation: hpPageEnter 200ms ease-out;
 }
 
@@ -2876,9 +2878,9 @@
     gap: 8px;
     padding: 9px 13px;
     border-radius: 9px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    color: #334155;
+    background: var(--brand-sand-light, #fcfaf7);
+    border: 1px solid var(--border-subtle, #ede4d5);
+    color: var(--text-secondary, #486581);
     font-size: 0.78rem;
 }
 
@@ -2922,9 +2924,9 @@
     width: 100%;
     padding: 7px 10px;
     border-radius: 8px;
-    background: #f8fafc;
-    border: 1px dashed #cbd5e1;
-    color: #64748b;
+    background: var(--brand-sand-light, #fcfaf7);
+    border: 1px dashed var(--border-strong, #c8bcab);
+    color: var(--text-muted, #627d98);
     font-size: 0.74rem;
     font-weight: 600;
     text-align: center;
