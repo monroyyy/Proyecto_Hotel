@@ -1016,15 +1016,18 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             {activeSection === 'explorar' && (
                 <>
                     {/* =========================================================
-                        ENCABEZADO EDITORIAL LIMPIO (DIRECTO SOBRE EL LIENZO)
+                        ENCABEZADO EDITORIAL UNIFICADO
                        ========================================================= */}
                     <section className="hp-hero">
                         <div className="hp-hero-content">
+                            <span className="hp-hero-kicker">
+                                Hola, {primerNombre} &middot; {hotelesUnicos.length || 5} propiedades en México
+                            </span>
                             <h1 className="hp-hero-title">
-                                Hospitalidad mexicana diseñada para el descanso
+                                Explora nuestros hoteles
                             </h1>
                             <p className="hp-hero-subtitle">
-                                Hola, <strong>{primerNombre}</strong>. Explora nuestras propiedades en Cancún, Ciudad de México, Acapulco, Guadalajara y Atlacomulco con apartado inmediato sin costo por 24 horas.
+                                Selecciona un destino para descubrir sus suites disponibles, amenidades exclusivas y apartado inmediato sin costo por 24 horas.
                             </p>
                         </div>
                     </section>
@@ -1036,19 +1039,10 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                     )}
 
                     {/* =========================================================
-                        DESTINOS: PRESENTACIÓN EDITORIAL
+                        DESTINOS: ACORDEÓN ARQUITECTÓNICO CON MICRO-RADAR
                        ========================================================= */}
                     {hotelesUnicos.length > 0 && (
                         <section className="hp-destinations-section">
-                            <div className="hp-section-header">
-                                <div>
-                                    <h2 className="hp-section-title">Destinos &amp; Colección de Hoteles</h2>
-                                    <p className="hp-section-desc">
-                                        Selecciona una propiedad para explorar sus suites disponibles y amenidades exclusivas.
-                                    </p>
-                                </div>
-                            </div>
-
                             {/* Acordeón Arquitectónico Híbrido con Micro-Radar Cartográfico */}
                             {(() => {
                                 const irASuitesHotel = (hotelId) => {
@@ -1118,7 +1112,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                     {/* Vista Colapsada (Franja Vertical en Escritorio / Cinta en Móvil) */}
                                                     {!isExpanded && (
                                                         <div className="hp-accordion-collapsed-content">
-                                                            <div className="hp-accordion-collapsed-num">{perfil.numero || `0${idx + 1}`}</div>
+                                                            <div className="hp-accordion-collapsed-num">{String(idx + 1).padStart(2, '0')}</div>
                                                             <div className="hp-accordion-collapsed-title">{h.ciudad.toUpperCase()}</div>
                                                             <div className="hp-accordion-collapsed-tag">{perfil.tag}</div>
                                                         </div>
@@ -1131,7 +1125,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                             <div className="hp-accordion-expanded-top">
                                                                 <div className="hp-accordion-dest-badge-col">
                                                                     <span className="hp-accordion-dest-index">
-                                                                        {perfil.numero || `0${idx + 1}`} · {h.ciudad.toUpperCase()}
+                                                                        {String(idx + 1).padStart(2, '0')} · {h.ciudad.toUpperCase()}
                                                                     </span>
                                                                     <h3 className="hp-accordion-dest-title">{h.nombre}</h3>
                                                                     <div className="hp-accordion-tags-row">

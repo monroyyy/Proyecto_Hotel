@@ -85,16 +85,16 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
             >
                 <defs>
                     <linearGradient id="mexicoSandstoneGrad" x1="10%" y1="10%" x2="90%" y2="90%">
-                        <stop offset="0%" stopColor="#eedecf" />
-                        <stop offset="50%" stopColor="#e3cca9" />
-                        <stop offset="100%" stopColor="#d5bc96" />
+                        <stop offset="0%" stopColor="#f5ebd8" />
+                        <stop offset="50%" stopColor="#e6d2b5" />
+                        <stop offset="100%" stopColor="#d4ba94" />
                     </linearGradient>
 
                     <radialGradient id="mexicoAuraGlow" cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stopColor="rgba(215, 85, 50, 0.78)" />
-                        <stop offset="45%" stopColor="rgba(215, 85, 50, 0.35)" />
-                        <stop offset="80%" stopColor="rgba(215, 85, 50, 0.08)" />
-                        <stop offset="100%" stopColor="rgba(215, 85, 50, 0)" />
+                        <stop offset="0%" stopColor="rgba(184, 93, 56, 0.85)" />
+                        <stop offset="45%" stopColor="rgba(184, 93, 56, 0.4)" />
+                        <stop offset="80%" stopColor="rgba(184, 93, 56, 0.1)" />
+                        <stop offset="100%" stopColor="rgba(184, 93, 56, 0)" />
                     </radialGradient>
 
                     <filter id="mexicoPinShadow" x="-50%" y="-50%" width="200%" height="200%">
@@ -170,7 +170,7 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                                     cy="0"
                                     r={esActivo ? 15 : 10.5}
                                     fill="#ffffff"
-                                    stroke={esActivo ? '#c4553a' : '#735034'}
+                                    stroke={esActivo ? '#b85d38' : '#16324f'}
                                     strokeWidth={esActivo ? 3.8 : 2.4}
                                     filter="url(#mexicoPinShadow)"
                                 />
@@ -180,7 +180,7 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                                         cx="0"
                                         cy="0"
                                         r="5"
-                                        fill="#c4553a"
+                                        fill="#b85d38"
                                         pointerEvents="none"
                                     />
                                 )}
