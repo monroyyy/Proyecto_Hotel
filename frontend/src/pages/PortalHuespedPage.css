@@ -2923,6 +2923,72 @@
     gap: 8px;
 }
 
+/* Indicador editorial de estado sin píldora ovalada + franja superior sutil en el talón */
+.hp-boarding-pass.is-status-confirmada .hp-boarding-stub {
+    box-shadow: inset 0 3px 0 0 var(--brand-palm, #2d5a43);
+}
+
+.hp-boarding-pass.is-status-prereserva .hp-boarding-stub {
+    box-shadow: inset 0 3px 0 0 #d97706;
+}
+
+.hp-boarding-pass.is-status-ocupada .hp-boarding-stub {
+    box-shadow: inset 0 3px 0 0 var(--brand-ocean, #16324f);
+}
+
+.hp-boarding-pass.is-status-cancelada .hp-boarding-stub {
+    box-shadow: inset 0 3px 0 0 rgba(185, 28, 28, 0.55);
+}
+
+.hp-boarding-pass.is-status-finalizada .hp-boarding-stub {
+    box-shadow: inset 0 3px 0 0 var(--border-strong, #c8bcab);
+}
+
+.hp-boarding-pass.is-status-cancelada .hp-boarding-img,
+.hp-boarding-pass.is-status-finalizada .hp-boarding-img {
+    filter: saturate(0.75);
+    opacity: 0.9;
+}
+
+.hp-boarding-status-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.hp-boarding-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+.hp-boarding-status-inline.is-confirmada {
+    color: var(--brand-palm, #2d5a43);
+}
+
+.hp-boarding-status-inline.is-prereserva {
+    color: #b45309;
+}
+
+.hp-boarding-status-inline.is-ocupada {
+    color: var(--brand-ocean, #16324f);
+}
+
+.hp-boarding-status-inline.is-cancelada {
+    color: #b91c1c;
+}
+
+.hp-boarding-status-inline.is-finalizada {
+    color: var(--text-muted, #627d98);
+}
+
 .hp-boarding-folio-tag {
     font-size: 0.68rem;
     font-weight: 700;

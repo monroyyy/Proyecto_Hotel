@@ -1793,14 +1793,24 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 const esPreReserva = r.estado === 'Pre-reserva';
                                 const esCancelada = r.estado === 'Cancelada';
                                 const esFinalizada = r.estado === 'Finalizada';
+                                const esOcupada = r.estado === 'Ocupada';
                                 const esActiva = !esCancelada && !esFinalizada && r.estado !== 'No-Show';
+                                const estadoClase = esCancelada || r.estado === 'No-Show'
+                                    ? 'cancelada'
+                                    : esPreReserva
+                                        ? 'prereserva'
+                                        : esOcupada
+                                            ? 'ocupada'
+                                            : esFinalizada
+                                                ? 'finalizada'
+                                                : 'confirmada';
                                 const saldoPendiente = Math.max(Number(r.total || 0) - Number(r.anticipo || 0), 0);
                                 const llegada = formatFechaItinerario(r.fechaEntrada);
                                 const salida = formatFechaItinerario(r.fechaSalida);
                                 return (
                                     <article
                                         key={r.idReserva}
-                                        className="hp-boarding-pass hp-room-anim-list"
+                                        className={`hp-boarding-pass hp-room-anim-list is-status-${estadoClase}`}
                                         style={{ '--card-idx': Math.min(idx, 8) }}
                                     >
                                         {/* Sección 1: Portada Fotográfica de la Suite */}
@@ -1920,7 +1930,10 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                             <div className="hp-boarding-stub-top">
                                                 <div className="hp-boarding-stub-header-row">
                                                     <span className="hp-boarding-folio-tag">FOLIO</span>
-                                                    <EstadoBadge estado={r.estado} />
+                                                    <span className={`hp-boarding-status-inline is-${estadoClase}`}>
+                                                        <span className="hp-boarding-status-dot" aria-hidden="true" />
+                                                        <span>{r.estado}</span>
+                                                    </span>
                                                 </div>
                                                 <div className="hp-boarding-folio-value num">
                                                     {r.folio || `#${r.idReserva}`}
