@@ -3680,17 +3680,17 @@
     box-shadow: 0 18px 38px -8px rgba(6, 15, 26, 0.55);
 }
 
-/* Chip de Clima Integrado en cristal oscuro */
+/* Chip de disponibilidad real en cristal oscuro dentro del mapa */
 .hp-micromap-weather-pill {
     position: absolute;
     top: 10px;
     right: 12px;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     padding: 4px 10px;
     border-radius: var(--radius-pill);
-    background: rgba(15, 35, 56, 0.72);
+    background: rgba(15, 35, 56, 0.78);
     border: 1px solid rgba(255, 255, 255, 0.2);
     font-size: 0.72rem;
     font-weight: 600;
@@ -3701,11 +3701,20 @@
     user-select: none;
 }
 
-.hp-micromap-sun-icon {
-    width: 13px;
-    height: 13px;
-    color: #fbbf24;
+.hp-micromap-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
     flex-shrink: 0;
+    background: #6ee7b7;
+}
+
+.hp-micromap-weather-pill.is-dates .hp-micromap-status-dot {
+    background: #fbbf24;
+}
+
+.hp-micromap-weather-pill.is-soldout .hp-micromap-status-dot {
+    background: #fca5a5;
 }
 
 /* SVG del mapa que cubre la tarjeta con cartografía real de la República Mexicana */
@@ -3769,20 +3778,28 @@
     pointer-events: none;
 }
 
-/* Pie Inferior del Panel Expandido */
+/* Pie Inferior del Panel Expandido (sin línea divisoria para dejar respirar la fotografía) */
 .hp-accordion-expanded-bottom {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
     gap: 1.5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.16);
-    padding-top: 1.25rem;
+    padding-top: 0.5rem;
 }
 
 .hp-accordion-amenities-col {
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
+    min-width: 0;
+}
+
+.hp-accordion-amenities-line {
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.88);
+    letter-spacing: 0.01em;
+    margin: 0;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
 }
 
 .hp-accordion-vibe-text {

@@ -27,7 +27,7 @@ const obtenerClimaReferencia = (hotel) => {
  * Proyecta cada hotel desde sus coordenadas reales (latitud, longitud); si un hotel
  * carece de coordenadas, no dibuja su pin.
  */
-export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel }) {
+export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel, disponibilidadLabel, disponibilidadEstado = 'avail' }) {
     const puntosDestinos = (Array.isArray(hotels) ? hotels : [])
         .map((h) => {
             if (h?.latitud == null || h?.longitud == null || h.latitud === '' || h.longitud === '') {
@@ -40,41 +40,21 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                 nombre: h.ciudad || h.nombre || 'Sede',
                 hotelNombre: h.nombre,
                 x: pos.x,
-                y: pos.y,
-                clima: obtenerClimaReferencia(h)
+                y: pos.y
             };
         })
         .filter(Boolean);
 
     const activeId = activeHotel?.idHotel;
-    const puntoActivo = puntosDestinos.find((p) => p.idHotel === activeId) || null;
     const etiquetaAria = activeHotel?.ciudad || activeHotel?.nombre || 'República Mexicana';
+    const textoChip = disponibilidadLabel || activeHotel?.ciudad || 'México';
 
     return (
         <div className="hp-micromap-card" role="region" aria-label={`Ubicación geográfica: ${etiquetaAria}`}>
-            {/* Chip de ubicación / referencia */}
-            <div className="hp-micromap-weather-pill">
-                <svg
-                    className="hp-micromap-sun-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                >
-                    <circle cx="12" cy="12" r="4" />
-                    <path d="M12 2v2" />
-                    <path d="M12 20v2" />
-                    <path d="m4.93 4.93 1.41 1.41" />
-                    <path d="m17.66 17.66 1.41 1.41" />
-                    <path d="M2 12h2" />
-                    <path d="M20 12h2" />
-                    <path d="m6.34 17.66-1.41 1.41" />
-                    <path d="m19.07 4.93-1.41 1.41" />
-                </svg>
-                <span>{puntoActivo ? puntoActivo.clima : obtenerClimaReferencia(activeHotel)}</span>
+            {/* Chip de disponibilidad real vinculada a la base de datos */}
+            <div className={`hp-micromap-weather-pill is-${disponibilidadEstado}`}>
+                <span className="hp-micromap-status-dot" aria-hidden="true" />
+                <span>{textoChip}</span>
             </div>
 
             <svg
@@ -137,7 +117,7 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
                                     }
                                 }}
                             >
-                                <title>{pto.nombre} · {pto.clima}</title>
+                                <title>{pto.hotelNombre || pto.nombre} · {pto.nombre}</title>
 
                                 <circle cx="0" cy="0" r="40" fill="transparent" />
 

@@ -1121,23 +1121,16 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                     {/* Vista Expandida (Ficha Panorámica de Lujo + Micro-Radar) */}
                                                     {isExpanded && (
                                                         <div className="hp-accordion-expanded-content">
-                                                            {/* Cabecera superior del panel activo */}
+                                                            {/* Cabecera superior del panel activo: kicker unificado + nombre del hotel */}
                                                             <div className="hp-accordion-expanded-top">
                                                                 <div className="hp-accordion-dest-badge-col">
                                                                     <span className="hp-accordion-dest-index">
-                                                                        {String(idx + 1).padStart(2, '0')} · {h.ciudad.toUpperCase()}
+                                                                        {String(idx + 1).padStart(2, '0')} · {h.ciudad.toUpperCase()} · {perfil.tag.toUpperCase()}
                                                                     </span>
                                                                     <h3 className="hp-accordion-dest-title">{h.nombre}</h3>
-                                                                    <div className="hp-accordion-tags-row">
-                                                                        <span className="hp-accordion-tag-pill">{perfil.tag}</span>
-                                                                        <span className={`hp-accordion-avail-pill ${c > 0 ? 'is-avail' : (v > 0 ? 'is-dates' : 'is-soldout')}`}>
-                                                                            <span className="hp-property-status-indicator" />
-                                                                            {c > 0 ? `${c} disponibles` : (v > 0 ? 'Ver fechas' : 'Agotado')}
-                                                                        </span>
-                                                                    </div>
                                                                 </div>
 
-                                                                {/* Micro-Radar Cartográfico Flotante Idéntico al Concepto */}
+                                                                {/* Micro-Radar Cartográfico con disponibilidad real de la propiedad */}
                                                                 <div
                                                                     className="hp-accordion-radar-slot"
                                                                     onClick={(e) => e.stopPropagation()}
@@ -1145,6 +1138,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                                     <MexicoMicroMap
                                                                         activeHotel={h}
                                                                         hotels={hotelesUnicos}
+                                                                        disponibilidadLabel={c > 0 ? `${c} ${c === 1 ? 'suite libre' : 'suites libres'}` : (v > 0 ? 'Ver fechas' : 'Agotado')}
+                                                                        disponibilidadEstado={c > 0 ? 'avail' : (v > 0 ? 'dates' : 'soldout')}
                                                                         onSelectHotel={(targetHotelId) => {
                                                                             const matchH = hotelesUnicos.find(item => item.idHotel === targetHotelId);
                                                                             if (matchH) {
@@ -1162,17 +1157,12 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                                 </div>
                                                             </div>
 
-                                                            {/* Pie inferior con servicios, tarifa y CTA */}
+                                                            {/* Pie inferior limpio: amenidades en 1 línea editorial + tarifa y CTA */}
                                                             <div className="hp-accordion-expanded-bottom">
                                                                 <div className="hp-accordion-amenities-col">
-                                                                    <p className="hp-accordion-vibe-text">{perfil.vibe}</p>
-                                                                    <div className="hp-accordion-amenities-pills">
-                                                                        {(perfil.amenidades || []).map((amenidad, aIdx) => (
-                                                                            <span key={aIdx} className="hp-accordion-amenity-chip">
-                                                                                {amenidad}
-                                                                            </span>
-                                                                        ))}
-                                                                    </div>
+                                                                    <p className="hp-accordion-amenities-line">
+                                                                        {(perfil.amenidades || []).join(' · ')}
+                                                                    </p>
                                                                 </div>
 
                                                                 <div className="hp-accordion-action-col">
