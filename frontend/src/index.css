@@ -73,7 +73,8 @@ body {
 
 .main-content {
     flex: 1;
-    padding: 1.5rem;
+    /* Espacio inferior extra para que el botón flotante del asistente no tape acciones de la última fila */
+    padding: 1.5rem 1.5rem 5.5rem 1.5rem;
     max-width: 1440px;
     width: 100%;
     margin: 0 auto;
@@ -1150,10 +1151,23 @@ body.modal-open .app-layout {
 .modal-actions {
     display: flex;
     justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 0.65rem;
     padding-top: 0.75rem;
     border-top: 1px solid var(--border-default);
     margin-top: 0.25rem;
+}
+
+/* En móvil apilar los botones de acción del modal para evitar desbordamientos laterales */
+@media (max-width: 640px) {
+    .modal-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+    .modal-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
 }
 
 /* Notificaciones y Alertas */
@@ -1182,7 +1196,8 @@ body.modal-open .app-layout {
 
 .toast-notification {
     position: fixed;
-    bottom: 1.5rem;
+    /* Margen inferior amplio para que no se solape con el botón flotante del asistente */
+    bottom: 5.5rem;
     right: 1.5rem;
     padding: 0.7rem 1.15rem;
     border-radius: var(--radius-md);

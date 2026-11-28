@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Hotel, User, Mail, Lock, UserPlus, AlertCircle, CheckCircle2, Send, Eye, EyeOff, MapPin, Award, LogIn, ShieldCheck, Compass } from 'lucide-react';
+import { Hotel, User, Mail, Phone, Lock, UserPlus, AlertCircle, CheckCircle2, Send, Eye, EyeOff, MapPin, Award, LogIn, ShieldCheck, Compass } from 'lucide-react';
 import { registrarUsuario, reenviarCorreoVerificacion, verificarCodigoCorreo } from '../api/hotelApi';
 import { useAuth } from '../context/AuthContext';
 import IMAGENES_HOTEL from '../data/imagenes';
@@ -28,6 +28,7 @@ export default function RegisterPage() {
     const [form, setForm] = useState({
         nombre: '',
         email: '',
+        telefono: '',
         password: '',
         confirmarPassword: ''
     });
@@ -71,6 +72,11 @@ export default function RegisterPage() {
         if (!form.email || !emailRegex.test(form.email.trim())) {
             return 'Ingrese un correo electrónico con formato válido.';
         }
+        // Teléfono celular obligatorio de 10 dígitos para reservaciones y contacto
+        const telLimpio = (form.telefono || '').replace(/\D/g, '');
+        if (telLimpio.length !== 10) {
+            return 'Ingrese un número telefónico válido a 10 dígitos.';
+        }
         const passRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
         if (!form.password || !passRegex.test(form.password)) {
             return 'La contraseña debe tener mínimo 8 caracteres e incluir al menos una mayúscula, una minúscula y un número.';
@@ -95,6 +101,7 @@ export default function RegisterPage() {
             const res = await registrarUsuario({
                 nombre: form.nombre.trim(),
                 email: form.email.trim().toLowerCase(),
+                telefono: form.telefono.replace(/\D/g, ''),
                 password: form.password
             });
             setRegistroExitoso(res);
@@ -437,6 +444,26 @@ export default function RegisterPage() {
                                             onChange={(e) => setForm({ ...form, email: e.target.value })}
                                             required
                                             autoComplete="email"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="auth-input-group">
+                                    <label className="auth-label" htmlFor="register-telefono">
+                                        Teléfono celular (10 dígitos)
+                                    </label>
+                                    <div className="auth-input-wrapper">
+                                        <Phone size={15} className="auth-input-icon" />
+                                        <input
+                                            id="register-telefono"
+                                            type="tel"
+                                            className="auth-input"
+                                            placeholder="5512345678"
+                                            value={form.telefono}
+                                            onChange={(e) => setForm({ ...form, telefono: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                            required
+                                            maxLength={10}
+                                            autoComplete="tel"
                                         />
                                     </div>
                                 </div>

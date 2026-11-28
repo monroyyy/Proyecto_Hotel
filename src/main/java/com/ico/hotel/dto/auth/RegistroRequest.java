@@ -24,6 +24,14 @@ public class RegistroRequest {
     )
     private String email;
 
+    // Teléfono celular obligatorio de 10 dígitos para contacto y reservaciones automáticas
+    @NotBlank(message = "El número telefónico es obligatorio.")
+    @Pattern(
+            regexp = "^\\d{10}$",
+            message = "El teléfono debe contener exactamente 10 dígitos numéricos."
+    )
+    private String telefono;
+
     @ToString.Exclude
     @NotBlank(message = "La contraseña es obligatoria.")
     @Size(min = 8, max = 72, message = "La contraseña debe tener al menos 8 caracteres.")

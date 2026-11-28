@@ -34,6 +34,10 @@ public class Usuario {
     @Column(nullable = false, unique = true, length = 150)
     private String email;
 
+    // Teléfono de contacto obligatorio (10 dígitos) sincronizado con reservas y chatbot
+    @Column(length = 20)
+    private String telefono;
+
     @JsonIgnore
     @ToString.Exclude
     @Column(name = "password_hash", nullable = false, length = 100)

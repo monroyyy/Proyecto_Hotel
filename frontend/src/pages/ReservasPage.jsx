@@ -205,7 +205,13 @@ function NuevaReserva({ irALista, preseleccion = null }) {
 
     const buscar = async (e) => {
         e?.preventDefault();
-        setError(''); setSeleccion(null); setBuscando(true);
+        setError(''); setSeleccion(null);
+        // Validar fechas de forma visible antes de consultar disponibilidad
+        if (!busq.fechaEntrada || !busq.fechaSalida || busq.fechaSalida <= busq.fechaEntrada) {
+            setError('La fecha de salida debe ser posterior a la fecha de llegada.');
+            return;
+        }
+        setBuscando(true);
         try {
             const data = await buscarDisponibilidad({ ...busq, idHotel: busq.idHotel || undefined });
             setResultados(data);
@@ -721,6 +727,8 @@ function ListaReservas({ onNueva }) {
     const [hotelFiltro, setHotelFiltro] = useState('');
     const [entradaDesde, setEntradaDesde] = useState('');
     const [entradaHasta, setEntradaHasta] = useState('');
+    // Filtro dedicado "Hoy": incluye llegadas de hoy, estancias activas hoy y reservas registradas hoy
+    const [soloHoy, setSoloHoy] = useState(false);
     const [sort, setSort] = useState('fechaCreacion,desc');
     const [page, setPage] = useState(0);
     const [size, setSize] = useState(20);
@@ -789,6 +797,15 @@ function ListaReservas({ onNueva }) {
     }, [busqueda]);
 
     const cargar = useCallback(async ({ silencioso = false } = {}) => {
+        // Validar rango de fechas en cliente para evitar petición inválida y filas desactualizadas
+        if (!soloHoy && entradaDesde && entradaHasta && entradaDesde > entradaHasta) {
+            setError("La fecha 'Desde' no puede ser posterior a la fecha 'Hasta'.");
+            setReservas([]);
+            setTotalElements(0);
+            setTotalPages(0);
+            setCargando(false);
+            return;
+        }
         if (!silencioso) {
             setCargando(true);
         }
@@ -800,8 +817,9 @@ function ListaReservas({ onNueva }) {
                     sort,
                     estado: filtro || undefined,
                     hotelId: hotelFiltro ? Number(hotelFiltro) : undefined,
-                    entradaDesde: entradaDesde || undefined,
-                    entradaHasta: entradaHasta || undefined,
+                    entradaDesde: soloHoy ? undefined : (entradaDesde || undefined),
+                    entradaHasta: soloHoy ? undefined : (entradaHasta || undefined),
+                    soloHoy: soloHoy || undefined,
                     q: busquedaDebounced || undefined,
                 }),
                 getResumenEstadosReservas()
@@ -825,7 +843,7 @@ function ListaReservas({ onNueva }) {
                 setCargando(false);
             }
         }
-    }, [page, size, sort, filtro, hotelFiltro, entradaDesde, entradaHasta, busquedaDebounced]);
+    }, [page, size, sort, filtro, hotelFiltro, entradaDesde, entradaHasta, soloHoy, busquedaDebounced]);
 
     useEffect(() => {
         cargar();
@@ -882,19 +900,19 @@ function ListaReservas({ onNueva }) {
         }
     };
 
-    const hoyIso = hoy();
-    const filtroHoyActivo = entradaDesde === hoyIso && entradaHasta === hoyIso;
-    const hayFiltrosActivos = Boolean(filtro || hotelFiltro || entradaDesde || entradaHasta || busqueda.trim());
+    const filtroHoyActivo = soloHoy;
+    const hayFiltrosActivos = Boolean(filtro || hotelFiltro || soloHoy || entradaDesde || entradaHasta || busqueda.trim());
     const inicioRango = totalElements === 0 ? 0 : page * size + 1;
     const finRango = Math.min(inicioRango + visibles.length - 1, totalElements);
 
+    // Activa o desactiva el filtro "Hoy" sin depender de un rango estricto entradaDesde=entradaHasta
     const toggleFiltroHoy = () => {
-        if (filtroHoyActivo) {
+        if (soloHoy) {
+            setSoloHoy(false);
+        } else {
+            setSoloHoy(true);
             setEntradaDesde('');
             setEntradaHasta('');
-        } else {
-            setEntradaDesde(hoyIso);
-            setEntradaHasta(hoyIso);
         }
         setPage(0);
     };
@@ -902,6 +920,7 @@ function ListaReservas({ onNueva }) {
     const limpiarFiltrosLista = () => {
         setFiltro('');
         setHotelFiltro('');
+        setSoloHoy(false);
         setEntradaDesde('');
         setEntradaHasta('');
         setBusqueda('');
@@ -1484,9 +1503,19 @@ function ModalPago({ reserva: r, onClose, onDone }) {
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
 
+    const montoNum = parseFloat(anticipo);
+    const totalNum = Number(r.total || 0);
+    // Validación inline del rango permitido de anticipo (50% a 100%)
+    const montoValido = Number.isFinite(montoNum) && montoNum >= minimo && montoNum <= totalNum;
+
     const enviar = async (e) => {
-        e.preventDefault(); setBusy(true); setError('');
-        try { await confirmarReserva(r.idReserva, parseFloat(anticipo), metodo); onDone(); }
+        e.preventDefault();
+        if (!montoValido) {
+            setError(`El anticipo debe estar entre ${money(minimo)} (50%) y ${money(totalNum)}.`);
+            return;
+        }
+        setBusy(true); setError('');
+        try { await confirmarReserva(r.idReserva, montoNum, metodo); onDone(); }
         catch (err) { setError(err.message); setBusy(false); }
     };
     return (
@@ -1499,6 +1528,11 @@ function ModalPago({ reserva: r, onClose, onDone }) {
                 <div className="form-group">
                     <label className="form-label">Monto del anticipo ($ MXN) *</label>
                     <input className="form-input" type="number" step="0.01" min={minimo} max={r.total} value={anticipo} onChange={(e) => setAnticipo(e.target.value)} required />
+                    {!montoValido && (
+                        <div style={{ color: 'var(--color-error, #b91c1c)', fontSize: '0.78rem', marginTop: 4, fontWeight: 600 }}>
+                            El monto debe estar entre {money(minimo)} y {money(totalNum)}.
+                        </div>
+                    )}
                 </div>
                 <div className="form-group">
                     <label className="form-label">Método de pago</label>
@@ -1511,7 +1545,7 @@ function ModalPago({ reserva: r, onClose, onDone }) {
                 </div>
                 <div className="modal-actions">
                     <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
-                    <button type="submit" className="btn btn-primary" disabled={busy}>Confirmar reservación</button>
+                    <button type="submit" className="btn btn-primary" disabled={busy || !montoValido}>Confirmar reservación</button>
                 </div>
             </form>
         </Modal>
@@ -1688,7 +1722,8 @@ function ModalDetalleReserva({ reserva: r, ocultarFinanzas = false, onClose }) {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: 4, marginTop: 4 }}>
                             <span>Saldo en check-in:</span>
-                            <b className="num" style={{ color: 'var(--color-error)' }}>{money(r.saldo)}</b>
+                            {/* Verde cuando el saldo está liquidado ($0.00), rojo solo si hay saldo pendiente */}
+                            <b className="num" style={{ color: Number(r.saldo || 0) > 0 ? 'var(--color-error)' : '#059669' }}>{money(r.saldo)}</b>
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
                             Método de pago del anticipo: {r.metodoPago || 'N/A'}

@@ -2,10 +2,13 @@ package com.ico.hotel.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ico.hotel.config.ClientResolver;
+import com.ico.hotel.models.Habitacion;
 import com.ico.hotel.models.Hotel;
 import com.ico.hotel.models.Reserva;
 import com.ico.hotel.models.Rol;
 import com.ico.hotel.models.Usuario;
+import com.ico.hotel.repository.HabitacionRepository;
+import com.ico.hotel.repository.HuespedRepository;
 import com.ico.hotel.repository.ReservaRepository;
 import com.ico.hotel.repository.UsuarioRepository;
 import com.ico.hotel.security.CustomUserDetails;
@@ -48,7 +51,11 @@ public class HotelChatServiceImpl implements HotelChatService {
     private final HotelPolicyTool hotelPolicyTool;
     private final ReservaTool reservaTool;
     private final DashboardService dashboardService;
+    @org.springframework.context.annotation.Lazy
+    private final ReservaService reservaService;
+    private final HabitacionRepository habitacionRepository;
     private final UsuarioRepository usuarioRepository;
+    private final HuespedRepository huespedRepository;
     private final ReservaRepository reservaRepository;
     private final ChatMemory chatMemory;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -108,7 +115,7 @@ public class HotelChatServiceImpl implements HotelChatService {
                    resumenRapido + "\n\nPregunta de recepción: " + promptOriginal;
         }
         return "[SESIÓN: ADMINISTRADOR | Usuario: " + user.getNombre() +
-               " | Acceso técnico a inventario de hoteles, habitaciones y estados. PROHIBIDO mostrar montos monetarios, precios, ingresos o usuarios.]\n" +
+               " | Acceso a inventario de hoteles, habitaciones, tarifas públicas por noche y reservaciones. El Dashboard financiero, reportes globales y directorio de usuarios son exclusivos del Gerente General.]\n" +
                resumenRapido + "\n\nPregunta del administrador: " + promptOriginal;
     }
 
@@ -118,7 +125,8 @@ public class HotelChatServiceImpl implements HotelChatService {
      */
     private String construirSnapshotCompacto(CustomUserDetails user) {
         try {
-            boolean ocultarPrecios = user != null && user.getRol() == Rol.ADMINISTRADOR;
+            // Todos los roles (incluyendo Administrador, Recepcionista, Gerente y Huésped) pueden ver tarifas por noche
+            boolean ocultarPrecios = false;
             List<Hotel> hoteles = hotelSearchTool.getHotelesActivos();
             String nombresHoteles = hoteles.stream()
                     .map(h -> h.getNombre() + " (" + h.getCiudad() + ")")
@@ -191,6 +199,13 @@ public class HotelChatServiceImpl implements HotelChatService {
                 String t = normalizarTexto(m.getText());
                 if (t.contains("todos los hoteles") || t.contains("toda la cadena")) return null;
                 String d = detectarHotelEnTexto(t);
+                if (d != null) return d;
+            }
+            // Respaldo en hilos largos: si el mensaje inicial del usuario salió de la ventana, revisar respuestas recientes del asistente
+            for (int i = hist.size() - 1; i >= 0; i--) {
+                Message m = hist.get(i);
+                if (m.getMessageType() != MessageType.ASSISTANT) continue;
+                String d = detectarHotelEnTexto(normalizarTexto(m.getText()));
                 if (d != null) return d;
             }
         } catch (Exception e) {
@@ -307,7 +322,82 @@ public class HotelChatServiceImpl implements HotelChatService {
             Map.entry("noviembre", 11), Map.entry("diciembre", 12)
     );
 
+    /** Detecta si el usuario escribió una fecha de calendario imposible (ej. "30 de febrero"). */
+    private boolean contieneFechaImposible(String norm) {
+        if (norm == null) return false;
+        Matcher m = Pattern.compile("\\b(\\d{1,2})\\s+de\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\\s+(?:de\\s+)?(202[5-9]))?\\b").matcher(norm);
+        while (m.find()) {
+            int d = Integer.parseInt(m.group(1));
+            int mes = MESES_ES.get(m.group(2));
+            int ano = m.group(3) != null ? Integer.parseInt(m.group(3)) : LocalDate.now().getYear();
+            try {
+                LocalDate.of(ano, mes, d);
+            } catch (Exception e) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Resultado estructurado de extracción de fechas para distinguir si el usuario indicó salida explícita o solo entrada
+    private record RangoFechasExtraido(LocalDate entrada, LocalDate salida, boolean salidaExplicita) {}
+
+    /** Formatea los detalles completos de una habitación desde la BD para mostrarlos antes de cotizar o reservar. */
+    private String formatearDetallesHabitacion(Habitacion habDb, Map<String, Object> habMap, String hotelNombre, boolean esAdmin) {
+        String num = habDb != null ? habDb.getNumero() : String.valueOf(habMap.get("numero"));
+        String tipo = (habDb != null && habDb.getTipoHabitacion() != null)
+                ? habDb.getTipoHabitacion().getNombre()
+                : String.valueOf(habMap.get("tipo"));
+        int piso = habDb != null && habDb.getPiso() != null
+                ? habDb.getPiso()
+                : (habMap.get("piso") instanceof Number n ? n.intValue() : 1);
+        int capacidad = (habDb != null && habDb.getTipoHabitacion() != null && habDb.getTipoHabitacion().getCapacidad() != null)
+                ? habDb.getTipoHabitacion().getCapacidad()
+                : (habMap.get("capacidad") instanceof Number n ? n.intValue() : 2);
+        Object precio = (habDb != null && habDb.getTipoHabitacion() != null && habDb.getTipoHabitacion().getPrecioBase() != null)
+                ? habDb.getTipoHabitacion().getPrecioBase()
+                : habMap.get("precioBase");
+        String descripcion = (habDb != null && habDb.getTipoHabitacion() != null && habDb.getTipoHabitacion().getDescripcion() != null)
+                ? habDb.getTipoHabitacion().getDescripcion().trim()
+                : "";
+        String estado = habDb != null ? habDb.getEstado() : String.valueOf(habMap.get("estado"));
+        String ciudad = (habDb != null && habDb.getHotel() != null && habDb.getHotel().getCiudad() != null)
+                ? " (" + habDb.getHotel().getCiudad() + ")"
+                : "";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("- **Propiedad:** ").append(hotelNombre).append(ciudad).append("\n");
+        sb.append("- **Habitación:** #").append(num).append(" — ").append(tipo).append("\n");
+        sb.append("- **Piso:** ").append(piso).append("\n");
+        sb.append("- **Capacidad máxima:** hasta ").append(capacidad).append(capacidad == 1 ? " persona" : " personas").append("\n");
+        if (!esAdmin && precio != null) {
+            sb.append("- **Tarifa base por noche:** ").append(fmtMoneda(precio)).append(" *(+25% en temporada alta)*\n");
+        }
+        if (!descripcion.isBlank()) {
+            sb.append("- **Descripción:** ").append(descripcion).append("\n");
+        }
+        sb.append("- **Estado actual en sistema:** ").append(estado);
+        return sb.toString();
+    }
+
+    /** Extrae duración explícita en noches cuando el usuario responde solo con noches o días (ej. "2 noches", "una noche"). */
+    private Integer extraerSoloDuracionNoches(String norm) {
+        if (norm == null || norm.isBlank()) return null;
+        if (norm.contains("una noche") || norm.contains("un dia")) return 1;
+        Matcher m = Pattern.compile("\\b(\\d{1,2})\\s*(?:noches?|dias?)\\b").matcher(norm);
+        if (m.find()) {
+            return Math.max(1, Math.min(30, Integer.parseInt(m.group(1))));
+        }
+        return null;
+    }
+
     private LocalDate[] extraerRangoFechas(String norm) {
+        RangoFechasExtraido ext = extraerFechasConDetalle(norm);
+        return ext != null ? new LocalDate[]{ext.entrada(), ext.salida()} : null;
+    }
+
+    /** Extrae fechas indicando si el usuario proporcionó explícitamente la fecha de salida o duración. */
+    private RangoFechasExtraido extraerFechasConDetalle(String norm) {
         if (norm == null) return null;
         // 1. ISO: 2026 12 05
         List<LocalDate> isos = new ArrayList<>();
@@ -319,8 +409,50 @@ public class HotelChatServiceImpl implements HotelChatService {
         }
         if (!isos.isEmpty()) {
             LocalDate ini = isos.get(0);
-            LocalDate fin = isos.size() > 1 && isos.get(1).isAfter(ini) ? isos.get(1) : ini.plusDays(1);
-            return new LocalDate[]{ini, fin};
+            if (isos.size() > 1 && isos.get(1).isAfter(ini)) {
+                return new RangoFechasExtraido(ini, isos.get(1), true);
+            }
+            Integer nochesExtra = extraerSoloDuracionNoches(norm);
+            if (nochesExtra != null) {
+                return new RangoFechasExtraido(ini, ini.plusDays(nochesExtra), true);
+            }
+            return new RangoFechasExtraido(ini, ini.plusDays(1), false);
+        }
+        // 1B. Formato numérico dd/mm/yyyy o dd-mm-yyyy (normalizado con espacios)
+        List<LocalDate> dmys = new ArrayList<>();
+        Matcher mDmy = Pattern.compile("\\b(\\d{1,2})\\s+(\\d{1,2})\\s+(202[5-9])\\b").matcher(norm);
+        while (mDmy.find()) {
+            try {
+                dmys.add(LocalDate.of(Integer.parseInt(mDmy.group(3)), Integer.parseInt(mDmy.group(2)), Integer.parseInt(mDmy.group(1))));
+            } catch (Exception ignored) {}
+        }
+        if (!dmys.isEmpty()) {
+            LocalDate ini = dmys.get(0);
+            if (dmys.size() > 1 && dmys.get(1).isAfter(ini)) {
+                return new RangoFechasExtraido(ini, dmys.get(1), true);
+            }
+            Integer nochesExtra = extraerSoloDuracionNoches(norm);
+            if (nochesExtra != null) {
+                return new RangoFechasExtraido(ini, ini.plusDays(nochesExtra), true);
+            }
+            return new RangoFechasExtraido(ini, ini.plusDays(1), false);
+        }
+        // 2A. Rango entre meses en español: "del 28 de noviembre al 2 de diciembre [2026]"
+        Matcher mRangoMeses = Pattern.compile("\\b(\\d{1,2})\\s+de\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\\s+(?:de\\s+)?(202[5-9]))?\\s+(?:al|hasta(?:\\s+el)?|a)\\s+(\\d{1,2})\\s+de\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\\s+(?:de\\s+)?(202[5-9]))?\\b").matcher(norm);
+        if (mRangoMeses.find()) {
+            int d1 = Integer.parseInt(mRangoMeses.group(1));
+            int m1 = MESES_ES.get(mRangoMeses.group(2));
+            int a1 = mRangoMeses.group(3) != null ? Integer.parseInt(mRangoMeses.group(3)) : LocalDate.now().getYear();
+            int d2 = Integer.parseInt(mRangoMeses.group(4));
+            int m2 = MESES_ES.get(mRangoMeses.group(5));
+            int a2 = mRangoMeses.group(6) != null ? Integer.parseInt(mRangoMeses.group(6)) : a1;
+            try {
+                LocalDate ini = LocalDate.of(a1, m1, d1);
+                if (mRangoMeses.group(3) == null && ini.isBefore(LocalDate.now())) ini = ini.plusYears(1);
+                LocalDate fin = LocalDate.of(mRangoMeses.group(6) != null ? a2 : ini.getYear(), m2, d2);
+                if (!fin.isAfter(ini)) fin = fin.plusYears(1);
+                return new RangoFechasExtraido(ini, fin, true);
+            } catch (Exception ignored) {}
         }
         // 2. Rango en español: "del 10 al 15 de diciembre [2026]"
         Matcher mRango = Pattern.compile("\\b(\\d{1,2})\\s+al\\s+(\\d{1,2})\\s+de\\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\\s+(?:de\\s+)?(202[5-9]))?\\b").matcher(norm);
@@ -332,8 +464,8 @@ public class HotelChatServiceImpl implements HotelChatService {
                 LocalDate ini = LocalDate.of(ano, mes, d1);
                 if (mRango.group(4) == null && ini.isBefore(LocalDate.now())) ini = ini.plusYears(1);
                 LocalDate fin = LocalDate.of(ini.getYear(), mes, d2);
-                if (!fin.isAfter(ini)) fin = ini.plusMonths(1);
-                return new LocalDate[]{ini, fin};
+                // No sumar un mes automáticamente si la salida es menor que la entrada; devolver tal cual para rechazar fechas invertidas
+                return new RangoFechasExtraido(ini, fin, true);
             } catch (Exception ignored) {}
         }
         // 3. Fecha única en español: "5 de diciembre [2026]"
@@ -345,21 +477,29 @@ public class HotelChatServiceImpl implements HotelChatService {
             try {
                 LocalDate ini = LocalDate.of(ano, mes, d);
                 if (mUnica.group(3) == null && ini.isBefore(LocalDate.now())) ini = ini.plusYears(1);
-                return new LocalDate[]{ini, ini.plusDays(1)};
+                Integer nochesExtra = extraerSoloDuracionNoches(norm);
+                if (nochesExtra != null) {
+                    return new RangoFechasExtraido(ini, ini.plusDays(nochesExtra), true);
+                }
+                return new RangoFechasExtraido(ini, ini.plusDays(1), false);
             } catch (Exception ignored) {}
         }
-        // 4. Fechas relativas en español: "hoy", "mañana", "pasado mañana" + "en X dias" / "por X noches"
+        // 4. Fechas relativas en español: "hoy", "mañana", "pasado mañana" + duración explícita opcional
         boolean tieneRelativa = norm.contains("pasado manana") || norm.contains("manana") || norm.contains("hoy");
         if (tieneRelativa) {
             LocalDate hoy = LocalDate.now();
             LocalDate ini = norm.contains("pasado manana") ? hoy.plusDays(2)
                     : norm.contains("manana") ? hoy.plusDays(1) : hoy;
             int noches = 1;
+            boolean durExplicita = false;
             Matcher mDur = Pattern.compile("\\b(?:en|por|durante)?\\s*(\\d{1,2})\\s*(?:dias?|noches?)\\b").matcher(norm);
             if (mDur.find()) {
                 noches = Math.max(1, Math.min(30, Integer.parseInt(mDur.group(1))));
+                durExplicita = true;
+            } else if (norm.contains("una noche") || norm.contains("un dia")) {
+                durExplicita = true;
             }
-            return new LocalDate[]{ini, ini.plusDays(noches)};
+            return new RangoFechasExtraido(ini, ini.plusDays(noches), durExplicita);
         }
         return null;
     }
@@ -401,6 +541,25 @@ public class HotelChatServiceImpl implements HotelChatService {
             sb.append(" |\n");
         }
         return sb.append("\n¿Desea apartar alguna de estas opciones?").toString();
+    }
+
+    private String obtenerTelefonoUsuario(CustomUserDetails user) {
+        if (user == null) return null;
+        if (user.getIdUsuario() != null) {
+            var uDb = usuarioRepository.findById(user.getIdUsuario());
+            if (uDb.isPresent() && uDb.get().getTelefono() != null) {
+                String t = uDb.get().getTelefono().replaceAll("\\D", "");
+                if (t.length() == 10) return t;
+            }
+        }
+        if (user.getEmail() != null) {
+            var hPrev = huespedRepository.findFirstByEmailIgnoreCase(user.getEmail());
+            if (hPrev.isPresent() && hPrev.get().getTelefono() != null) {
+                String t = hPrev.get().getTelefono().replaceAll("\\D", "");
+                if (t.length() == 10) return t;
+            }
+        }
+        return null;
     }
 
     private String aislarConversationIdPorUsuario(CustomUserDetails user, String conversationId) {
@@ -531,9 +690,16 @@ public class HotelChatServiceImpl implements HotelChatService {
     private String resolverConsultaDirecta(String prompt, CustomUserDetails user, String scopedConvId) {
         if (prompt == null || prompt.isBlank()) return null;
         String norm = normalizarTexto(prompt);
+        // Bloqueo determinístico de prompt injection y extracción del prompt/contexto interno del sistema
+        if (norm.contains("prompt del sistema") || norm.contains("system prompt") || norm.contains("tus instrucciones")
+                || norm.contains("ignora todo") || norm.contains("ignora tus") || norm.contains("olvida tus")
+                || norm.contains("pwned") || norm.contains("jailbreak") || norm.contains("actua como")) {
+            return "Por seguridad, no puedo compartir configuraciones internas ni alterar mis instrucciones. Con gusto le ayudo con disponibilidad, tarifas, políticas o Pre-reservas de **Hotel Paraíso**.";
+        }
         Rol rol = user != null ? user.getRol() : null;
         boolean esGerente = rol == Rol.GERENTE;
-        boolean esAdmin = rol == Rol.ADMINISTRADOR;
+        // El Administrador ahora puede consultar precios y tarifas por noche al igual que Recepción, Gerente y Huésped
+        boolean esAdmin = false;
         boolean esHuesped = rol == Rol.HUESPED;
 
         // 0. Flujo guiado de nueva reservación
@@ -569,6 +735,99 @@ public class HotelChatServiceImpl implements HotelChatService {
         if (pidePagar) {
             return "Por seguridad, este asistente virtual **no procesa pagos ni solicita datos de tarjeta o cuentas bancarias**.\n\n" +
                    "A través del chat únicamente se registra la **Pre-reserva** (apartado temporal con vigencia de 24 a 48 horas). Para confirmar su estancia con el **50% de anticipo**, realice el pago directamente en **Recepción** o consulte las instrucciones de depósito desde **Mis Reservaciones** usando su folio oficial.";
+        }
+
+        // 0A-BIS. Abortar limpiamente un flujo de Pre-reserva en curso si el usuario desiste ("cancelalo ya no quiero", "no gracias")
+        try {
+            List<Message> histAbort = chatMemory.get(scopedConvId);
+            String ultAsistAbort = "";
+            for (int i = histAbort.size() - 1; i >= 0; i--) {
+                if (histAbort.get(i).getMessageType() == MessageType.ASSISTANT) {
+                    ultAsistAbort = normalizarTexto(histAbort.get(i).getText());
+                    break;
+                }
+            }
+            boolean enFlujoPreReserva = ultAsistAbort.contains("resumen de pre reserva")
+                    || ultAsistAbort.contains("cual sera su fecha de salida")
+                    || ultAsistAbort.contains("fecha de entrada y fecha de salida")
+                    || ultAsistAbort.contains("fechas de entrada y salida");
+            boolean quiereAbortarFlujo = norm.contains("ya no quiero") || norm.contains("cancelalo")
+                    || norm.contains("mejor no quiero") || norm.contains("no gracias")
+                    || norm.contains("dejalo asi") || norm.equals("no") || norm.equals("cancelar");
+            // Si menciona otro hotel, otra habitación o nuevas fechas, está cambiando su elección, no cancelando el flujo
+            boolean cambiaDestinoOFecha = detectarHotelEnTexto(norm) != null || norm.contains("quiero la ")
+                    || norm.contains("entro") || extraerFechasConDetalle(norm) != null;
+            if (enFlujoPreReserva && quiereAbortarFlujo && !cambiaDestinoOFecha && !norm.contains("folio") && !norm.contains("politica")) {
+                return "Entendido, he cancelado el proceso de **Pre-reserva**. No se registró ninguna reservación. ¿En qué más puedo ayudarle?";
+            }
+        } catch (Exception ignored) {}
+
+        // 0A-TER. Consultas frecuentes determinísticas para usuarios novatos (evitan alucinaciones del LLM y timeouts)
+        // 1) Métodos de pago aceptados en Recepción (sin afectar gráficas de Gerencia)
+        if ((norm.contains("efectivo") || norm.contains("tarjeta") || norm.contains("transferencia"))
+                && (norm.contains("aceptan") || norm.contains("reciben") || norm.contains("recepcion") || norm.contains("metodos"))
+                && !norm.contains("grafica") && !norm.contains("recaudacion") && !norm.contains("metodo de pago")) {
+            return "En **Recepción** aceptamos **Efectivo**, **Tarjeta de crédito o débito** y **Transferencia bancaria** para liquidar su anticipo (50%) o el saldo de su estancia.\n\n"
+                    + "*(Recuerde que este asistente virtual no procesa cobros ni solicita datos bancarios; por aquí únicamente registramos su **Pre-reserva**).*";
+        }
+
+        // 2) Auto-servicio de cancelación o cambio de fechas para huéspedes
+        if (norm.contains("quiero cancelar") || norm.contains("como cancelo") || norm.contains("cancelar mi reserva") || norm.contains("cancelar mi pre")) {
+            return "Puede cancelar su reservación directamente desde la sección **Mis Reservaciones** en el portal usando el botón **Cancelar**, sin necesidad de hacerlo por el chat.\n\n"
+                    + "**Resumen de la Política de Cancelación:**\n"
+                    + "- Si es **Pre-reserva** (sin anticipo pagado), se cancela sin costo.\n"
+                    + "- Con **más de 72 horas** antes del Check-in (15:00 h): **100% de reembolso** del anticipo.\n"
+                    + "- Entre **48 y 72 horas** antes del Check-in: **50% de reembolso**.\n"
+                    + "- Con **menos de 48 horas** antes del Check-in: sin reembolso.";
+        }
+        if (norm.contains("me equivoque de fecha") || norm.contains("cambiar fecha") || norm.contains("cambiar la fecha")
+                || norm.contains("cambiarla") || norm.contains("reprogramar")) {
+            return "Si su reservación está en estado **Pre-reserva**, puede modificar la entrada o salida directamente desde **Mis Reservaciones → Reprogramar fechas**.\n\n"
+                    + "Si su reservación ya está **Confirmada** (con anticipo cubierto), por favor comuníquese con **Recepción** para gestionar el cambio según disponibilidad.";
+        }
+
+        // 3) Horarios de Check-in / Check-out, Facturación (CFDI) y Amenidades / Servicios
+        if ((norm.contains("check in") || norm.contains("check out") || norm.contains("hora de entrada") || norm.contains("hora de salida"))
+                && !norm.contains("saldo") && !norm.contains("folio") && !norm.contains("reembolso")) {
+            return "Nuestro horario estándar en todas las propiedades de **Hotel Paraíso** es:\n\n"
+                    + "- **Check-in (Entrada):** a partir de las **15:00 horas**.\n"
+                    + "- **Check-out (Salida):** máximo a las **12:00 horas**.\n\n"
+                    + "*(Si requiere extensión de salida o día extra, puede consultarlo en Recepción sujeto a disponibilidad).*";
+        }
+        if (norm.contains("factura") || norm.contains("cfdi")) {
+            return "La **facturación fiscal (CFDI)** se tramita directamente en **Recepción** al momento de realizar su pago o durante el Check-out, presentando sus datos fiscales (RFC, razón social, régimen fiscal, código postal y uso de CFDI).";
+        }
+        if (norm.contains("alberca") || norm.contains("estacionamiento") || norm.contains("wifi") || norm.contains("wi fi") || norm.contains("desayuno")) {
+            return "Nuestras propiedades cuentan con **Wi-Fi de cortesía** para huéspedes y facilidades de **estacionamiento**; además, nuestras sedes vacacionales (como Cancún y Acapulco) disponen de áreas de alberca y terraza. Los horarios específicos de amenidades o desayuno se confirman directamente en **Recepción** al realizar su Check-in.";
+        }
+
+        // 4) Habitación más barata / económica (consulta real a BD/inventario, nunca alucinar categoría)
+        if ((norm.contains("mas barata") || norm.contains("mas barato") || norm.contains("economica") || norm.contains("economico")
+                || norm.contains("cuarto barato") || norm.contains("habitacion barata") || norm.contains("menor precio"))
+                && !esAdmin) {
+            String hotelBarata = resolverHotelEnContexto(prompt, scopedConvId);
+            habitacionSearchTool.resetCallTracker();
+            List<Map<String, Object>> todasBaratas = habitacionSearchTool.findHabitacionesPorHotel(null);
+            habitacionSearchTool.resetCallTracker();
+            List<Map<String, Object>> candidatas = todasBaratas.stream()
+                    .filter(r -> r.get("numero") != null && r.get("precioBase") instanceof Number)
+                    .filter(r -> !"Mantenimiento".equalsIgnoreCase(String.valueOf(r.get("estado"))))
+                    .filter(r -> hotelBarata == null || normalizarTexto(String.valueOf(r.get("hotel"))).equals(normalizarTexto(hotelBarata)))
+                    .sorted(Comparator.comparingDouble(r -> ((Number) r.get("precioBase")).doubleValue()))
+                    .toList();
+            if (!candidatas.isEmpty()) {
+                Map<String, Object> top = candidatas.get(0);
+                String hNom = String.valueOf(top.get("hotel"));
+                String numB = String.valueOf(top.get("numero"));
+                String tipoB = String.valueOf(top.get("tipo"));
+                String estB = String.valueOf(top.get("estado"));
+                String precioB = fmtMoneda(top.get("precioBase"));
+                return "La habitación más económica disponible en **" + (hotelBarata != null ? hotelBarata : "la cadena") + "** es:\n\n"
+                        + "- **Propiedad:** " + hNom + " (" + top.get("ciudad") + ")\n"
+                        + "- **Habitación:** #" + numB + " — **" + tipoB + "** (Piso " + top.get("piso") + ", Estado: **" + estB + "**)\n"
+                        + "- **Tarifa base por noche:** **" + precioB + "** *(+25% en temporada alta)*\n\n"
+                        + "¿Desea iniciar una **Pre-reserva** para esta habitación o consultar sus fechas disponibles?";
+            }
         }
 
         // 0B. Consulta de Usuarios Registrados / Cuentas del Sistema / Roles
@@ -647,9 +906,12 @@ public class HotelChatServiceImpl implements HotelChatService {
             sb.append("| **Huésped Titular** | ").append(res.get("titular")).append(" |\n");
             sb.append("| **Estancia** | ").append(res.get("fechaEntrada")).append(" → ").append(res.get("fechaSalida")).append(" (").append(res.get("noches")).append(" noches) |\n");
             if (!esAdmin) {
+                // Lectura de llaves reales devueltas por ReservaTool ("anticipo" y "saldo") con respaldo para evitar null
+                Object anticipoVal = res.getOrDefault("anticipo", res.get("anticipoPagado"));
+                Object saldoVal = res.getOrDefault("saldo", res.get("saldoPendiente"));
                 sb.append("| **Total** | **").append(res.get("total")).append("** |\n");
-                sb.append("| **Anticipo Pagado** | ").append(res.get("anticipoPagado")).append(" |\n");
-                sb.append("| **Saldo Pendiente** | ").append(res.get("saldoPendiente")).append(" |\n");
+                sb.append("| **Anticipo Pagado** | ").append(anticipoVal != null ? anticipoVal : "$0.00 MXN").append(" |\n");
+                sb.append("| **Saldo Pendiente** | ").append(saldoVal != null ? saldoVal : "$0.00 MXN").append(" |\n");
             }
             return sb.toString();
         }
@@ -1054,64 +1316,242 @@ public class HotelChatServiceImpl implements HotelChatService {
         // 4. CONSULTAS DE INVENTARIO, HABITACIONES Y RESERVACIONES
 
         // 4-PRE. Flujos conversacionales con memoria de hotel/ciudad
-        // 4-PRE-RESERVA. Selección de habitación por número o flujo real de Pre-reserva desde el chat
+        // 4-PRE-RESERVA. Selección de habitación por número o flujo guiado paso a paso de Pre-reserva desde el chat
         String ctxHotelRes = resolverHotelEnContexto(prompt, scopedConvId);
+        boolean consultaListaDisponibles = norm.contains("habitaciones disponibles") || norm.contains("disponibles actualmente")
+                || norm.contains("que habitaciones estan disponibles") || norm.equals("disponibles hoy");
         if (ctxHotelRes != null && !norm.contains("mantenimiento") && !norm.contains("ocupada")
                 && !norm.contains("cancel") && !norm.contains("politic") && !norm.contains("folio")
-                && !norm.contains("disponib") && !norm.contains("que fechas") && !norm.contains("cuando")) {
+                && !consultaListaDisponibles && !norm.contains("que fechas") && !norm.contains("cuando")) {
             List<Map<String, Object>> roomsCtx = habitacionesDeHotel(ctxHotelRes);
+            // Revisar inventario completo del hotel (incluyendo Mantenimiento) para bloquear cuartos en mantenimiento sin alucinar
+            List<Habitacion> todasHotelDb = habitacionRepository.findByHotelNombreActivos(ctxHotelRes);
+            Habitacion habMantenimiento = null;
+            for (Habitacion hDb : todasHotelDb) {
+                String numDb = normalizarTexto(hDb.getNumero());
+                if (!numDb.isBlank() && Pattern.compile("(^| )" + Pattern.quote(numDb) + "( |$)").matcher(norm).find()
+                        && "Mantenimiento".equalsIgnoreCase(hDb.getEstado())) {
+                    habMantenimiento = hDb;
+                    break;
+                }
+            }
+            if (habMantenimiento != null) {
+                return tablaHabitacionesHotel(ctxHotelRes, esAdmin,
+                        "La **Habitación #" + habMantenimiento.getNumero() + "** (" +
+                        (habMantenimiento.getTipoHabitacion() != null ? habMantenimiento.getTipoHabitacion().getNombre() : "Suite") +
+                        ") en **" + ctxHotelRes + "** se encuentra actualmente en **Mantenimiento** y no puede reservarse. Estas son las habitaciones disponibles:");
+            }
+
             Map<String, Object> habMencionadaAhora = habitacionMencionada(prompt, roomsCtx);
             Map<String, Object> habActiva = habitacionEnContexto(prompt, scopedConvId, roomsCtx);
-            LocalDate[] fechasAhora = extraerRangoFechas(norm);
+            RangoFechasExtraido fechasExtAhora = extraerFechasConDetalle(norm);
 
+            // Si escribió una fecha inexistente en el calendario (ej. 30 de febrero), rechazarla claramente
+            if (fechasExtAhora == null && contieneFechaImposible(norm)) {
+                return "La fecha indicada no existe en el calendario (por ejemplo, febrero no tiene 30 días). Por favor ingrese una fecha válida.";
+            }
+
+            // Leer último mensaje del asistente para conocer en qué paso del flujo guiado se encuentra la conversación
+            String ultimoAsistenteRaw = "";
+            try {
+                List<Message> hist = chatMemory.get(scopedConvId);
+                for (int i = hist.size() - 1; i >= 0; i--) {
+                    if (hist.get(i).getMessageType() == MessageType.ASSISTANT) {
+                        ultimoAsistenteRaw = hist.get(i).getText() != null ? hist.get(i).getText() : "";
+                        break;
+                    }
+                }
+            } catch (Exception ignored) {}
+            String ultimoAsistenteNorm = normalizarTexto(ultimoAsistenteRaw);
+            boolean esperandoConfirmacionResumen = ultimoAsistenteNorm.contains("resumen de pre reserva")
+                    || ultimoAsistenteNorm.contains("responda si junto con su telefono");
+            boolean esperandoFechaSalida = ultimoAsistenteNorm.contains("cual sera su fecha de salida")
+                    || ultimoAsistenteNorm.contains("indiqueme su fecha de salida");
+            boolean esperandoFechasReserva = ultimoAsistenteNorm.contains("fecha de entrada y fecha de salida")
+                    || ultimoAsistenteNorm.contains("fechas de entrada y salida");
+
+            boolean tieneTelAhora = Pattern.compile("\\b\\d{10}\\b").matcher(prompt.replaceAll("[-\\s]", "")).find();
             boolean esConfirmacion = norm.equals("si") || norm.equals("ok") || norm.equals("claro")
                     || norm.equals("confirmo") || norm.equals("adelante") || norm.equals("dale")
-                    || norm.equals("si por favor") || norm.equals("confirmar");
-            boolean quiereReservar = norm.contains("reservar") || norm.contains("apartar")
+                    || norm.equals("si por favor") || norm.equals("confirmar")
+                    || (norm.startsWith("si ") && norm.length() <= 35);
+
+            boolean intencionExplicitaReservar = norm.contains("reservar") || norm.contains("apartar")
                     || norm.contains("pre reserva") || norm.contains("prereserva")
-                    || (fechasAhora != null && habActiva != null)
-                    || (esConfirmacion && habActiva != null);
+                    || norm.contains("quiero la ") || norm.contains("me quedo con") || norm.contains("elijo la ");
+
+            // Detectar si el usuario solo está preguntando disponibilidad puntual (ej. "¿para el día de hoy?") y NO pidiendo reservar
+            boolean esPreguntaDisponibilidad = (prompt.trim().endsWith("?")
+                    || norm.contains("disponib") || norm.contains("libre")
+                    || norm.startsWith("para el ") || norm.startsWith("para hoy") || norm.startsWith("para manana")
+                    || norm.startsWith("y para ") || norm.startsWith("esta ") || norm.startsWith("hay "))
+                    && !intencionExplicitaReservar
+                    && !esperandoFechaSalida
+                    && (!esperandoFechasReserva || prompt.trim().endsWith("?"))
+                    && !esperandoConfirmacionResumen;
+
+            // Si pregunta si hay hotel en una ciudad sin pedir una habitación/categoría específica, mostrar la tabla del hotel
+            boolean preguntaPorHotel = (norm.contains("tienen hotel") || norm.contains("hay hotel") || norm.contains("hotel en "))
+                    && habMencionadaAhora == null && habitacionPorCategoria(prompt, roomsCtx) == null;
+
+            // Caso 0: Pregunta puntual de disponibilidad sobre la habitación activa en contexto (sin asumir que quiere reservar)
+            if (esPreguntaDisponibilidad && !preguntaPorHotel && habActiva != null) {
+                String num = String.valueOf(habActiva.get("numero"));
+                List<Habitacion> habsDb = habitacionRepository.findByNumeroAndHotelNombreActivos(num, ctxHotelRes);
+                Habitacion habDb = habsDb.isEmpty() ? null : habsDb.get(0);
+                String detalles = formatearDetallesHabitacion(habDb, habActiva, ctxHotelRes, esAdmin);
+
+                if (fechasExtAhora != null) {
+                    LocalDate fIni = fechasExtAhora.entrada();
+                    LocalDate fFin = fechasExtAhora.salida();
+                    if (fIni.isBefore(LocalDate.now())) {
+                        return "No es posible consultar disponibilidad para una fecha pasada (**" + fIni + "**). Por favor indique una fecha a partir de hoy (**" + LocalDate.now() + "**).";
+                    }
+                    boolean ocupada = habDb != null && !reservaRepository.findTraslapes(habDb.getIdHabitacion(), fIni, fFin).isEmpty();
+                    String rangoTxt = fechasExtAhora.salidaExplicita()
+                            ? "del **" + fIni + "** al **" + fFin + "**"
+                            : "para el **" + fIni + "**";
+                    if (ocupada) {
+                        return "La **Habitación #" + num + "** en **" + ctxHotelRes + "** **no está disponible** " + rangoTxt
+                                + " porque ya cuenta con una reservación activa en esas fechas.\n\n"
+                                + calendarioHabitacion(ctxHotelRes, habActiva);
+                    }
+                    return "Sí, la **Habitación #" + num + "** en **" + ctxHotelRes + "** se encuentra **Disponible** " + rangoTxt + ".\n\n"
+                            + "**Detalles de la habitación:**\n" + detalles + "\n\n"
+                            + "¿Desea iniciar una **Pre-reserva** para esta habitación? Si es así, indíqueme su **fecha de entrada** y **fecha de salida** (por ejemplo: `del 10 al 12 de diciembre`).";
+                }
+
+                // Pregunta sin fecha específica (ej. "¿la 501 está disponible?")
+                return "La **Habitación #" + num + "** en **" + ctxHotelRes + "** se encuentra **" + habActiva.get("estado") + "** actualmente.\n\n"
+                        + "**Detalles de la habitación:**\n" + detalles + "\n\n"
+                        + "¿Desea consultar disponibilidad para una fecha en particular o iniciar una **Pre-reserva**?";
+            }
+
+            // Si dijo "sí" ante la pregunta de si desea iniciar una Pre-reserva (sin haber visto aún el Resumen)
+            boolean iniciaReservaTrasPregunta = esConfirmacion && !esperandoConfirmacionResumen && habActiva != null;
+            boolean quiereReservar = intencionExplicitaReservar
+                    || iniciaReservaTrasPregunta
+                    || (fechasExtAhora != null && habActiva != null)
+                    || (esperandoFechaSalida && extraerSoloDuracionNoches(norm) != null && habActiva != null)
+                    || ((esConfirmacion || tieneTelAhora) && esperandoConfirmacionResumen && habActiva != null);
+
+            String telCuenta = obtenerTelefonoUsuario(user);
 
             // Caso A: El usuario solo eligió una habitación (ej. "101", "habitacion 101", "villa 10")
             if (habMencionadaAhora != null && !quiereReservar && norm.split(" ").length <= 5) {
                 String num = String.valueOf(habMencionadaAhora.get("numero"));
-                String tipo = String.valueOf(habMencionadaAhora.get("tipo"));
-                String precioTxt = esAdmin ? "" : " — **" + fmtMoneda(habMencionadaAhora.get("precioBase")) + "** / noche";
-                return "Seleccionó la **Habitación #" + num + "** (**" + tipo + "**) en **" + ctxHotelRes + "**" + precioTxt + ".\n\n" +
-                       "¿Desea registrar una **Pre-reserva** (apartado temporal por 24 horas sin cobro inmediato)?\n" +
-                       "Si es así, indíqueme:\n" +
-                       "- **Fechas de entrada y salida** (ej. `del 1 al 3 de diciembre` o `2026-12-01 al 2026-12-03`)\n" +
-                       "- **Teléfono celular a 10 dígitos** (ej. `5512345678`)\n" +
-                       "- **Número de adultos y niños** (opcional, por defecto 1 adulto)";
+                List<Habitacion> habsDb = habitacionRepository.findByNumeroAndHotelNombreActivos(num, ctxHotelRes);
+                Habitacion habDb = habsDb.isEmpty() ? null : habsDb.get(0);
+                return "Seleccionó la **Habitación #" + num + "** en **" + ctxHotelRes + "**.\n\n"
+                        + "**Detalles de la habitación:**\n"
+                        + formatearDetallesHabitacion(habDb, habMencionadaAhora, ctxHotelRes, esAdmin) + "\n\n"
+                        + "¿Desea registrar una **Pre-reserva** (apartado temporal por 24 horas sin cobro inmediato)?\n"
+                        + "Si es así, indíqueme su **fecha de entrada** y **fecha de salida** (ej. `del 1 al 3 de diciembre` o `2026-12-01 al 2026-12-03`).";
             }
 
-            // Caso B: El usuario quiere reservar/apartar la habitación en contexto (o dio fechas para reservarla)
+            // Caso B: Flujo guiado de Pre-reserva (nunca asumir fechas ni saltar pasos sin corroborar con BD)
             if (quiereReservar && habActiva != null) {
                 String num = String.valueOf(habActiva.get("numero"));
                 String tipo = String.valueOf(habActiva.get("tipo"));
-                LocalDate[] fechas = fechasAhora;
-                if (fechas == null) {
-                    // Buscar si dio fechas en turnos recientes del usuario
-                    try {
-                        List<Message> hist = chatMemory.get(scopedConvId);
-                        for (int i = hist.size() - 1; i >= 0; i--) {
-                            if (hist.get(i).getMessageType() != MessageType.USER) continue;
-                            fechas = extraerRangoFechas(normalizarTexto(hist.get(i).getText()));
-                            if (fechas != null) break;
+                List<Habitacion> habsDbCheck = habitacionRepository.findByNumeroAndHotelNombreActivos(num, ctxHotelRes);
+                Habitacion habDb = habsDbCheck.isEmpty() ? null : habsDbCheck.get(0);
+                String detallesHab = formatearDetallesHabitacion(habDb, habActiva, ctxHotelRes, esAdmin);
+
+                LocalDate entrada = null;
+                LocalDate salida = null;
+                boolean salidaExplicita = false;
+
+                // 1) Si el usuario está confirmando el Resumen de Pre-reserva ("sí" o teléfono)
+                if ((esConfirmacion || tieneTelAhora) && esperandoConfirmacionResumen) {
+                    List<LocalDate> isosResumen = new ArrayList<>();
+                    Matcher mIsoRes = Pattern.compile("\\b(202[5-9]-\\d{2}-\\d{2})\\b").matcher(ultimoAsistenteRaw);
+                    while (mIsoRes.find()) {
+                        try { isosResumen.add(LocalDate.parse(mIsoRes.group(1))); } catch (Exception ignored) {}
+                    }
+                    if (isosResumen.size() >= 2) {
+                        entrada = isosResumen.get(0);
+                        salida = isosResumen.get(1);
+                        salidaExplicita = true;
+                    }
+                }
+
+                // 2) Si el bot preguntó específicamente la fecha de salida, recuperar la entrada previa y tomar la salida actual
+                if (entrada == null && esperandoFechaSalida) {
+                    Matcher mIsoPrev = Pattern.compile("\\b(202[5-9]-\\d{2}-\\d{2})\\b").matcher(ultimoAsistenteRaw);
+                    if (mIsoPrev.find()) {
+                        try { entrada = LocalDate.parse(mIsoPrev.group(1)); } catch (Exception ignored) {}
+                    }
+                    if (entrada == null) {
+                        try {
+                            List<Message> hist = chatMemory.get(scopedConvId);
+                            for (int i = hist.size() - 1; i >= 0; i--) {
+                                if (hist.get(i).getMessageType() != MessageType.USER) continue;
+                                RangoFechasExtraido prevExt = extraerFechasConDetalle(normalizarTexto(hist.get(i).getText()));
+                                if (prevExt != null) { entrada = prevExt.entrada(); break; }
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    if (entrada != null) {
+                        Integer nochesResp = extraerSoloDuracionNoches(norm);
+                        // Si el usuario cambió de opinión sobre su fecha de entrada ("mejor no, entro el 18"), actualizar entrada y pedir salida de nuevo
+                        boolean cambiaEntrada = norm.contains("entro") || norm.contains("llegada")
+                                || norm.contains("mejor no") || norm.contains("mejor el")
+                                || norm.contains("cambiar") || norm.contains("me equivoque");
+                        if (fechasExtAhora != null && fechasExtAhora.salidaExplicita()) {
+                            entrada = fechasExtAhora.entrada();
+                            salida = fechasExtAhora.salida();
+                            salidaExplicita = true;
+                        } else if (fechasExtAhora != null && cambiaEntrada) {
+                            entrada = fechasExtAhora.entrada();
+                            salida = fechasExtAhora.salida();
+                            salidaExplicita = false;
+                        } else if (fechasExtAhora != null) {
+                            salida = fechasExtAhora.entrada();
+                            salidaExplicita = true;
+                        } else if (nochesResp != null) {
+                            salida = entrada.plusDays(nochesResp);
+                            salidaExplicita = true;
                         }
-                    } catch (Exception ignored) {}
+                    }
                 }
 
-                if (fechas == null) {
-                    String precioTxt = esAdmin ? "" : " (" + fmtMoneda(habActiva.get("precioBase")) + " / noche)";
-                    return "Con gusto registro su **Pre-reserva** para la **Habitación #" + num + "** (**" + tipo + "**) en **" + ctxHotelRes + "**" + precioTxt + ".\n\n" +
-                           "*(Desde el chat la reservación siempre queda en estado **Pre-reserva** por 24 horas; el pago del 50% de anticipo se registra posteriormente en Recepción).*\n\n" +
-                           "Para generarla ahora mismo, indíqueme:\n" +
-                           "1. **Fechas de entrada y salida** (ej. `del 1 al 3 de diciembre` o `2026-12-01 al 2026-12-03`)\n" +
-                           "2. **Teléfono celular a 10 dígitos**";
+                // 3) Si el mensaje actual trae fechas (entrada sola o entrada + salida)
+                if (entrada == null && fechasExtAhora != null) {
+                    entrada = fechasExtAhora.entrada();
+                    salida = fechasExtAhora.salida();
+                    salidaExplicita = fechasExtAhora.salidaExplicita();
                 }
 
-                // Extraer teléfono (10 dígitos), adultos, niños y correo si los proporcionó
+                // Si aún no hay fecha de entrada, mostrar detalles de la habitación elegida y pedir entrada + salida
+                if (entrada == null) {
+                    return "Con gusto iniciamos su **Pre-reserva** para la **Habitación #" + num + "** (**" + tipo + "**) en **" + ctxHotelRes + "**.\n\n"
+                            + "**Detalles de la habitación elegida:**\n" + detallesHab + "\n\n"
+                            + "*(Desde el chat la reservación siempre queda en estado **Pre-reserva** por 24 horas; el pago del 50% de anticipo se registra posteriormente en Recepción).*\n\n"
+                            + "Para continuar, indíqueme su **fecha de entrada y fecha de salida** (ej. `del 10 al 12 de diciembre` o `entro el 10 de diciembre`).";
+                }
+
+                // Validar explícitamente que la entrada no esté en el pasado
+                if (entrada.isBefore(LocalDate.now())) {
+                    return "La fecha de entrada (**" + entrada + "**) no puede estar en el pasado. Por favor indíqueme una fecha de entrada a partir de hoy (**" + LocalDate.now() + "**).";
+                }
+
+                // Si solo dio fecha de entrada (sin salida explícita), corroborar disponibilidad en BD para esa entrada y preguntar fecha de salida
+                if (!salidaExplicita) {
+                    if (habDb != null && !reservaRepository.findTraslapes(habDb.getIdHabitacion(), entrada, entrada.plusDays(1)).isEmpty()) {
+                        return "La **Habitación #" + num + "** en **" + ctxHotelRes + "** **no está disponible** para ingresar el **"
+                                + entrada + "** porque ya tiene una reservación en esa fecha.\n\n"
+                                + calendarioHabitacion(ctxHotelRes, habActiva);
+                    }
+                    return "La fecha de entrada (**" + entrada + "**) está **disponible** en nuestro sistema para la **Habitación #" + num + "** (**" + tipo + "**) en **" + ctxHotelRes + "**.\n\n"
+                            + "¿Cuál será su **fecha de salida**? *(También puede indicar cuántas noches se hospedará, por ejemplo: `12 de diciembre` o `2 noches`).*";
+                }
+
+                // Validar que la fecha de salida sea posterior a la entrada
+                if (salida == null || !salida.isAfter(entrada)) {
+                    return "La fecha de salida debe ser posterior a la fecha de entrada (**" + entrada + "**). Por favor indíqueme una fecha de salida válida.";
+                }
+
+                // Extraer teléfono (10 dígitos) del mensaje actual, memoria del chat o cuenta/perfil del usuario
                 String tel = null;
                 Matcher mTel = Pattern.compile("\\b(\\d{10})\\b").matcher(prompt.replaceAll("[-\\s]", ""));
                 if (mTel.find()) tel = mTel.group(1);
@@ -1125,42 +1565,126 @@ public class HotelChatServiceImpl implements HotelChatService {
                         }
                     } catch (Exception ignored) {}
                 }
+                if (tel == null) {
+                    tel = telCuenta;
+                }
 
+                // Extraer adultos y niños del mensaje actual; heredar del turno previo solo al confirmar o responder fecha de salida
                 int adultos = 1;
                 Matcher mAd = Pattern.compile("\\b(\\d+)\\s*adultos?\\b").matcher(norm);
-                if (mAd.find()) adultos = Math.max(1, Integer.parseInt(mAd.group(1)));
+                if (mAd.find()) {
+                    adultos = Math.max(1, Integer.parseInt(mAd.group(1)));
+                } else if ((esConfirmacion && esperandoConfirmacionResumen) || tieneTelAhora || esperandoFechaSalida) {
+                    try {
+                        List<Message> hist = chatMemory.get(scopedConvId);
+                        for (int i = hist.size() - 1; i >= 0; i--) {
+                            if (hist.get(i).getMessageType() != MessageType.USER) continue;
+                            Matcher mAdHist = Pattern.compile("\\b(\\d+)\\s*adultos?\\b").matcher(normalizarTexto(hist.get(i).getText()));
+                            if (mAdHist.find()) {
+                                adultos = Math.max(1, Integer.parseInt(mAdHist.group(1)));
+                                break;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
                 int ninos = 0;
                 Matcher mNi = Pattern.compile("\\b(\\d+)\\s*ninos?\\b").matcher(norm);
-                if (mNi.find()) ninos = Math.max(0, Integer.parseInt(mNi.group(1)));
+                if (mNi.find()) {
+                    ninos = Math.max(0, Integer.parseInt(mNi.group(1)));
+                } else if ((esConfirmacion && esperandoConfirmacionResumen) || tieneTelAhora || esperandoFechaSalida) {
+                    try {
+                        List<Message> hist = chatMemory.get(scopedConvId);
+                        for (int i = hist.size() - 1; i >= 0; i--) {
+                            if (hist.get(i).getMessageType() != MessageType.USER) continue;
+                            Matcher mNiHist = Pattern.compile("\\b(\\d+)\\s*ninos?\\b").matcher(normalizarTexto(hist.get(i).getText()));
+                            if (mNiHist.find()) {
+                                ninos = Math.max(0, Integer.parseInt(mNiHist.group(1)));
+                                break;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
 
-                String nombreTitular = user != null ? user.getNombre() : null;
-                String emailTitular = user != null ? user.getEmail() : null;
+                // Validar capacidad máxima y traslapes en BD ANTES de mostrar el Resumen de Pre-reserva
+                if (habDb != null) {
+                    int capMax = habDb.getTipoHabitacion() != null ? habDb.getTipoHabitacion().getCapacidad() : 2;
+                    if (adultos + ninos > capMax) {
+                        return "La **Habitación #" + num + "** (**" + tipo + "**) admite máximo **" + capMax
+                                + (capMax == 1 ? " ocupante" : " ocupantes") + "** y solicitó **" + (adultos + ninos)
+                                + "**. Por favor indique menos ocupantes o seleccione una categoría de mayor capacidad.";
+                    }
+                    if (!reservaRepository.findTraslapes(habDb.getIdHabitacion(), entrada, salida).isEmpty()) {
+                        return "La **Habitación #" + num + "** en **" + ctxHotelRes + "** ya se encuentra reservada u ocupada del **"
+                                + entrada + "** al **" + salida + "**. Por favor elija otras fechas o consulte otra habitación.";
+                    }
+                }
+
+                String nombreTitular = user != null ? user.getNombre() : "Por definir";
+                String emailTitular = user != null ? user.getEmail() : "Por definir";
                 Matcher mEmail = Pattern.compile("[\\w.%+-]+@[\\w.-]+\\.[a-zA-Z]{2,}").matcher(prompt);
                 if (mEmail.find()) emailTitular = mEmail.group();
 
-                // Paso 1: Si aún no confirma explícitamente, mostrar Resumen de Pre-reserva y pedir confirmación (SIN pedir pago)
-                if (!esConfirmacion) {
-                    long noches = Math.max(1, java.time.temporal.ChronoUnit.DAYS.between(fechas[0], fechas[1]));
+                // Paso 1: Mostrar Resumen completo con detalles de habitación, fechas, datos de contacto y monto exacto
+                boolean confirmaAhora = (esConfirmacion || tieneTelAhora) && esperandoConfirmacionResumen;
+                if (!confirmaAhora) {
+                    long noches = Math.max(1, java.time.temporal.ChronoUnit.DAYS.between(entrada, salida));
                     double tarifa = habActiva.get("precioBase") instanceof Number n ? n.doubleValue() : 0.0;
                     double totalEst = tarifa * noches;
                     double anticipoEst = totalEst * 0.5;
+                    long nochesTemporadaAlta = 0;
+                    if (habDb != null) {
+                        try {
+                            Map<String, Object> calc = reservaService.calcularTarifa(habDb, entrada, salida, false, false);
+                            totalEst = ((Number) calc.get("total")).doubleValue();
+                            anticipoEst = ((Number) calc.get("anticipoRequerido")).doubleValue();
+                            nochesTemporadaAlta = ((Number) calc.getOrDefault("nochesTemporadaAlta", 0)).longValue();
+                        } catch (Exception e) {
+                            log.warn("No se pudo calcular tarifa exacta en resumen: {}", e.getMessage());
+                        }
+                    }
+                    int capHab = (habDb != null && habDb.getTipoHabitacion() != null && habDb.getTipoHabitacion().getCapacidad() != null)
+                            ? habDb.getTipoHabitacion().getCapacidad() : 2;
+                    int pisoHab = (habDb != null && habDb.getPiso() != null) ? habDb.getPiso() : 1;
+                    String descHab = (habDb != null && habDb.getTipoHabitacion() != null && habDb.getTipoHabitacion().getDescripcion() != null)
+                            ? habDb.getTipoHabitacion().getDescripcion().trim() : "";
+
                     StringBuilder res = new StringBuilder();
                     res.append("### Resumen de Pre-reserva\n\n");
                     res.append("| Campo | Detalle |\n| :--- | :--- |\n");
                     res.append("| **Propiedad** | ").append(ctxHotelRes).append(" |\n");
-                    res.append("| **Habitación** | #").append(num).append(" — ").append(tipo).append(" |\n");
-                    res.append("| **Entrada (Check-in 15:00 h)** | ").append(fechas[0]).append(" |\n");
-                    res.append("| **Salida (Check-out 12:00 h)** | ").append(fechas[1]).append(" (").append(noches).append(noches == 1 ? " noche" : " noches").append(") |\n");
+                    res.append("| **Habitación** | #").append(num).append(" — ").append(tipo)
+                       .append(" (Piso ").append(pisoHab).append(", máx. ").append(capHab)
+                       .append(capHab == 1 ? " persona" : " personas").append(") |\n");
+                    if (!descHab.isBlank()) {
+                        res.append("| **Descripción** | ").append(descHab).append(" |\n");
+                    }
+                    res.append("| **Entrada (Check-in 15:00 h)** | ").append(entrada).append(" |\n");
+                    res.append("| **Salida (Check-out 12:00 h)** | ").append(salida).append(" (").append(noches).append(noches == 1 ? " noche" : " noches").append(") |\n");
+                    res.append("| **Ocupantes** | ").append(adultos).append(adultos == 1 ? " adulto" : " adultos")
+                       .append(ninos > 0 ? ", " + ninos + (ninos == 1 ? " niño" : " niños") : "").append(" |\n");
+                    res.append("| **Titular (Contacto)** | ").append(nombreTitular).append(" · ").append(emailTitular)
+                       .append(" · Tel: ").append(tel != null ? tel : "Pendiente de proporcionar").append(" |\n");
                     res.append("| **Modalidad** | **Pre-reserva** (apartado temporal 24 h; el pago se registra después en Recepción) |\n");
-                    if (!esAdmin && tarifa > 0) {
-                        res.append("| **Total estimado** | **").append(fmtMoneda(totalEst)).append("** |\n");
+                    if (!esAdmin && totalEst > 0) {
+                        String notaTemp = nochesTemporadaAlta > 0 ? " *(incluye temporada alta +25%)*" : "";
+                        res.append("| **Tarifa base / noche** | ").append(fmtMoneda(tarifa)).append(" |\n");
+                        res.append("| **Total estimado** | **").append(fmtMoneda(totalEst)).append("**").append(notaTemp).append(" |\n");
                         res.append("| **Anticipo del 50% (en Recepción)** | ").append(fmtMoneda(anticipoEst)).append(" |\n");
                     }
-                    res.append("\n¿Confirma que desea registrar esta **Pre-reserva**? Responda **Sí** para generar su folio y recibir el comprobante en PDF.");
+                    if (tel == null) {
+                        res.append("\nPor favor verifique que los detalles de la habitación, fechas, monto y sus datos de contacto sean correctos. Para confirmar esta **Pre-reserva**, responda **Sí** junto con su **teléfono celular a 10 dígitos** (ej. `Sí, 5512345678`).");
+                    } else {
+                        res.append("\nPor favor verifique que los detalles de la habitación, fechas, monto y sus datos de contacto sean correctos. ¿Confirma que desea registrar esta **Pre-reserva**? Responda **Sí** para generar su folio y recibir el comprobante en PDF.");
+                    }
                     return res.toString();
                 }
 
-                // Paso 2: El usuario confirmó ("sí" / "confirmo") → registrar Pre-reserva real en BD
+                // Si confirmó ("sí") pero su cuenta aún no tiene teléfono registrado, pedir solo el teléfono sin perder el contexto
+                if (tel == null) {
+                    return "Para registrar su **Pre-reserva** de la **Habitación #" + num + "** en **" + ctxHotelRes + "** (" + entrada + " → " + salida + "), solo indíqueme su **teléfono celular a 10 dígitos** (ej. `5512345678`).";
+                }
+
+                // Paso 2: El usuario confirmó ("sí" / "confirmo") tras revisar el Resumen → registrar Pre-reserva real en BD
                 String prevPrompt = HabitacionSearchTool.CURRENT_USER_PROMPT.get();
                 HabitacionSearchTool.CURRENT_USER_PROMPT.set("confirmo proceder con la pre-reserva");
                 Map<String, Object> creada;
@@ -1168,8 +1692,8 @@ public class HotelChatServiceImpl implements HotelChatService {
                     creada = reservaTool.crearReservacion(
                             ctxHotelRes,
                             num,
-                            fechas[0].toString(),
-                            fechas[1].toString(),
+                            entrada.toString(),
+                            salida.toString(),
                             nombreTitular,
                             tel,
                             emailTitular,
@@ -1513,8 +2037,8 @@ public class HotelChatServiceImpl implements HotelChatService {
             return sb.toString();
         }
 
-        // 4I. Habitación más cara / exclusiva
-        if (norm.contains("habitacion mas cara") || norm.contains("mas exclusiva")) {
+        // 4I. Habitación más cara / exclusiva (incluye consulta corta "la mas cara" o "mas costosa")
+        if (norm.contains("mas cara") || norm.contains("mas caro") || norm.contains("mas exclusiva") || norm.contains("mas costosa")) {
             List<Map<String, Object>> cara = habitacionSearchTool.findHabitacionMasCara();
             if (!cara.isEmpty()) {
                 Map<String, Object> h = cara.get(0);

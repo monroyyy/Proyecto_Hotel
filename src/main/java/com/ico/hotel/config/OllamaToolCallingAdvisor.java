@@ -61,10 +61,11 @@ public class OllamaToolCallingAdvisor extends ToolCallingAdvisor {
                 "\n\nPresenta esta información directamente al usuario en español con trato formal. No incluyas encabezados como 'Respuesta al usuario:' ni menciones instrucciones internas."
         ));
 
+        // Usar llama3.1:latest local como modelo por defecto cuando OllamaOptions no lo especifica
         ToolCallingChatOptions newOptions;
         if (options instanceof OllamaChatOptions ollamaOptions) {
             newOptions = ollamaOptions.mutate()
-                    .model(ollamaOptions.getModel() != null ? ollamaOptions.getModel() : "llama3.2:latest")
+                    .model(ollamaOptions.getModel() != null ? ollamaOptions.getModel() : "llama3.1:latest")
                     .toolCallbacks(List.of())
                     .build();
         } else if (options instanceof ToolCallingChatOptions toolOptions) {
@@ -73,7 +74,7 @@ public class OllamaToolCallingAdvisor extends ToolCallingAdvisor {
                     .build();
         } else {
             newOptions = OllamaChatOptions.builder()
-                    .model("llama3.2:latest")
+                    .model("llama3.1:latest")
                     .toolCallbacks(List.of())
                     .build();
         }
@@ -94,10 +95,11 @@ public class OllamaToolCallingAdvisor extends ToolCallingAdvisor {
     }
 
     private Prompt stripToolsFromPrompt(List<Message> instructions, ChatOptions options) {
+        // Usar llama3.1:latest local como modelo por defecto cuando OllamaOptions no lo especifica
         ToolCallingChatOptions newOptions;
         if (options instanceof OllamaChatOptions ollamaOptions) {
             newOptions = ollamaOptions.mutate()
-                    .model(ollamaOptions.getModel() != null ? ollamaOptions.getModel() : "llama3.2:latest")
+                    .model(ollamaOptions.getModel() != null ? ollamaOptions.getModel() : "llama3.1:latest")
                     .toolCallbacks(List.of())
                     .build();
         } else if (options instanceof ToolCallingChatOptions toolOptions) {
@@ -106,7 +108,7 @@ public class OllamaToolCallingAdvisor extends ToolCallingAdvisor {
                     .build();
         } else {
             newOptions = OllamaChatOptions.builder()
-                    .model("llama3.2:latest")
+                    .model("llama3.1:latest")
                     .toolCallbacks(List.of())
                     .build();
         }

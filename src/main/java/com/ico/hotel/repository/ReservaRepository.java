@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -48,8 +49,13 @@ public interface ReservaRepository extends JpaRepository<Reserva, Integer> {
     List<Integer> findHabitacionesOcupadas(@Param("entrada") LocalDate entrada,
                                            @Param("salida") LocalDate salida);
 
-    @Query("SELECT r FROM Reserva r WHERE r.estado = 'Pre-reserva' AND (r.fechaExpiracion < :ahora OR r.fechaSalida <= :hoy)")
+    // Incluye pre-reservas cuya fecha de entrada ya pasó para no dejar pendientes de días anteriores
+    @Query("SELECT r FROM Reserva r WHERE r.estado = 'Pre-reserva' AND (r.fechaExpiracion < :ahora OR r.fechaSalida <= :hoy OR r.fechaEntrada < :hoy)")
     List<Reserva> findPreReservasVencidas(@Param("ahora") LocalDateTime ahora, @Param("hoy") LocalDate hoy);
+
+    // Reservaciones en curso (Ocupada) cuya fecha de salida ya se cumplió para cierre automático
+    @Query("SELECT r FROM Reserva r WHERE r.estado = 'Ocupada' AND r.fechaSalida <= :hoy")
+    List<Reserva> findOcupadasParaFinalizar(@Param("hoy") LocalDate hoy);
 
     @Query("SELECT r FROM Reserva r WHERE r.estado = 'Confirmada' AND r.fechaEntrada <= :hoy")
     List<Reserva> findConfirmadasParaNoShow(@Param("hoy") LocalDate hoy);
@@ -176,4 +182,24 @@ public interface ReservaRepository extends JpaRepository<Reserva, Integer> {
                                             @Param("fin") LocalDate fin,
                                             @Param("idHotel") Integer idHotel,
                                             Pageable pageable);
+
+    // Cuenta reservaciones activas de un usuario para bloquear la eliminación de su cuenta
+    long countByUsuarioIdUsuarioAndEstadoIn(Integer idUsuario, Collection<String> estados);
+
+    // Desvincula el usuario de reservaciones históricas (Finalizada, Cancelada, No-Show) antes de eliminar la cuenta, conservando el historial contable y el registro de huésped
+    @Modifying
+    @Query("UPDATE Reserva r SET r.usuario = null WHERE r.usuario.idUsuario = :idUsuario")
+    int desvincularUsuarioDeReservas(@Param("idUsuario") Integer idUsuario);
+
+    // Cuenta reservaciones activas de un hotel para impedir su desactivación o eliminación
+    long countByHabitacionHotelIdHotelAndEstadoIn(Integer idHotel, Collection<String> estados);
+
+    // Cuenta reservaciones totales de una habitación para impedir eliminarla si tiene historial
+    long countByHabitacionIdHabitacion(Integer idHabitacion);
+
+    // Obtiene el máximo de ocupantes en reservaciones activas de una categoría para evitar reducir su capacidad por debajo
+    @Query("SELECT COALESCE(MAX(COALESCE(r.adultos, 1) + COALESCE(r.ninos, 0)), 0) "
+            + "FROM Reserva r WHERE r.habitacion.tipoHabitacion.idTipo = :idTipo "
+            + "AND r.estado IN ('Pre-reserva','Confirmada','Ocupada')")
+    int findMaxOcupantesEnReservasActivasPorTipo(@Param("idTipo") Integer idTipo);
 }

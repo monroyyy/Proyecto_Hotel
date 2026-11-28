@@ -4,6 +4,8 @@ import com.ico.hotel.dto.auth.UsuarioResponse;
 import com.ico.hotel.models.Rol;
 import com.ico.hotel.models.TokenVerificacion;
 import com.ico.hotel.models.Usuario;
+import com.ico.hotel.repository.ReservaRepository;
+import com.ico.hotel.repository.TokenRecuperacionPasswordRepository;
 import com.ico.hotel.repository.TokenVerificacionRepository;
 import com.ico.hotel.repository.UsuarioRepository;
 import com.ico.hotel.security.CustomUserDetails;
@@ -31,6 +33,8 @@ public class UsuarioController {
 
     private final UsuarioRepository usuarioRepository;
     private final TokenVerificacionRepository tokenVerificacionRepository;
+    private final TokenRecuperacionPasswordRepository tokenRecuperacionPasswordRepository;
+    private final ReservaRepository reservaRepository;
     private final PasswordEncoder passwordEncoder;
 
     @GetMapping
@@ -45,14 +49,21 @@ public class UsuarioController {
     public ResponseEntity<?> crearUsuarioDesdeAdmin(@RequestBody Map<String, Object> body) {
         String nombre = body.get("nombre") != null ? String.valueOf(body.get("nombre")).trim() : "";
         String email = body.get("email") != null ? String.valueOf(body.get("email")).trim().toLowerCase() : "";
+        String telefono = body.get("telefono") != null ? String.valueOf(body.get("telefono")).replaceAll("\\D", "") : "";
         String password = body.get("password") != null ? String.valueOf(body.get("password")) : "";
         String rolStr = body.get("rol") != null ? String.valueOf(body.get("rol")).trim().toUpperCase() : "HUESPED";
         boolean verificado = body.get("verificado") == null || Boolean.parseBoolean(String.valueOf(body.get("verificado")));
         boolean activo = body.get("activo") == null || Boolean.parseBoolean(String.valueOf(body.get("activo")));
 
-        if (nombre.isBlank() || email.isBlank() || password.length() < 8) {
+        if (nombre.isBlank() || email.isBlank() || telefono.length() != 10 || password.length() < 8) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "error", "Nombre, correo válido y contraseña de al menos 8 caracteres son obligatorios."
+                    "error", "Nombre, correo válido, teléfono de 10 dígitos y contraseña de al menos 8 caracteres son obligatorios."
+            ));
+        }
+        // Bloquear etiquetas HTML o caracteres de inyección en el nombre del usuario
+        if (nombre.contains("<") || nombre.contains(">")) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "El nombre no puede contener etiquetas HTML ni los caracteres '<' o '>'."
             ));
         }
 
@@ -72,6 +83,7 @@ public class UsuarioController {
         Usuario nuevo = Usuario.builder()
                 .nombre(nombre)
                 .email(email)
+                .telefono(telefono)
                 .passwordHash(passwordEncoder.encode(password))
                 .rol(rol)
                 .verificado(verificado)
@@ -100,6 +112,9 @@ public class UsuarioController {
             if (nuevoNombre.isBlank()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "El nombre del usuario no puede estar vacío."));
             }
+            if (nuevoNombre.contains("<") || nuevoNombre.contains(">")) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El nombre no puede contener etiquetas HTML ni los caracteres '<' o '>'."));
+            }
             u.setNombre(nuevoNombre);
         }
 
@@ -114,6 +129,15 @@ public class UsuarioController {
                 ));
             }
             u.setEmail(nuevoEmail);
+        }
+
+        // Actualizar teléfono obligatorio de 10 dígitos cuando se envía en la edición
+        if (body.containsKey("telefono") && body.get("telefono") != null) {
+            String nuevoTel = String.valueOf(body.get("telefono")).replaceAll("\\D", "");
+            if (nuevoTel.length() != 10) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El teléfono debe tener exactamente 10 dígitos numéricos."));
+            }
+            u.setTelefono(nuevoTel);
         }
 
         if (body.containsKey("rol") && body.get("rol") != null) {
@@ -241,12 +265,30 @@ public class UsuarioController {
             return ResponseEntity.badRequest().body(Map.of("error", "Por seguridad, no puede eliminar su propia cuenta de administrador en sesión."));
         }
 
+        // Bloquear eliminación si el usuario tiene reservaciones activas (Pre-reserva, Confirmada u Ocupada)
+        long reservasActivas = reservaRepository.countByUsuarioIdUsuarioAndEstadoIn(
+                id, List.of("Pre-reserva", "Confirmada", "Ocupada"));
+        if (reservasActivas > 0) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                    "error", "No se puede eliminar la cuenta porque tiene " + reservasActivas
+                            + " reservación(es) activa(s) (Pre-reserva, Confirmada u Ocupada). Cancele o finalice las estancias primero, o suspenda la cuenta."
+            ));
+        }
+
+        // Desvincular reservaciones históricas (Finalizada, Cancelada, No-Show) para conservar el registro contable y los datos del huésped sin romper la FK
+        int historialDesvinculado = reservaRepository.desvincularUsuarioDeReservas(id);
+
         List<TokenVerificacion> tokens = tokenVerificacionRepository.findByUsuario(u);
         if (!tokens.isEmpty()) {
             tokenVerificacionRepository.deleteAll(tokens);
         }
+        // Eliminar tokens de recuperación de contraseña asociados antes de borrar el usuario
+        tokenRecuperacionPasswordRepository.eliminarPorUsuario(id);
 
         usuarioRepository.delete(u);
-        return ResponseEntity.ok(Map.of("mensaje", "Usuario eliminado correctamente."));
+        String mensaje = historialDesvinculado > 0
+                ? "Usuario eliminado correctamente. Sus " + historialDesvinculado + " reservación(es) histórica(s) se conservaron en el registro contable."
+                : "Usuario eliminado correctamente.";
+        return ResponseEntity.ok(Map.of("mensaje", mensaje));
     }
 }

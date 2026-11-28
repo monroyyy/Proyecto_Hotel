@@ -1276,10 +1276,28 @@ select.chat-model-select {
   transform: scale(0.92);
 }
 
-@media (max-width: 768px) {
+/* Activar modo pantalla completa también en móvil apaisado de baja altura (ej. 844×390) */
+@media (max-width: 768px), (max-height: 520px) {
+  /* Ventana de chat adaptada al viewport móvil sin desbordamientos */
+  .chat-widget-container {
+    bottom: 14px;
+    right: 14px;
+  }
+
   .chat-window {
-    width: calc(100vw - 24px);
-    height: calc(100vh - 100px);
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    height: calc(100dvh - 16px);
+    max-height: none;
+    border-radius: 16px;
+  }
+
+  /* Ocultar el botón flotante cuando el chat está abierto en móvil para no tapar el botón de enviar */
+  .chat-floating-btn.active {
+    display: none;
   }
 
   .chat-sidebar {

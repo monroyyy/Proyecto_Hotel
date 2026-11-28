@@ -127,6 +127,8 @@ export async function registrarUsuario(datos) {
         body: JSON.stringify({
             nombre: datos.nombre,
             email: datos.email,
+            // Enviar teléfono obligatorio de 10 dígitos en el registro público
+            telefono: datos.telefono,
             password: datos.password,
         }),
     });
@@ -415,6 +417,7 @@ export async function getReservas(opts = {}) {
     if (opts.hotelId) params.append('hotelId', String(opts.hotelId));
     if (opts.entradaDesde) params.append('entradaDesde', opts.entradaDesde);
     if (opts.entradaHasta) params.append('entradaHasta', opts.entradaHasta);
+    if (opts.soloHoy) params.append('soloHoy', 'true');
     if (opts.salidaDesde) params.append('salidaDesde', opts.salidaDesde);
     if (opts.salidaHasta) params.append('salidaHasta', opts.salidaHasta);
     if (opts.q && opts.q.trim()) params.append('q', opts.q.trim());

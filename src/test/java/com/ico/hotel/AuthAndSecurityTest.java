@@ -347,7 +347,14 @@ class AuthAndSecurityTest {
 
         when(mockReservaRepo.findByFolioIgnoreCase("HP-2026-00099")).thenReturn(Optional.of(reservaAjena));
 
-        ReservaTool reservaTool = new ReservaTool(mock(ReservaService.class), habRepo, mockReservaRepo, hotelRepo, mock(com.ico.hotel.repository.HuespedRepository.class));
+        // Constructor actualizado con UsuarioRepository mockeado
+        ReservaTool reservaTool = new ReservaTool(
+                mock(ReservaService.class),
+                habRepo,
+                mockReservaRepo,
+                hotelRepo,
+                mock(com.ico.hotel.repository.HuespedRepository.class),
+                mock(com.ico.hotel.repository.UsuarioRepository.class));
         Map<String, Object> folioResult = reservaTool.consultarReservacionPorFolio("HP-2026-00099");
         assertThat(folioResult).containsEntry("accesoRestringido", true);
     }

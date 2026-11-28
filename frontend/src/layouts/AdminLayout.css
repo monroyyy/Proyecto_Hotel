@@ -353,4 +353,32 @@
     .admin-navbar .admin-account-trigger {
         padding: 3px 8px 3px 4px;
     }
+
+    /* Sub-barra de navegación con desplazamiento horizontal táctil en móvil */
+    .admin-subnav-inner {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        gap: 4px;
+    }
+    .admin-subnav-inner::-webkit-scrollbar {
+        display: none;
+    }
+    .admin-subnav .admin-tab-btn {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-topbar {
+        height: 54px;
+    }
+    .admin-topbar-actions {
+        gap: 6px;
+    }
+    .admin-subnav .admin-tab-btn {
+        padding: 9px 10px;
+        font-size: 0.8rem;
+    }
 }

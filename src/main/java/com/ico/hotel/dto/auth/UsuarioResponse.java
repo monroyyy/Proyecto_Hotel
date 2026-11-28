@@ -25,15 +25,16 @@ public class UsuarioResponse {
     private LocalDateTime fechaCreacion;
 
     public static UsuarioResponse fromEntity(Usuario u) {
-        return fromEntity(u, null);
+        return fromEntity(u, u != null ? u.getTelefono() : null);
     }
 
     public static UsuarioResponse fromEntity(Usuario u, String telefono) {
+        String telFinal = (telefono != null && !telefono.isBlank()) ? telefono : (u != null ? u.getTelefono() : null);
         return UsuarioResponse.builder()
                 .idUsuario(u.getIdUsuario())
                 .nombre(u.getNombre())
                 .email(u.getEmail())
-                .telefono(telefono)
+                .telefono(telFinal)
                 .rol(u.getRol())
                 .verificado(u.getVerificado())
                 .activo(u.getActivo())

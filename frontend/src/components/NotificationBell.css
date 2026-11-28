@@ -113,6 +113,19 @@
     to { transform: rotate(360deg); }
 }
 
+/* En móvil el panel de notificaciones se ancla al ancho completo para no cortarse */
+@media (max-width: 600px) {
+    .hp-notif-dropdown {
+        position: fixed;
+        top: 64px;
+        left: 12px;
+        right: 12px;
+        width: auto;
+        max-width: none;
+        max-height: calc(100dvh - 80px);
+    }
+}
+
 .hp-notif-header {
     padding: 12px 16px;
     background: #ffffff;

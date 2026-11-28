@@ -215,11 +215,51 @@ function obtenerAmenidadesHabitacion(hab) {
     return base;
 }
 
-// Helper para sumar días a una fecha YYYY-MM-DD
+// Calcula tarifa exacta del portal replicando la regla del backend (temporada alta +25% en Jul, Ago y Dic)
+function calcularTarifaPortal(precioBase, entradaStr, salidaStr, cuna = false, camaExtra = false) {
+    const base = Number(precioBase || 0);
+    if (!entradaStr || !salidaStr || base <= 0) {
+        return { noches: 1, nochesTemporadaAlta: 0, total: base, anticipo: Number((base * 0.5).toFixed(2)) };
+    }
+    const dIni = new Date(entradaStr + 'T12:00:00');
+    const dFin = new Date(salidaStr + 'T12:00:00');
+    let noches = 0;
+    let nochesTemporadaAlta = 0;
+    let subtotal = 0;
+    for (let d = new Date(dIni); d < dFin; d.setDate(d.getDate() + 1)) {
+        noches++;
+        const mes = d.getMonth() + 1;
+        if (mes === 7 || mes === 8 || mes === 12) {
+            nochesTemporadaAlta++;
+            subtotal += base * 1.25;
+        } else {
+            subtotal += base;
+        }
+    }
+    if (noches === 0) {
+        noches = 1;
+        subtotal = base;
+    }
+    let extras = 0;
+    if (cuna) extras += 100 * noches;
+    if (camaExtra) extras += 250 * noches;
+    const total = Number((subtotal + extras).toFixed(2));
+    return { noches, nochesTemporadaAlta, total, anticipo: Number((total * 0.5).toFixed(2)) };
+}
+
+// Helper para formatear una fecha Date a YYYY-MM-DD en zona horaria LOCAL (evita salto de día en UTC después de las 18:00)
+function obtenerFechaLocalIso(date = new Date()) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+// Helper para sumar días a una fecha YYYY-MM-DD en hora local
 function sumarDiasFecha(fechaStr, dias) {
     const base = fechaStr ? new Date(fechaStr + 'T12:00:00') : new Date();
     base.setDate(base.getDate() + Number(dias));
-    return base.toISOString().split('T')[0];
+    return obtenerFechaLocalIso(base);
 }
 
 // Formatea fecha YYYY-MM-DD en formato legible corto ("04 Nov" o "04 Nov 2026")
@@ -245,6 +285,31 @@ function evaluarDisponibilidadHabitacion(hab, entradaStr, salidaStr) {
             proximaOcupacion: null,
             fechaLiberacion: null,
             periodos: []
+        };
+    }
+
+    // Rechazar fechas en el pasado o invertidas (salida <= entrada) para no mostrar "Fechas disponibles" ni habilitar el envío
+    const hoyIso = obtenerFechaLocalIso();
+    if (entradaStr && entradaStr < hoyIso) {
+        return {
+            esVendible: true,
+            disponibleEnFechas: false,
+            conflicto: null,
+            proximaOcupacion: null,
+            fechaLiberacion: hoyIso,
+            errorFechas: 'La fecha de entrada no puede estar en el pasado.',
+            periodos: Array.isArray(hab?.periodosOcupados) ? hab.periodosOcupados : []
+        };
+    }
+    if (entradaStr && salidaStr && salidaStr <= entradaStr) {
+        return {
+            esVendible: true,
+            disponibleEnFechas: false,
+            conflicto: null,
+            proximaOcupacion: null,
+            fechaLiberacion: null,
+            errorFechas: 'La fecha de salida debe ser posterior a la fecha de entrada.',
+            periodos: Array.isArray(hab?.periodosOcupados) ? hab.periodosOcupados : []
         };
     }
 
@@ -296,8 +361,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
     const [loading, setLoading] = useState(true);
     const [alertMsg, setAlertMsg] = useState({ type: '', text: '' });
 
-    // Fechas por defecto (hoy y +2 noches)
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Fechas por defecto en zona horaria local (hoy y +2 noches)
+    const todayStr = obtenerFechaLocalIso();
     const defaultCheckoutStr = sumarDiasFecha(todayStr, 2);
 
     const [filtroHotel, setFiltroHotel] = useState('TODOS');
@@ -339,10 +404,11 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
     const [notasReserva, setNotasReserva] = useState('');
     const [procesandoReserva, setProcesandoReserva] = useState(false);
 
-    // Modal para reprogramar fechas
+    // Modal para reprogramar fechas y su error inline
     const [reservaReprogramar, setReservaReprogramar] = useState(null);
     const [nuevaEntrada, setNuevaEntrada] = useState('');
     const [nuevaSalida, setNuevaSalida] = useState('');
+    const [errorReprogramar, setErrorReprogramar] = useState('');
     const [extendiendoReservaId, setExtendiendoReservaId] = useState(null);
 
     // Modal para cancelar reservación con desglose de reembolso
@@ -758,9 +824,21 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
     const handleGuardarNuevasFechas = async (e) => {
         e.preventDefault();
         if (!reservaReprogramar) return;
+        setErrorReprogramar('');
+        if (!nuevaEntrada || !nuevaSalida || nuevaEntrada < todayStr) {
+            setErrorReprogramar('La nueva fecha de llegada no puede estar en el pasado.');
+            return;
+        }
+        if (nuevaSalida <= nuevaEntrada) {
+            setErrorReprogramar('La fecha de salida debe ser posterior a la fecha de llegada.');
+            return;
+        }
         try {
             await actualizarReserva(reservaReprogramar.idReserva, {
                 idHabitacion: reservaReprogramar.habitacion?.idHabitacion,
+                nombre: reservaReprogramar.huesped?.nombre || user?.nombre || 'Cliente',
+                telefono: reservaReprogramar.huesped?.telefono || telefonoHuesped || '',
+                email: reservaReprogramar.huesped?.email || user?.email || '',
                 fechaEntrada: nuevaEntrada,
                 fechaSalida: nuevaSalida,
                 adultos: reservaReprogramar.adultos || 1,
@@ -773,7 +851,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             setReservaReprogramar(null);
             cargarDatos();
         } catch (err) {
-            showAlert('error', err.message);
+            setErrorReprogramar(err.message || 'No se pudieron actualizar las fechas.');
         }
     };
 
@@ -1744,7 +1822,17 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                             <div className="hp-boarding-specs-row">
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                                                     <Users size={14} color="var(--brand-terracotta)" />
-                                                    <strong className="num">{(r.adultos || 1) + (r.ninos || 0)}</strong> huéspedes ({r.adultos || 1} adultos{r.ninos ? `, ${r.ninos} niños` : ''})
+                                                    {/* Pluralización correcta en singular y plural */}
+                                                    {(() => {
+                                                        const adultos = r.adultos || 1;
+                                                        const ninos = r.ninos || 0;
+                                                        const totalHuespedes = adultos + ninos;
+                                                        return (
+                                                            <>
+                                                                <strong className="num">{totalHuespedes}</strong> {totalHuespedes === 1 ? 'huésped' : 'huéspedes'} ({adultos} {adultos === 1 ? 'adulto' : 'adultos'}{ninos ? `, ${ninos} ${ninos === 1 ? 'niño' : 'niños'}` : ''})
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </span>
                                                 <span>•</span>
                                                 <span>Piso <strong className="num">{r.habitacion?.piso || 1}</strong></span>
@@ -1790,7 +1878,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                 <div className="hp-boarding-finance-detail">
                                                     <span>Anticipo:</span>
                                                     <strong style={{ color: Number(r.anticipo || 0) > 0 ? '#059669' : '#64748b' }} className="num">
-                                                        ${Number(r.anticipo || 0).toFixed(2)}
+                                                        ${Number(r.anticipo || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </strong>
                                                 </div>
                                                 {r.estado === 'Cancelada' ? (
@@ -1804,13 +1892,13 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                         fontWeight: 600,
                                                         lineHeight: 1.3
                                                     }}>
-                                                        {r.observaciones ? r.observaciones : 'Reservación cancelada por administración'}
+                                                        {r.observaciones ? r.observaciones : 'Reservación cancelada'}
                                                     </div>
                                                 ) : (
                                                     <div className="hp-boarding-finance-detail">
                                                         <span>Restante al Check-in:</span>
                                                         <strong style={{ color: saldoPendiente > 0 ? 'var(--brand-terracotta)' : '#059669' }} className="num">
-                                                            ${saldoPendiente.toFixed(2)}
+                                                            ${saldoPendiente.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </strong>
                                                     </div>
                                                 )}
@@ -1988,7 +2076,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         <label className="form-label" htmlFor="perfil-email">Correo Electrónico (no editable)</label>
                                         <input id="perfil-email" type="email" className="form-input" value={user?.email || ''} disabled />
                                     </div>
-                                    <div className="form-group" style={{ marginBottom: 0, gridColumn: 'span 2' }}>
+                                    {/* Clase responsiva para ocupar 2 columnas en desktop y 1 en móvil */}
+                                    <div className="form-group hp-profile-field-full" style={{ marginBottom: 0 }}>
                                         <label className="form-label" htmlFor="perfil-telefono">Teléfono de Contacto (10 dígitos)</label>
                                         <input
                                             id="perfil-telefono"
@@ -2651,18 +2740,25 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                             })()}
                         </div>
 
-                        {/* Desglose Financiero con .num */}
+                        {/* Desglose Financiero con .num (incluye recargo de temporada alta +25% en Jul, Ago y Dic) */}
                         {(() => {
                             const precioNoche = Number(habitacionSeleccionada.tipoHabitacion?.precioBase || 0);
-                            const totalEstimado = precioNoche * nochesSeleccionadas;
-                            const anticipo = totalEstimado * 0.5;
+                            const calc = calcularTarifaPortal(precioNoche, fechaEntrada, fechaSalida, cunaExtra, camaExtra);
+                            const totalEstimado = calc.total;
+                            const anticipo = calc.anticipo;
 
                             return (
                                 <div className="hp-reserva-pricing-breakdown">
                                     <div className="hp-reserva-price-row">
-                                        <span>Tarifa por noche ({nochesSeleccionadas} {nochesSeleccionadas === 1 ? 'noche' : 'noches'})</span>
+                                        <span>Tarifa por noche ({calc.noches} {calc.noches === 1 ? 'noche' : 'noches'})</span>
                                         <span className="num">${precioNoche.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN</span>
                                     </div>
+                                    {calc.nochesTemporadaAlta > 0 && (
+                                        <div className="hp-reserva-price-row">
+                                            <span>Recargo temporada alta (+25% · {calc.nochesTemporadaAlta} {calc.nochesTemporadaAlta === 1 ? 'noche' : 'noches'})</span>
+                                            <span className="hp-reserva-included-tag">Aplicado</span>
+                                        </div>
+                                    )}
                                     <div className="hp-reserva-price-row">
                                         <span>Impuestos y servicios hoteleros</span>
                                         <span className="hp-reserva-included-tag">Incluidos</span>
@@ -2851,12 +2947,12 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                             </div>
                             <div style={{ background: 'var(--brand-sand-light)', padding: 12, borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', fontWeight: 700, letterSpacing: '0.06em' }}>TOTAL DE ESTANCIA</span>
-                                <strong className="num" style={{ fontSize: '1.1rem', color: 'var(--brand-ocean)' }}>${Number(voucherReserva.total || 0).toFixed(2)} MXN</strong>
+                                <strong className="num" style={{ fontSize: '1.1rem', color: 'var(--brand-ocean)' }}>${Number(voucherReserva.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN</strong>
                             </div>
                             <div style={{ background: 'var(--brand-sand-light)', padding: 12, borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', fontWeight: 700, letterSpacing: '0.06em' }}>ANTICIPO REGISTRADO</span>
                                 <strong className="num" style={{ fontSize: '1.1rem', color: Number(voucherReserva.anticipo || 0) > 0 ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                                    ${Number(voucherReserva.anticipo || 0).toFixed(2)} MXN
+                                    ${Number(voucherReserva.anticipo || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN
                                 </strong>
                             </div>
                         </div>
@@ -2995,7 +3091,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                ================================================================= */}
             <Modal
                 isOpen={Boolean(reservaReprogramar)}
-                onClose={() => setReservaReprogramar(null)}
+                onClose={() => { setReservaReprogramar(null); setErrorReprogramar(''); }}
                 title={reservaReprogramar ? `Cambiar fechas (${reservaReprogramar.folio || '#' + reservaReprogramar.idReserva})` : ''}
                 subtitle="Selecciona tus nuevas fechas de llegada y salida"
                 icon={Calendar}
@@ -3003,6 +3099,12 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             >
                 {reservaReprogramar && (
                     <form onSubmit={handleGuardarNuevasFechas} className="modal-form">
+                        {errorReprogramar && (
+                            <div className="alert alert-error">
+                                <Info size={16} />
+                                <span>{errorReprogramar}</span>
+                            </div>
+                        )}
                         <div className="form-group">
                             <label className="form-label">Nueva Fecha de Llegada *</label>
                             <input
