@@ -2057,31 +2057,23 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                ================================================================= */}
             {activeSection === 'mi-perfil' && (
                 <section>
-                    <div className="hp-section-header">
-                        <div>
-                            <div className="hp-section-kicker">Espacio Personal</div>
-                            <h2 className="hp-section-title">Perfil del Huésped</h2>
-                            <p className="hp-section-desc">
-                                Administra tu información personal, datos de contacto y credenciales de acceso.
-                            </p>
-                        </div>
-                        {isAuthenticated && (
-                            <button type="button" className="btn btn-secondary" onClick={() => cambiarSeccion('mis-reservas')}>
-                                <CalendarCheck size={16} /> Ver Mis Reservaciones ({misReservas.length})
-                            </button>
-                        )}
+                    <div className="hp-guide-header">
+                        <h1 className="hp-hero-title">Mi Perfil</h1>
+                        <p className="hp-section-desc">
+                            Administra tu información personal, datos de contacto y credenciales de acceso.
+                        </p>
                     </div>
 
                     {!isAuthenticated ? (
                         <div className="table-card" style={{ padding: '56px 24px', textAlign: 'center', maxWidth: 560, margin: '0 auto' }}>
-                            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(196, 85, 58, 0.1)', color: 'var(--brand-terracotta)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--brand-terracotta-light)', color: 'var(--brand-terracotta)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
                                 <User size={26} />
                             </div>
-                            <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+                            <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--brand-ocean)', marginBottom: 8 }}>
                                 Tu perfil de huésped está protegido
                             </h3>
-                            <p style={{ color: '#64748b', maxWidth: 440, margin: '0 auto 24px', fontSize: '0.95rem', lineHeight: 1.55 }}>
-                                Inicia sesión o regístrate para configurar tus preferencias de estancia, teléfono de contacto y credenciales de acceso.
+                            <p style={{ color: 'var(--text-muted)', maxWidth: 440, margin: '0 auto 24px', fontSize: '0.95rem', lineHeight: 1.55 }}>
+                                Inicia sesión o regístrate para configurar tus datos de contacto y credenciales de acceso.
                             </p>
                             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
                                 <button type="button" className="btn btn-primary" onClick={() => navigate('/login')}>
@@ -2099,21 +2091,26 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 {(user?.nombre || 'H')[0].toUpperCase()}
                             </div>
                             <div className="hp-profile-main-meta">
-                                <h3 className="hp-profile-name">{user?.nombre || 'Huésped Distinguido'}</h3>
+                                <h2 className="hp-profile-name">{user?.nombre || 'Huésped Distinguido'}</h2>
                                 <div className="hp-profile-email">
-                                    <Mail size={15} /> {user?.email}
+                                    <Mail size={14} /> {user?.email}
                                 </div>
-                                <div className="hp-profile-badge-row">
-                                    <span className="hp-profile-verified-badge">
-                                        <CheckCircle2 size={13} /> Correo Verificado
+                                <div className="hp-profile-status-line">
+                                    <span className="hp-profile-verified-inline">
+                                        <span className="hp-room-avail-dot" aria-hidden="true" />
+                                        Correo verificado
                                     </span>
-                                    <span className="hp-profile-reservas-badge">
-                                        <CalendarCheck size={13} /> {misReservas.length} {misReservas.length === 1 ? 'reservación' : 'reservaciones'}
+                                    <span className="hp-profile-sep" aria-hidden="true">&middot;</span>
+                                    <span className="num">
+                                        {misReservas.length} {misReservas.length === 1 ? 'reservación' : 'reservaciones'}
                                     </span>
                                     {totalNochesAcumuladas > 0 && (
-                                        <span className="hp-profile-reservas-badge">
-                                            <Moon size={13} /> {totalNochesAcumuladas} {totalNochesAcumuladas === 1 ? 'noche acumulada' : 'noches acumuladas'}
-                                        </span>
+                                        <>
+                                            <span className="hp-profile-sep" aria-hidden="true">&middot;</span>
+                                            <span className="num">
+                                                {totalNochesAcumuladas} {totalNochesAcumuladas === 1 ? 'noche acumulada' : 'noches acumuladas'}
+                                            </span>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -2123,9 +2120,9 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                             {/* Bloque 1: Información Personal y Teléfono de Contacto */}
                             <form onSubmit={handleGuardarPreferenciasPerfil} className="hp-profile-subblock">
                                 <div className="hp-profile-block-heading">
-                                    <User size={18} color="var(--brand-terracotta)" />
+                                    <span className="hp-editorial-icon-badge"><User size={16} /></span>
                                     <div>
-                                        <h4 className="hp-profile-form-title">Información de Contacto</h4>
+                                        <h3 className="hp-profile-form-title">Información de Contacto</h3>
                                         <p className="hp-profile-block-desc">Datos asociados a tus itinerarios y notificaciones de estancia.</p>
                                     </div>
                                 </div>
@@ -2145,7 +2142,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                     </div>
                                     <div className="form-group" style={{ marginBottom: 0 }}>
                                         <label className="form-label" htmlFor="perfil-email">Correo Electrónico (no editable)</label>
-                                        <input id="perfil-email" type="email" className="form-input" value={user?.email || ''} disabled />
+                                        <input id="perfil-email" type="email" className="form-input hp-input-readonly" value={user?.email || ''} disabled />
                                     </div>
                                     {/* Clase responsiva para ocupar 2 columnas en desktop y 1 en móvil */}
                                     <div className="form-group hp-profile-field-full" style={{ marginBottom: 0 }}>
@@ -2176,9 +2173,9 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                             {/* Bloque 2: Seguridad y Cambio de Contraseña */}
                             <div className="hp-profile-subblock">
                                 <div className="hp-profile-block-heading">
-                                    <KeyRound size={18} color="var(--brand-terracotta)" />
+                                    <span className="hp-editorial-icon-badge"><KeyRound size={16} /></span>
                                     <div>
-                                        <h4 className="hp-profile-form-title">Seguridad y Cambio de Contraseña</h4>
+                                        <h3 className="hp-profile-form-title">Seguridad y Cambio de Contraseña</h3>
                                         <p className="hp-profile-block-desc">
                                             Actualiza tu clave de acceso ingresando tu contraseña actual y la nueva dos veces.
                                         </p>
@@ -2206,10 +2203,11 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 )}
 
                                 <form onSubmit={handleCambiarPassword} className="hp-profile-pw-form">
-                                    <div className="form-group">
-                                        <label className="form-label">Contraseña Actual</label>
+                                    <div className="form-group" style={{ marginBottom: '1.15rem' }}>
+                                        <label className="form-label" htmlFor="perfil-pw-actual">Contraseña Actual</label>
                                         <div className="hp-pw-input-wrap">
                                             <input
+                                                id="perfil-pw-actual"
                                                 type={showPwActual ? 'text' : 'password'}
                                                 className="form-input"
                                                 placeholder="Ingresa tu contraseña actual"
@@ -2231,9 +2229,10 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
 
                                     <div className="hp-profile-fields-grid" style={{ marginBottom: 0 }}>
                                         <div className="form-group" style={{ marginBottom: 0 }}>
-                                            <label className="form-label">Nueva Contraseña (mínimo 8 caracteres)</label>
+                                            <label className="form-label" htmlFor="perfil-pw-nueva">Nueva Contraseña (mínimo 8 caracteres)</label>
                                             <div className="hp-pw-input-wrap">
                                                 <input
+                                                    id="perfil-pw-nueva"
                                                     type={showPwNueva ? 'text' : 'password'}
                                                     className="form-input"
                                                     placeholder="Mínimo 8 caracteres"
@@ -2254,9 +2253,10 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         </div>
 
                                         <div className="form-group" style={{ marginBottom: 0 }}>
-                                            <label className="form-label">Confirmar Nueva Contraseña</label>
+                                            <label className="form-label" htmlFor="perfil-pw-confirmar">Confirmar Nueva Contraseña</label>
                                             <div className="hp-pw-input-wrap">
                                                 <input
+                                                    id="perfil-pw-confirmar"
                                                     type={showPwConfirmar ? 'text' : 'password'}
                                                     className="form-input"
                                                     placeholder="Repite tu nueva contraseña"

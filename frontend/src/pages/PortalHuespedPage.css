@@ -2218,30 +2218,32 @@
     margin: 0 auto 3rem;
 }
 
+/* Cabecera cálida arena del perfil alineada con el portal y comprobante */
 .hp-profile-header-strip {
-    background: linear-gradient(135deg, var(--brand-ocean-dark) 0%, var(--brand-ocean) 60%, #1f476e 100%);
-    padding: 2rem 2.2rem;
-    color: #ffffff;
+    background: linear-gradient(135deg, var(--brand-sand-base, #f5f0e8) 0%, var(--brand-sand-light, #fcfaf7) 100%);
+    border-bottom: 1px solid var(--border-default, #e2d9cc);
+    padding: 1.75rem 2.2rem;
+    color: var(--brand-ocean, #16324f);
     display: flex;
     align-items: center;
-    gap: 1.5rem;
+    gap: 1.35rem;
     position: relative;
 }
 
 .hp-profile-avatar {
-    width: 68px;
-    height: 68px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--brand-terracotta) 0%, var(--brand-terracotta-hover) 100%);
     color: #ffffff;
     font-family: var(--font-serif);
-    font-size: 1.85rem;
+    font-size: 1.7rem;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 6px 18px rgba(184, 93, 56, 0.35);
-    border: 3px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 6px 18px rgba(184, 93, 56, 0.28);
+    border: 3px solid var(--bg-surface, #ffffff);
     flex-shrink: 0;
 }
 
@@ -2252,65 +2254,60 @@
 
 .hp-profile-name {
     font-family: var(--font-serif);
-    font-size: 1.55rem;
+    font-size: 1.45rem;
     font-weight: 600;
-    color: #ffffff;
-    margin: 0 0 4px 0;
+    color: var(--brand-ocean, #16324f);
+    margin: 0 0 3px 0;
     line-height: 1.2;
 }
 
 .hp-profile-email {
-    font-size: 0.88rem;
-    color: #cbd5e1;
+    font-size: 0.85rem;
+    color: var(--text-secondary, #486581);
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
-.hp-profile-badge-row {
+.hp-profile-status-line {
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-}
-
-.hp-profile-verified-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: rgba(45, 90, 67, 0.3);
-    border: 1px solid rgba(52, 211, 153, 0.45);
-    color: #6ee7b7;
-    padding: 4px 11px;
-    border-radius: 999px;
-    font-size: 0.74rem;
-    font-weight: 700;
-}
-
-.hp-profile-reservas-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    color: #ffffff;
-    padding: 4px 11px;
-    border-radius: 999px;
-    font-size: 0.74rem;
+    font-size: 0.78rem;
     font-weight: 600;
+    color: var(--text-muted, #627d98);
+}
+
+.hp-profile-verified-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--brand-palm, #2d5a43);
+}
+
+.hp-profile-sep {
+    color: var(--border-strong, #c8bcab);
 }
 
 .hp-profile-form-body {
-    padding: 2.2rem;
+    padding: 2rem 2.2rem;
 }
 
 .hp-profile-form-title {
     font-family: var(--font-serif);
-    font-size: 1.15rem;
+    font-size: 1.12rem;
     font-weight: 600;
     color: var(--brand-ocean);
-    margin: 0 0 1.25rem 0;
+    margin: 0 0 3px 0;
+    line-height: 1.25;
+}
+
+.hp-input-readonly {
+    background: var(--brand-sand-base, #f5f0e8) !important;
+    color: var(--text-muted, #627d98) !important;
+    cursor: not-allowed;
 }
 
 .hp-profile-fields-grid {
