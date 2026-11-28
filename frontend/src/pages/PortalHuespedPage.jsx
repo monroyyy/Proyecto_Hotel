@@ -1121,16 +1121,16 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                     {/* Vista Expandida (Ficha Panorámica de Lujo + Micro-Radar) */}
                                                     {isExpanded && (
                                                         <div className="hp-accordion-expanded-content">
-                                                            {/* Cabecera superior del panel activo: kicker unificado + nombre del hotel */}
+                                                            {/* Cabecera superior del panel activo: índice, ciudad y disponibilidad en una línea limpia */}
                                                             <div className="hp-accordion-expanded-top">
                                                                 <div className="hp-accordion-dest-badge-col">
                                                                     <span className="hp-accordion-dest-index">
-                                                                        {String(idx + 1).padStart(2, '0')} · {h.ciudad.toUpperCase()} · {perfil.tag.toUpperCase()}
+                                                                        {String(idx + 1).padStart(2, '0')} · {h.ciudad.toUpperCase()} · {c > 0 ? `${c} ${c === 1 ? 'LIBRE' : 'LIBRES'}` : (v > 0 ? 'VER FECHAS' : 'AGOTADO')}
                                                                     </span>
                                                                     <h3 className="hp-accordion-dest-title">{h.nombre}</h3>
                                                                 </div>
 
-                                                                {/* Micro-Radar Cartográfico con disponibilidad real de la propiedad */}
+                                                                {/* Micro-Radar Cartográfico limpio sin etiquetas superpuestas */}
                                                                 <div
                                                                     className="hp-accordion-radar-slot"
                                                                     onClick={(e) => e.stopPropagation()}
@@ -1138,8 +1138,6 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                                     <MexicoMicroMap
                                                                         activeHotel={h}
                                                                         hotels={hotelesUnicos}
-                                                                        disponibilidadLabel={c > 0 ? `${c} ${c === 1 ? 'suite libre' : 'suites libres'}` : (v > 0 ? 'Ver fechas' : 'Agotado')}
-                                                                        disponibilidadEstado={c > 0 ? 'avail' : (v > 0 ? 'dates' : 'soldout')}
                                                                         onSelectHotel={(targetHotelId) => {
                                                                             const matchH = hotelesUnicos.find(item => item.idHotel === targetHotelId);
                                                                             if (matchH) {

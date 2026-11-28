@@ -27,7 +27,7 @@ const obtenerClimaReferencia = (hotel) => {
  * Proyecta cada hotel desde sus coordenadas reales (latitud, longitud); si un hotel
  * carece de coordenadas, no dibuja su pin.
  */
-export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel, disponibilidadLabel, disponibilidadEstado = 'avail' }) {
+export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel }) {
     const puntosDestinos = (Array.isArray(hotels) ? hotels : [])
         .map((h) => {
             if (h?.latitud == null || h?.longitud == null || h.latitud === '' || h.longitud === '') {
@@ -47,15 +47,9 @@ export default function MexicoMicroMap({ activeHotel, hotels = [], onSelectHotel
 
     const activeId = activeHotel?.idHotel;
     const etiquetaAria = activeHotel?.ciudad || activeHotel?.nombre || 'República Mexicana';
-    const textoChip = disponibilidadLabel || activeHotel?.ciudad || 'México';
 
     return (
         <div className="hp-micromap-card" role="region" aria-label={`Ubicación geográfica: ${etiquetaAria}`}>
-            {/* Chip de disponibilidad real vinculada a la base de datos */}
-            <div className={`hp-micromap-weather-pill is-${disponibilidadEstado}`}>
-                <span className="hp-micromap-status-dot" aria-hidden="true" />
-                <span>{textoChip}</span>
-            </div>
 
             <svg
                 viewBox="0 0 793 498"
