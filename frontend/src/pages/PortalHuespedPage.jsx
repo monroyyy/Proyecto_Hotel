@@ -960,17 +960,9 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             {activeSection === 'explorar' && (
                 <>
                     {/* =========================================================
-                        HERO DE MARCA CON FOTOGRAFÍA COSTERA
+                        ENCABEZADO EDITORIAL COMPACTO (SIN BANNER FOTOGRÁFICO)
                        ========================================================= */}
                     <section className="hp-hero">
-                        <div
-                            className="hp-hero-bg"
-                            style={{ backgroundImage: `url('${IMAGENES_HOTEL.heroCosta.webp}')` }}
-                            role="img"
-                            aria-label={IMAGENES_HOTEL.heroCosta.alt}
-                        />
-                        <div className="hp-hero-overlay" />
-
                         <div className="hp-hero-content">
                             <div className="hp-hero-badge">
                                 <span className="hp-hero-dot" />
