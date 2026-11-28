@@ -6,7 +6,7 @@ import {
     ArrowRight, Info, SlidersHorizontal, User, Award, Phone,
     Mail, Check, HelpCircle, FileText, Sun, LogOut, Hotel,
     Lock, KeyRound, Eye, EyeOff, Moon, AlertCircle, CalendarPlus, Bell,
-    UserPlus, LogIn, Printer, RotateCcw, List, LayoutGrid
+    UserPlus, LogIn, Printer, RotateCcw, List, LayoutGrid, Plus
 } from 'lucide-react';
 import {
     getHoteles,
@@ -2327,50 +2327,47 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                ================================================================= */}
             {activeSection === 'experiencias' && (
                 <section className="hp-editorial-guide">
-                    {/* Cabecera Editorial */}
-                    <div style={{ marginBottom: '2.5rem' }}>
-                        <div className="hp-editorial-chapter-kicker">Hospitalidad & Claridad Absoluta</div>
-                        <h2 className="hp-section-title" style={{ fontSize: 'clamp(2rem, 3.5vw, 2.75rem)', marginBottom: '1rem' }}>
-                            Guía del Huésped, Servicios y Políticas
-                        </h2>
-                        <p className="hp-editorial-lead">
-                            Concebimos la hospitalidad como un ejercicio de calidez y transparencia. Aquí encontrarás cada pauta operativa, nuestros rituales de bienvenida y las garantías financieras que respaldan tu estancia.
+                    {/* Cabecera Editorial alineada con Explorar Hoteles y Mis Reservaciones */}
+                    <div className="hp-guide-header">
+                        <h1 className="hp-hero-title">Guía y Políticas</h1>
+                        <p className="hp-section-desc">
+                            Conoce nuestros horarios de llegada y salida, modalidades de reservación, políticas de reembolso y respuestas rápidas para tu estancia.
                         </p>
                     </div>
 
-                    {/* Capítulo 1: El Ritual de Llegada y Despedida */}
+                    {/* 01: Llegada y Salida */}
                     <article className="hp-editorial-chapter">
                         <div>
-                            <div className="hp-editorial-chapter-kicker">Capítulo I</div>
-                            <h3 className="hp-editorial-chapter-title">El Ritual de Llegada y Despedida</h3>
+                            <div className="hp-editorial-chapter-kicker">01 · Llegada y Salida</div>
+                            <h2 className="hp-editorial-chapter-title">El Ritual de Llegada y Despedida</h2>
                             <p className="hp-editorial-chapter-text">
-                                Diseñamos los tiempos de recepción para asegurar que tu suite sea preparada con minuciosidad artesanal, garantizando ventilación natural, ropa de cama fresca y amenidades botánicas listas.
+                                Diseñamos los tiempos de recepción para asegurar que tu suite sea preparada con minuciosidad, garantizando ventilación natural, ropa de cama fresca y amenidades listas.
                             </p>
                             <ul className="hp-editorial-checklist">
                                 <li className="hp-editorial-check-item">
-                                    <Clock size={18} className="hp-editorial-check-icon" />
+                                    <span className="hp-editorial-icon-badge"><Clock size={16} /></span>
                                     <div>
-                                        <strong>Llegada (Check-in): A partir de las 15:00 hrs.</strong>
-                                        <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
+                                        <strong>Llegada (Check-in): a partir de las 15:00 hrs.</strong>
+                                        <div className="hp-editorial-check-desc">
                                             Recepción abierta las 24 horas. Si llegas antes, puedes disfrutar de la alberca o dejar tu equipaje en custodia.
                                         </div>
                                     </div>
                                 </li>
                                 <li className="hp-editorial-check-item">
-                                    <Clock size={18} className="hp-editorial-check-icon" />
+                                    <span className="hp-editorial-icon-badge"><Clock size={16} /></span>
                                     <div>
-                                        <strong>Salida (Check-out): Hasta las 12:00 hrs.</strong>
-                                        <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
+                                        <strong>Salida (Check-out): hasta las 12:00 hrs.</strong>
+                                        <div className="hp-editorial-check-desc">
                                             Permite a nuestro personal de camarería realizar la limpieza profunda de cada suite para los siguientes viajeros.
                                         </div>
                                     </div>
                                 </li>
                                 <li className="hp-editorial-check-item">
-                                    <ShieldCheck size={18} className="hp-editorial-check-icon" />
+                                    <span className="hp-editorial-icon-badge"><ShieldCheck size={16} /></span>
                                     <div>
-                                        <strong>Custodia de Equipaje de Cortesía.</strong>
-                                        <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
-                                            Resguardamos tus pertenencias sin costo alguno antes de tu Check-in o después de tu Check-out.
+                                        <strong>Custodia de equipaje de cortesía.</strong>
+                                        <div className="hp-editorial-check-desc">
+                                            Resguardamos tus pertenencias sin costo antes de tu Check-in o después de tu Check-out.
                                         </div>
                                     </div>
                                 </li>
@@ -2389,7 +2386,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                         </figure>
                     </article>
 
-                    {/* Capítulo 2: Modalidades y Garantías de Estancia */}
+                    {/* 02: Reservaciones */}
                     <article className="hp-editorial-chapter reverse">
                         <figure className="hp-editorial-card-figure">
                             <img
@@ -2403,36 +2400,36 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                             </figcaption>
                         </figure>
                         <div>
-                            <div className="hp-editorial-chapter-kicker">Capítulo II</div>
-                            <h3 className="hp-editorial-chapter-title">Modalidades de Reservación</h3>
+                            <div className="hp-editorial-chapter-kicker">02 · Reservaciones</div>
+                            <h2 className="hp-editorial-chapter-title">Modalidades de Reservación</h2>
                             <p className="hp-editorial-chapter-text">
-                                Creemos en dar certidumbre a tus planes de viaje. Ofrecemos dos modalidades claras para que asegures tu lugar sin presiones innecesarias.
+                                Creemos en dar certidumbre a tus planes de viaje. Ofrecemos dos modalidades claras para que asegures tu estancia sin presiones innecesarias.
                             </p>
                             <ul className="hp-editorial-checklist">
                                 <li className="hp-editorial-check-item">
-                                    <CalendarCheck size={18} style={{ color: 'var(--brand-terracotta)', flexShrink: 0, marginTop: 3 }} />
+                                    <span className="hp-editorial-icon-badge"><CalendarCheck size={16} /></span>
                                     <div>
-                                        <strong>Pre-reserva (Apartado sin costo por 24 horas):</strong>
-                                        <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
-                                            Bloquea tu suite favorita en nuestro sistema inmediatamente. Cuentas con 24 horas para transferir tu anticipo del 50% y enviar el comprobante a administración.
+                                        <strong>Pre-reserva (apartado sin costo por 24 horas):</strong>
+                                        <div className="hp-editorial-check-desc">
+                                            Bloquea tu suite favorita en nuestro sistema de inmediato. Cuentas con 24 horas para transferir tu anticipo del 50% y enviar el comprobante a recepción.
                                         </div>
                                     </div>
                                 </li>
                                 <li className="hp-editorial-check-item">
-                                    <CheckCircle2 size={18} className="hp-editorial-check-icon" />
+                                    <span className="hp-editorial-icon-badge"><CheckCircle2 size={16} /></span>
                                     <div>
-                                        <strong>Reservación Confirmada (Con 50% de anticipo):</strong>
-                                        <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
-                                            Una vez validado el anticipo por administración, tu fecha queda blindada con tarifa garantizada y confirmación formal en tu pase de abordar.
+                                        <strong>Reservación confirmada (con 50% de anticipo):</strong>
+                                        <div className="hp-editorial-check-desc">
+                                            Una vez validado el anticipo, tu fecha queda garantizada con tarifa asegurada y pase de abordar digital.
                                         </div>
                                     </div>
                                 </li>
                                 <li className="hp-editorial-check-item">
-                                    <Award size={18} style={{ color: 'var(--brand-ocean)', flexShrink: 0, marginTop: 3 }} />
+                                    <span className="hp-editorial-icon-badge"><Award size={16} /></span>
                                     <div>
-                                        <strong>Liquidación Restante al Check-in:</strong>
-                                        <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
-                                            El 50% restante se liquida tranquilamente al momento de tu registro en recepción (efectivo, débito o crédito).
+                                        <strong>Liquidación restante al Check-in:</strong>
+                                        <div className="hp-editorial-check-desc">
+                                            El 50% restante se liquida al momento de tu registro en recepción (efectivo, débito o crédito).
                                         </div>
                                     </div>
                                 </li>
@@ -2440,39 +2437,33 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                         </div>
                     </article>
 
-                    {/* Capítulo 3: Transparencia en Cancelaciones y Reembolsos */}
-                    <div style={{ marginBottom: '4rem', paddingBottom: '3rem', borderBottom: '1px solid var(--border-subtle)' }}>
-                        <div className="hp-editorial-chapter-kicker">Capítulo III</div>
-                        <h3 className="hp-editorial-chapter-title">Política Transparente de Cancelación y Reembolso</h3>
+                    {/* 03: Cancelaciones y Reembolsos */}
+                    <div className="hp-guide-section-block">
+                        <div className="hp-editorial-chapter-kicker">03 · Cancelaciones</div>
+                        <h2 className="hp-editorial-chapter-title">Política Transparente de Cancelación y Reembolso</h2>
                         <p className="hp-editorial-chapter-text" style={{ maxWidth: '65ch' }}>
-                            Entendemos que los imprevistos suceden. Nuestra política de cancelación opera en tramos de tiempo justos y transparentes, devolviendo tu anticipo directamente a la CLABE bancaria de tu perfil.
+                            Entendemos que los imprevistos suceden. Nuestra política de cancelación opera en tramos de tiempo claros, devolviendo tu anticipo directamente a la CLABE bancaria que indiques al cancelar.
                         </p>
 
                         <div className="hp-refund-timeline">
-                            <div className="hp-refund-tier" style={{ borderTop: '3px solid #10b981' }}>
-                                <div className="hp-refund-pct" style={{ color: '#059669' }}>
-                                    100%
-                                </div>
+                            <div className="hp-refund-tier is-tier-full">
+                                <div className="hp-refund-pct num">100%</div>
                                 <div className="hp-refund-label">Más de 72 horas antes</div>
                                 <div className="hp-refund-desc">
                                     Reembolso íntegro de la totalidad de tu anticipo si cancelas con al menos 3 días de antelación al día de llegada.
                                 </div>
                             </div>
 
-                            <div className="hp-refund-tier" style={{ borderTop: '3px solid #f59e0b' }}>
-                                <div className="hp-refund-pct" style={{ color: '#b45309' }}>
-                                    50%
-                                </div>
+                            <div className="hp-refund-tier is-tier-half">
+                                <div className="hp-refund-pct num">50%</div>
                                 <div className="hp-refund-label">Entre 24 y 72 horas antes</div>
                                 <div className="hp-refund-desc">
                                     Reembolso de la mitad del anticipo cubierto. La otra mitad amortiza el bloqueo de habitación reservada.
                                 </div>
                             </div>
 
-                            <div className="hp-refund-tier" style={{ borderTop: '3px solid #ef4444' }}>
-                                <div className="hp-refund-pct" style={{ color: '#b91c1c' }}>
-                                    0%
-                                </div>
+                            <div className="hp-refund-tier is-tier-none">
+                                <div className="hp-refund-pct num">0%</div>
                                 <div className="hp-refund-label">Menos de 24 horas o No-show</div>
                                 <div className="hp-refund-desc">
                                     Sin reembolso debido al compromiso de inventario y preparación exclusiva de la suite en el hotel.
@@ -2481,12 +2472,12 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                         </div>
                     </div>
 
-                    {/* Capítulo 4: Preguntas Frecuentes de Hospitalidad */}
+                    {/* 04: Preguntas Frecuentes */}
                     <div style={{ marginBottom: '3rem' }}>
-                        <div className="hp-editorial-chapter-kicker">Capítulo IV</div>
-                        <h3 className="hp-editorial-chapter-title">Preguntas Frecuentes de Nuestros Huéspedes</h3>
+                        <div className="hp-editorial-chapter-kicker">04 · Preguntas Frecuentes</div>
+                        <h2 className="hp-editorial-chapter-title">Dudas comunes de nuestros huéspedes</h2>
                         <p className="hp-editorial-chapter-text" style={{ maxWidth: '65ch' }}>
-                            Respuestas claras a las dudas más comunes sobre reservaciones directas, amenidades e itinerarios.
+                            Respuestas claras sobre reservaciones directas, amenidades e itinerarios.
                         </p>
 
                         <div className="hp-editorial-faq">
@@ -2497,23 +2488,23 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 },
                                 {
                                     q: '¿Qué incluye la tarifa mostrada en el catálogo de habitaciones?',
-                                    a: 'Todas las tarifas publicadas ya incluyen impuestos hoteleros, acceso ilimitado a albercas, conexión Wi-Fi 6 de fibra óptica en toda la propiedad, servicio diario de camarería y coctel o bebida de bienvenida artesanal al momento del Check-in.'
+                                    a: 'Todas las tarifas publicadas ya incluyen impuestos hoteleros, acceso ilimitado a albercas, conexión Wi-Fi 6 de fibra óptica en toda la propiedad, servicio diario de camarería y bebida de bienvenida al momento del Check-in.'
                                 },
                                 {
                                     q: '¿Cómo confirmo una pre-reserva una vez realizado el anticipo bancario?',
-                                    a: 'Es muy sencillo: transfiere el 50% del total a la cuenta oficial del hotel e informa a recepción enviando tu comprobante junto con tu número de folio (vía WhatsApp o correo electrónico). El personal administrativo validará el depósito y tu reservación pasará de inmediato a estado "Confirmada".'
+                                    a: 'Transfiere el 50% del total a la cuenta oficial del hotel e informa a recepción enviando tu comprobante junto con tu número de folio (vía WhatsApp o correo electrónico). El personal administrativo validará el depósito y tu reservación pasará de inmediato a estado "Confirmada".'
                                 },
                                 {
-                                    q: '¿Cómo interactúo con el Asistente Virtual Concierge con Inteligencia Artificial?',
-                                    a: 'Nuestro Asistente Concierge (disponible en el icono flotante inferior derecho) está conectado a la base de datos viva de toda la cadena Hotel Paraíso. Puedes preguntarle por disponibilidad de suites, cotizaciones exactas por fecha, amenidades y recomendaciones de destinos.'
+                                    q: '¿Cómo funciona el Asistente de Recepción?',
+                                    a: 'Nuestro Asistente de Recepción (disponible en el botón flotante inferior derecho) consulta en tiempo real el catálogo de Hotel Paraíso. Puedes preguntarle por disponibilidad de suites, cotizaciones exactas por fecha, amenidades y guiarte para registrar una pre-reserva.'
                                 },
                                 {
                                     q: '¿Se admiten cunas para bebés o camas adicionales en las habitaciones?',
-                                    a: 'Sí. Al realizar tu reservación puedes solicitar cuna de bebé sin ningún costo adicional. Si requieres cama extra, puedes marcar la casilla correspondiente para que nuestra camarería la acondicione antes de tu llegada.'
+                                    a: 'Sí. Al realizar tu reservación puedes solicitar cuna de bebé sin costo adicional. Si requieres cama extra, puedes marcar la casilla correspondiente para que nuestra camarería la acondicione antes de tu llegada.'
                                 },
                                 {
-                                    q: '¿Dónde se refleja mi reembolso en caso de cancelación oportuna?',
-                                    a: 'El reembolso se procesa de forma directa hacia los datos bancarios (Banco y CLABE interbancaria de 18 dígitos) que tengas configurados en tu apartado de "Mi Perfil". La dispersión suele reflejarse entre 24 y 48 horas hábiles.'
+                                    q: '¿Dónde recibo mi reembolso en caso de cancelación oportuna?',
+                                    a: 'Al cancelar tu reservación desde "Mis Reservaciones" podrás capturar el titular, banco y CLABE interbancaria de 18 dígitos donde deseas recibir tu devolución. La dispersión suele reflejarse entre 24 y 48 horas hábiles.'
                                 }
                             ].map((item, idx) => {
                                 const abierto = faqAbierto === idx;
@@ -2529,15 +2520,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                             aria-expanded={abierto}
                                         >
                                             <span>{item.q}</span>
-                                            <span style={{
-                                                fontSize: '1.25rem',
-                                                color: 'var(--brand-terracotta)',
-                                                fontWeight: 600,
-                                                transform: abierto ? 'rotate(45deg)' : 'rotate(0deg)',
-                                                transition: 'transform 180ms ease-out',
-                                                display: 'inline-block'
-                                            }}>
-                                                +
+                                            <span className={`hp-faq-plus-icon ${abierto ? 'is-open' : ''}`} aria-hidden="true">
+                                                <Plus size={18} />
                                             </span>
                                         </button>
                                         {abierto && (
