@@ -33,8 +33,10 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
     const [menuAbierto, setMenuAbierto] = useState(false);
     const [cuentaAbierta, setCuentaAbierta] = useState(false);
     const [conScroll, setConScroll] = useState(false);
+    const [indicadorNav, setIndicadorNav] = useState({ left: 0, width: 0, visible: false });
     const headerRef = useRef(null);
     const cuentaRef = useRef(null);
+    const tabRefs = useRef({});
 
     const huespedNavItems = [
         {
@@ -96,6 +98,29 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
         };
     }, []);
 
+    // Calcular posición y ancho de la cápsula deslizante para la pestaña activa
+    useEffect(() => {
+        const actualizarIndicador = () => {
+            const btn = tabRefs.current[activeTab];
+            if (btn) {
+                setIndicadorNav({
+                    left: btn.offsetLeft,
+                    width: btn.offsetWidth,
+                    visible: true
+                });
+            } else {
+                setIndicadorNav(prev => ({ ...prev, visible: false }));
+            }
+        };
+
+        actualizarIndicador();
+        window.addEventListener('resize', actualizarIndicador);
+        if (document.fonts?.ready) {
+            document.fonts.ready.then(actualizarIndicador).catch(() => {});
+        }
+        return () => window.removeEventListener('resize', actualizarIndicador);
+    }, [activeTab, isAuthenticated]);
+
     const handleTabClick = (item) => {
         setMenuAbierto(false);
         setCuentaAbierta(false);
@@ -155,8 +180,17 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                         </button>
                     </div>
 
-                    {/* Centro: Cápsula agrupada de 3 pestañas principales en escritorio */}
+                    {/* Centro: Cápsula agrupada con indicador deslizante animado */}
                     <nav className="guest-navbar-desktop-nav" aria-label="Navegación principal">
+                        <span
+                            className="guest-nav-sliding-pill"
+                            style={{
+                                transform: `translateX(${indicadorNav.left}px)`,
+                                width: `${indicadorNav.width}px`,
+                                opacity: indicadorNav.visible ? 1 : 0
+                            }}
+                            aria-hidden="true"
+                        />
                         {huespedNavItems
                             .filter(item => item.id !== 'mi-perfil' && (isAuthenticated || item.publico))
                             .map((item) => {
@@ -165,6 +199,10 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                                 return (
                                     <button
                                         key={item.id}
+                                        ref={(el) => {
+                                            if (el) tabRefs.current[item.id] = el;
+                                            else delete tabRefs.current[item.id];
+                                        }}
                                         type="button"
                                         className={`guest-desktop-nav-link ${isActive ? 'is-active' : ''}`}
                                         onClick={() => handleTabClick(item)}

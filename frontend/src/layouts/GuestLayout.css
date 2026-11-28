@@ -304,8 +304,9 @@
   color: #991b1b;
 }
 
-/* --- Opción A: Cápsula Agrupada de Navegación en Escritorio --- */
+/* --- Opción A: Cápsula Agrupada con Indicador Deslizante y Rebote Sutil --- */
 .guest-navbar-desktop-nav {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -315,7 +316,27 @@
   border-radius: var(--radius-pill);
 }
 
+/* Indicador blanco flotante que se desliza con pequeño rebote elástico */
+.guest-nav-sliding-pill {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  height: calc(100% - 8px);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid rgba(226, 217, 204, 0.8);
+  box-shadow: 0 2px 10px rgba(22, 50, 79, 0.11);
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform, width;
+  transition: transform 380ms cubic-bezier(0.34, 1.42, 0.64, 1),
+              width 360ms cubic-bezier(0.34, 1.42, 0.64, 1),
+              opacity 200ms ease;
+}
+
 .guest-desktop-nav-link {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 0.42rem;
@@ -330,27 +351,24 @@
   white-space: nowrap;
   flex-shrink: 0;
   cursor: pointer;
-  transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
-              color 160ms ease,
-              box-shadow 180ms ease,
-              transform 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: background-color 180ms ease,
+              color 200ms ease,
+              transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.guest-desktop-nav-link:hover {
-  background: rgba(255, 255, 255, 0.62);
+.guest-desktop-nav-link:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.48);
   color: var(--brand-ocean, #16324f);
 }
 
 .guest-desktop-nav-link:active {
-  transform: scale(0.97);
+  transform: scale(0.95);
 }
 
-/* Pestaña activa elevada en blanco sobre la cápsula arena con acento terracota */
+/* Texto e ícono terracota cuando el indicador deslizante se posa debajo */
 .guest-desktop-nav-link.is-active {
-  background: var(--bg-surface, #ffffff);
+  background: transparent;
   color: var(--brand-terracotta, #b85d38);
-  border-color: rgba(226, 217, 204, 0.75);
-  box-shadow: 0 2px 8px rgba(22, 50, 79, 0.10);
   font-weight: 700;
 }
 
