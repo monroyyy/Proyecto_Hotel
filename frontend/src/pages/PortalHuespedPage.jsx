@@ -6,7 +6,7 @@ import {
     ArrowRight, Info, SlidersHorizontal, User, Award, Phone,
     Mail, Check, HelpCircle, FileText, Sun, LogOut, Hotel,
     Lock, KeyRound, Eye, EyeOff, Moon, AlertCircle, CalendarPlus, Bell,
-    UserPlus, LogIn, Printer
+    UserPlus, LogIn, Printer, RotateCcw
 } from 'lucide-react';
 import {
     getHoteles,
@@ -535,6 +535,26 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
         const diff = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
         return diff > 0 ? diff : 1;
     }, [fechaEntrada, fechaSalida]);
+
+    const hayFiltrosActivos = (
+        filtroHotel !== 'TODOS'
+        || filtroCategoria !== 'TODAS'
+        || Number(filtroCapacidad) !== 1
+        || ordenCatalogo !== 'DESTACADOS'
+        || fechaEntrada !== todayStr
+        || fechaSalida !== defaultCheckoutStr
+        || Boolean(busquedaTexto.trim())
+    );
+
+    const limpiarFiltrosCatalogo = () => {
+        setFiltroHotel('TODOS');
+        setFiltroCategoria('TODAS');
+        setFiltroCapacidad(1);
+        setOrdenCatalogo('DESTACADOS');
+        setFechaEntrada(todayStr);
+        setFechaSalida(defaultCheckoutStr);
+        setBusquedaTexto('');
+    };
 
     // Conteo de disponibles por hotel según las fechas seleccionadas
     const disponiblesPorHotelId = useMemo(() => {
@@ -1350,6 +1370,17 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                             <><strong>{habitacionesLibresEnFechasCount}</strong> libres de {habitacionesDisponibles.length}</>
                                         )}
                                     </span>
+
+                                    {hayFiltrosActivos && (
+                                        <button
+                                            type="button"
+                                            className="hp-clear-filters-btn"
+                                            onClick={limpiarFiltrosCatalogo}
+                                        >
+                                            <RotateCcw size={13} />
+                                            <span>Limpiar filtros</span>
+                                        </button>
+                                    )}
 
                                     <div className="hp-catalog-order-wrap">
                                         <SlidersHorizontal size={14} color="var(--text-muted)" />

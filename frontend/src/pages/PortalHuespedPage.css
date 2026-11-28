@@ -885,6 +885,33 @@
     box-shadow: 0 3px 10px rgba(184, 93, 56, 0.24);
 }
 
+/* Botón discreto para restablecer filtros del catálogo */
+.hp-clear-filters-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 34px;
+    padding: 0 11px;
+    border-radius: 999px;
+    border: 1px solid rgba(184, 93, 56, 0.28);
+    background: var(--brand-terracotta-light, #faebe5);
+    color: var(--brand-terracotta-hover, #9e4e2d);
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.hp-clear-filters-btn:hover {
+    background: var(--brand-terracotta, #b85d38);
+    color: #ffffff;
+}
+
+.hp-clear-filters-btn:active {
+    transform: scale(0.97);
+}
+
 .hp-catalog-order-wrap {
     display: flex;
     align-items: center;
