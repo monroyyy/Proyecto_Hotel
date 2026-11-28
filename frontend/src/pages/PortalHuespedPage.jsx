@@ -964,10 +964,6 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                        ========================================================= */}
                     <section className="hp-hero">
                         <div className="hp-hero-content">
-                            <div className="hp-hero-badge">
-                                <span className="hp-hero-dot" />
-                                <span>Colección México · Tarifa Preferencial Directa</span>
-                            </div>
                             <h1 className="hp-hero-title">
                                 Hospitalidad mexicana diseñada para el descanso
                             </h1>
