@@ -1293,84 +1293,48 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 </div>
                             </div>
 
-                            <div className="hp-search-summary-row">
-                                <div className="hp-search-summary-tags">
-                                    <span className="hp-summary-chip num">
-                                        <Clock size={13} /> {nochesSeleccionadas} {nochesSeleccionadas === 1 ? 'noche' : 'noches'} de estancia
-                                    </span>
-                                    <span className="hp-summary-chip num">
-                                        {habitacionesDisponibles.length} {habitacionesDisponibles.length === 1 ? 'suite disponible' : 'suites disponibles'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Cinta rápida de sedes con tarifas reales de BD */}
-                        {hotelesUnicos.length > 1 && (
-                            <div className="hp-category-bar" style={{ marginBottom: 12 }}>
-                                <button
-                                    type="button"
-                                    className={`hp-cat-pill ${filtroHotel === 'TODOS' ? 'active' : ''}`}
-                                    onClick={() => setFiltroHotel('TODOS')}
-                                >
-                                    Todas las sedes ({habitaciones.filter(h => (h.estado || '').toLowerCase() !== 'mantenimiento').length})
-                                </button>
-                                {hotelesUnicos.map((h) => {
-                                    const minPrecio = precioMinimoPorHotelId[h.idHotel];
-                                    const dispCount = disponiblesPorHotelId[h.idHotel] || 0;
-                                    return (
+                            {/* Fila unificada de categorías, resumen de estancia y ordenamiento */}
+                            <div className="hp-search-toolbar-row">
+                                <div className="hp-category-bar">
+                                    {[
+                                        { id: 'TODAS', label: 'Todas las suites' },
+                                        { id: 'SUITE', label: 'Suites Signature' },
+                                        { id: 'FAMILIAR', label: 'Familiares' },
+                                        { id: 'DOBLE', label: 'Dobles & King' },
+                                        { id: 'INDIVIDUAL', label: 'Ejecutivas' }
+                                    ].map(cat => (
                                         <button
-                                            key={h.idHotel}
+                                            key={cat.id}
                                             type="button"
-                                            className={`hp-cat-pill ${String(filtroHotel) === String(h.idHotel) ? 'active' : ''}`}
-                                            onClick={() => setFiltroHotel(String(h.idHotel))}
+                                            className={`hp-cat-pill ${filtroCategoria === cat.id ? 'active' : ''}`}
+                                            onClick={() => setFiltroCategoria(cat.id)}
                                         >
-                                            <span>{h.nombre} · {h.ciudad}</span>
-                                            {minPrecio ? (
-                                                <span className="num" style={{ marginLeft: 6, opacity: 0.85, fontWeight: 700 }}>
-                                                    (${Number(minPrecio).toLocaleString('es-MX')}+ · {dispCount} {dispCount === 1 ? 'libre' : 'libres'})
-                                                </span>
-                                            ) : null}
+                                            {cat.label}
                                         </button>
-                                    );
-                                })}
-                            </div>
-                        )}
+                                    ))}
+                                </div>
 
-                        {/* Barra de filtros de categoría y orden */}
-                        <div className="hp-catalog-toolbar">
-                            <div className="hp-category-bar">
-                                {[
-                                    { id: 'TODAS', label: 'Todas las suites' },
-                                    { id: 'SUITE', label: 'Suites Signature' },
-                                    { id: 'FAMILIAR', label: 'Familiares' },
-                                    { id: 'DOBLE', label: 'Dobles & King' },
-                                    { id: 'INDIVIDUAL', label: 'Ejecutivas' }
-                                ].map(cat => (
-                                    <button
-                                        key={cat.id}
-                                        type="button"
-                                        className={`hp-cat-pill ${filtroCategoria === cat.id ? 'active' : ''}`}
-                                        onClick={() => setFiltroCategoria(cat.id)}
-                                    >
-                                        {cat.label}
-                                    </button>
-                                ))}
-                            </div>
+                                <div className="hp-search-toolbar-right">
+                                    <span className="hp-search-inline-summary num">
+                                        <Clock size={13} />
+                                        {nochesSeleccionadas} {nochesSeleccionadas === 1 ? 'noche' : 'noches'} · <strong>{habitacionesDisponibles.length}</strong> {habitacionesDisponibles.length === 1 ? 'disponible' : 'disponibles'}
+                                    </span>
 
-                            <div className="hp-catalog-order-wrap">
-                                <SlidersHorizontal size={14} color="var(--text-muted)" />
-                                <select
-                                    className="hp-catalog-order-select"
-                                    value={ordenCatalogo}
-                                    onChange={(e) => setOrdenCatalogo(e.target.value)}
-                                    aria-label="Ordenar catálogo"
-                                >
-                                    <option value="DESTACADOS">Destacados</option>
-                                    <option value="PRECIO_ASC">Precio: menor a mayor</option>
-                                    <option value="PRECIO_DESC">Precio: mayor a menor</option>
-                                    <option value="CAPACIDAD">Mayor capacidad</option>
-                                </select>
+                                    <div className="hp-catalog-order-wrap">
+                                        <SlidersHorizontal size={14} color="var(--text-muted)" />
+                                        <select
+                                            className="hp-catalog-order-select"
+                                            value={ordenCatalogo}
+                                            onChange={(e) => setOrdenCatalogo(e.target.value)}
+                                            aria-label="Ordenar catálogo"
+                                        >
+                                            <option value="DESTACADOS">Destacados</option>
+                                            <option value="PRECIO_ASC">Precio: menor a mayor</option>
+                                            <option value="PRECIO_DESC">Precio: mayor a menor</option>
+                                            <option value="CAPACIDAD">Mayor capacidad</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
