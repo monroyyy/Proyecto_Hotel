@@ -1377,9 +1377,10 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                             type="button"
                                             className="hp-clear-filters-btn"
                                             onClick={limpiarFiltrosCatalogo}
+                                            aria-label="Limpiar filtros"
+                                            title="Limpiar filtros"
                                         >
-                                            <RotateCcw size={13} />
-                                            <span>Limpiar filtros</span>
+                                            <RotateCcw size={14} />
                                         </button>
                                     )}
 
@@ -1478,17 +1479,25 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                 <div className="hp-room-location-tag">
                                                     <MapPin size={12} /> {hab.hotel?.ciudad || 'México'}{isAuthenticated ? ` · Hab. ${hab.numero}` : ''}
                                                 </div>
-                                                <span className={`hp-room-status-pill ${evalHab.disponibleEnFechas ? 'is-free' : 'is-busy'}`}>
-                                                    <span className="hp-room-status-dot" />
-                                                    {evalHab.disponibleEnFechas
-                                                        ? 'Disponible'
-                                                        : `Libre desde ${formatearFechaOcupacion(evalHab.fechaLiberacion)}`}
-                                                </span>
+                                                {/* Solo mostrar aviso sobre la foto cuando la habitación tenga ocupación en las fechas */}
+                                                {!evalHab.disponibleEnFechas && (
+                                                    <span className="hp-room-status-pill is-busy">
+                                                        <Clock size={11} />
+                                                        Libre desde {formatearFechaOcupacion(evalHab.fechaLiberacion)}
+                                                    </span>
+                                                )}
                                             </div>
 
                                             <div className="hp-room-row-info">
                                                 <div>
                                                     <div className="hp-room-row-meta">
+                                                        {evalHab.disponibleEnFechas && (
+                                                            <span
+                                                                className="hp-room-avail-dot"
+                                                                title="Disponible para tus fechas"
+                                                                aria-label="Disponible para tus fechas"
+                                                            />
+                                                        )}
                                                         <span className="hp-room-hotel-name">{hab.hotel?.nombre}</span>
                                                         <span>&bull;</span>
                                                         <span>Hasta {capacidad} {capacidad === 1 ? 'persona' : 'personas'}</span>
@@ -1587,17 +1596,26 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                     <div className="hp-room-location-tag">
                                                         <MapPin size={12} /> {hab.hotel?.ciudad || 'México'}{isAuthenticated ? ` · Hab. ${hab.numero}` : ''}
                                                     </div>
-                                                    <span className={`hp-room-status-pill ${evalHab.disponibleEnFechas ? 'is-free' : 'is-busy'}`}>
-                                                        <span className="hp-room-status-dot" />
-                                                        {evalHab.disponibleEnFechas
-                                                            ? 'Disponible'
-                                                            : `Libre ${formatearFechaOcupacion(evalHab.fechaLiberacion)}`}
-                                                    </span>
+                                                    {!evalHab.disponibleEnFechas && (
+                                                        <span className="hp-room-status-pill is-busy">
+                                                            <Clock size={11} />
+                                                            Libre {formatearFechaOcupacion(evalHab.fechaLiberacion)}
+                                                        </span>
+                                                    )}
                                                 </div>
 
                                                 <div className="hp-room-body-minimal">
                                                     <div className="hp-room-header-meta">
-                                                        <span className="hp-room-hotel-name">{hab.hotel?.nombre}</span>
+                                                        <span className="hp-room-hotel-wrap">
+                                                            {evalHab.disponibleEnFechas && (
+                                                                <span
+                                                                    className="hp-room-avail-dot"
+                                                                    title="Disponible para tus fechas"
+                                                                    aria-label="Disponible para tus fechas"
+                                                                />
+                                                            )}
+                                                            <span className="hp-room-hotel-name">{hab.hotel?.nombre}</span>
+                                                        </span>
                                                         <span className="hp-room-capacity">
                                                             {capacidad} {capacidad === 1 ? 'huésped' : 'huéspedes'}{isAuthenticated ? ` · ${obtenerSuperficieHabitacion(hab)}` : ''}
                                                         </span>
