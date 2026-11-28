@@ -1020,9 +1020,9 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                        ========================================================= */}
                     <section className="hp-hero">
                         <div className="hp-hero-content">
-                            <span className="hp-hero-kicker">
-                                Hola, {primerNombre} &middot; {hotelesUnicos.length || 5} propiedades en México
-                            </span>
+                            <p className="hp-hero-kicker">
+                                Hola, {primerNombre}
+                            </p>
                             <h1 className="hp-hero-title">
                                 Explora nuestros hoteles
                             </h1>
