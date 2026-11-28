@@ -1698,7 +1698,8 @@ function ModalDetalleReserva({ reserva: r, ocultarFinanzas = false, onClose }) {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-default)', paddingTop: 4, marginTop: 4 }}>
                             <span>Saldo en check-in:</span>
-                            <b className="num" style={{ color: 'var(--color-error)' }}>{money(r.saldo)}</b>
+                            {/* Verde cuando el saldo está liquidado ($0.00), rojo solo si hay saldo pendiente */}
+                            <b className="num" style={{ color: Number(r.saldo || 0) > 0 ? 'var(--color-error)' : '#059669' }}>{money(r.saldo)}</b>
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
                             Método de pago del anticipo: {r.metodoPago || 'N/A'}

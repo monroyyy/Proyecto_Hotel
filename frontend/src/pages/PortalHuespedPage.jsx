@@ -1797,7 +1797,17 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                             <div className="hp-boarding-specs-row">
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                                                     <Users size={14} color="var(--brand-terracotta)" />
-                                                    <strong className="num">{(r.adultos || 1) + (r.ninos || 0)}</strong> huéspedes ({r.adultos || 1} adultos{r.ninos ? `, ${r.ninos} niños` : ''})
+                                                    {/* Pluralización correcta en singular y plural */}
+                                                    {(() => {
+                                                        const adultos = r.adultos || 1;
+                                                        const ninos = r.ninos || 0;
+                                                        const totalHuespedes = adultos + ninos;
+                                                        return (
+                                                            <>
+                                                                <strong className="num">{totalHuespedes}</strong> {totalHuespedes === 1 ? 'huésped' : 'huéspedes'} ({adultos} {adultos === 1 ? 'adulto' : 'adultos'}{ninos ? `, ${ninos} ${ninos === 1 ? 'niño' : 'niños'}` : ''})
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </span>
                                                 <span>•</span>
                                                 <span>Piso <strong className="num">{r.habitacion?.piso || 1}</strong></span>
@@ -1843,7 +1853,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                 <div className="hp-boarding-finance-detail">
                                                     <span>Anticipo:</span>
                                                     <strong style={{ color: Number(r.anticipo || 0) > 0 ? '#059669' : '#64748b' }} className="num">
-                                                        ${Number(r.anticipo || 0).toFixed(2)}
+                                                        ${Number(r.anticipo || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </strong>
                                                 </div>
                                                 {r.estado === 'Cancelada' ? (
@@ -1863,7 +1873,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                     <div className="hp-boarding-finance-detail">
                                                         <span>Restante al Check-in:</span>
                                                         <strong style={{ color: saldoPendiente > 0 ? 'var(--brand-terracotta)' : '#059669' }} className="num">
-                                                            ${saldoPendiente.toFixed(2)}
+                                                            ${saldoPendiente.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </strong>
                                                     </div>
                                                 )}
@@ -2041,7 +2051,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         <label className="form-label" htmlFor="perfil-email">Correo Electrónico (no editable)</label>
                                         <input id="perfil-email" type="email" className="form-input" value={user?.email || ''} disabled />
                                     </div>
-                                    <div className="form-group" style={{ marginBottom: 0, gridColumn: 'span 2' }}>
+                                    {/* Clase responsiva para ocupar 2 columnas en desktop y 1 en móvil */}
+                                    <div className="form-group hp-profile-field-full" style={{ marginBottom: 0 }}>
                                         <label className="form-label" htmlFor="perfil-telefono">Teléfono de Contacto (10 dígitos)</label>
                                         <input
                                             id="perfil-telefono"
@@ -2911,12 +2922,12 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                             </div>
                             <div style={{ background: 'var(--brand-sand-light)', padding: 12, borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', fontWeight: 700, letterSpacing: '0.06em' }}>TOTAL DE ESTANCIA</span>
-                                <strong className="num" style={{ fontSize: '1.1rem', color: 'var(--brand-ocean)' }}>${Number(voucherReserva.total || 0).toFixed(2)} MXN</strong>
+                                <strong className="num" style={{ fontSize: '1.1rem', color: 'var(--brand-ocean)' }}>${Number(voucherReserva.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN</strong>
                             </div>
                             <div style={{ background: 'var(--brand-sand-light)', padding: 12, borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', fontWeight: 700, letterSpacing: '0.06em' }}>ANTICIPO REGISTRADO</span>
                                 <strong className="num" style={{ fontSize: '1.1rem', color: Number(voucherReserva.anticipo || 0) > 0 ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                                    ${Number(voucherReserva.anticipo || 0).toFixed(2)} MXN
+                                    ${Number(voucherReserva.anticipo || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN
                                 </strong>
                             </div>
                         </div>

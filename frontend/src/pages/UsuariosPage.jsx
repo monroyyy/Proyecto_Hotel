@@ -93,6 +93,8 @@ export default function UsuariosPage() {
     // Modal Crear / Editar
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modoEdicion, setModoEdicion] = useState(false);
+    // Error mostrado dentro del modal para que no quede oculto detrás del backdrop
+    const [errorModal, setErrorModal] = useState('');
     const [formUser, setFormUser] = useState({
         idUsuario: null,
         nombre: '',
@@ -239,6 +241,7 @@ export default function UsuariosPage() {
 
     const abrirModalNuevo = () => {
         setModoEdicion(false);
+        setErrorModal('');
         setFormUser({
             idUsuario: null,
             nombre: '',
@@ -254,6 +257,7 @@ export default function UsuariosPage() {
 
     const abrirModalEditar = (u) => {
         setModoEdicion(true);
+        setErrorModal('');
         setFormUser({
             idUsuario: u.idUsuario,
             nombre: limpiarNombre(u.nombre),
@@ -270,22 +274,23 @@ export default function UsuariosPage() {
 
     const handleSubmitFormulario = (e) => {
         e.preventDefault();
+        setErrorModal('');
         if (!formUser.nombre.trim() || !formUser.email.trim()) {
-            mostrarNotificacion('error', 'El nombre y el correo electrónico son obligatorios.');
+            setErrorModal('El nombre y el correo electrónico son obligatorios.');
             return;
         }
         // Teléfono obligatorio de 10 dígitos para todos los tipos de usuario
         const telLimpio = (formUser.telefono || '').replace(/\D/g, '');
         if (telLimpio.length !== 10) {
-            mostrarNotificacion('error', 'El número telefónico es obligatorio y debe tener exactamente 10 dígitos.');
+            setErrorModal('El número telefónico es obligatorio y debe tener exactamente 10 dígitos.');
             return;
         }
         if (!modoEdicion && formUser.password.length < 8) {
-            mostrarNotificacion('error', 'La contraseña inicial debe tener al menos 8 caracteres.');
+            setErrorModal('La contraseña inicial debe tener al menos 8 caracteres.');
             return;
         }
         if (modoEdicion && formUser.password && formUser.password.length < 8) {
-            mostrarNotificacion('error', 'La nueva contraseña debe tener al menos 8 caracteres.');
+            setErrorModal('La nueva contraseña debe tener al menos 8 caracteres.');
             return;
         }
 
@@ -329,7 +334,8 @@ export default function UsuariosPage() {
                     setModalAbierto(false);
                     await cargar();
                 } catch (err) {
-                    mostrarNotificacion('error', err.message || 'No se pudo guardar el usuario.');
+                    // Mostrar error dentro del modal para que sea visible sobre el backdrop
+                    setErrorModal(err.message || 'No se pudo guardar el usuario.');
                     setConfirmacion(prev => ({ ...prev, abierto: false }));
                 } finally {
                     setProcesando(false);
@@ -408,8 +414,8 @@ export default function UsuariosPage() {
             accion: async () => {
                 setProcesando(true);
                 try {
-                    await eliminarUsuarioAdmin(u.idUsuario);
-                    mostrarNotificacion('exito', `Usuario ${nombreLimpio} eliminado.`);
+                    const res = await eliminarUsuarioAdmin(u.idUsuario);
+                    mostrarNotificacion('exito', res?.mensaje || `Usuario ${nombreLimpio} eliminado.`);
                     setConfirmacion(prev => ({ ...prev, abierto: false }));
                     await cargar();
                 } catch (err) {
@@ -798,13 +804,19 @@ export default function UsuariosPage() {
             {/* Modal Crear / Editar Usuario (0 emojis, selects alineados) */}
             <Modal
                 isOpen={modalAbierto}
-                onClose={() => setModalAbierto(false)}
+                onClose={() => { setModalAbierto(false); setErrorModal(''); }}
                 title={modoEdicion ? `Editar Usuario #${formUser.idUsuario}` : 'Nuevo Usuario'}
                 subtitle={modoEdicion ? 'Actualiza datos, rol y permisos de acceso' : 'Alta de cuenta en la plataforma'}
                 icon={Users}
                 maxWidth="520px"
             >
                 <form onSubmit={handleSubmitFormulario} className="modal-form">
+                    {errorModal && (
+                        <div className="alert alert-error" style={{ marginBottom: '0.75rem' }}>
+                            <AlertCircle size={16} />
+                            <span>{errorModal}</span>
+                        </div>
+                    )}
                     <div className="form-group">
                         <label className="form-label">Nombre completo *</label>
                         <input

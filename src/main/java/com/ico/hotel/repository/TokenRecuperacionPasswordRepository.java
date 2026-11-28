@@ -17,4 +17,9 @@ public interface TokenRecuperacionPasswordRepository extends JpaRepository<Token
     @Modifying
     @Query("UPDATE TokenRecuperacionPassword t SET t.usado = true WHERE t.usuario.idUsuario = :idUsuario AND t.usado = false")
     int invalidarActivosPorUsuario(@Param("idUsuario") Integer idUsuario);
+
+    // Elimina tokens de recuperación de contraseña asociados al usuario antes de borrar la cuenta
+    @Modifying
+    @Query("DELETE FROM TokenRecuperacionPassword t WHERE t.usuario.idUsuario = :idUsuario")
+    int eliminarPorUsuario(@Param("idUsuario") Integer idUsuario);
 }

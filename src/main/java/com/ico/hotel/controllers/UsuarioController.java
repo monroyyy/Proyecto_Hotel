@@ -4,6 +4,8 @@ import com.ico.hotel.dto.auth.UsuarioResponse;
 import com.ico.hotel.models.Rol;
 import com.ico.hotel.models.TokenVerificacion;
 import com.ico.hotel.models.Usuario;
+import com.ico.hotel.repository.ReservaRepository;
+import com.ico.hotel.repository.TokenRecuperacionPasswordRepository;
 import com.ico.hotel.repository.TokenVerificacionRepository;
 import com.ico.hotel.repository.UsuarioRepository;
 import com.ico.hotel.security.CustomUserDetails;
@@ -31,6 +33,8 @@ public class UsuarioController {
 
     private final UsuarioRepository usuarioRepository;
     private final TokenVerificacionRepository tokenVerificacionRepository;
+    private final TokenRecuperacionPasswordRepository tokenRecuperacionPasswordRepository;
+    private final ReservaRepository reservaRepository;
     private final PasswordEncoder passwordEncoder;
 
     @GetMapping
@@ -252,12 +256,30 @@ public class UsuarioController {
             return ResponseEntity.badRequest().body(Map.of("error", "Por seguridad, no puede eliminar su propia cuenta de administrador en sesión."));
         }
 
+        // Bloquear eliminación si el usuario tiene reservaciones activas (Pre-reserva, Confirmada u Ocupada)
+        long reservasActivas = reservaRepository.countByUsuarioIdUsuarioAndEstadoIn(
+                id, List.of("Pre-reserva", "Confirmada", "Ocupada"));
+        if (reservasActivas > 0) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                    "error", "No se puede eliminar la cuenta porque tiene " + reservasActivas
+                            + " reservación(es) activa(s) (Pre-reserva, Confirmada u Ocupada). Cancele o finalice las estancias primero, o suspenda la cuenta."
+            ));
+        }
+
+        // Desvincular reservaciones históricas (Finalizada, Cancelada, No-Show) para conservar el registro contable y los datos del huésped sin romper la FK
+        int historialDesvinculado = reservaRepository.desvincularUsuarioDeReservas(id);
+
         List<TokenVerificacion> tokens = tokenVerificacionRepository.findByUsuario(u);
         if (!tokens.isEmpty()) {
             tokenVerificacionRepository.deleteAll(tokens);
         }
+        // Eliminar tokens de recuperación de contraseña asociados antes de borrar el usuario
+        tokenRecuperacionPasswordRepository.eliminarPorUsuario(id);
 
         usuarioRepository.delete(u);
-        return ResponseEntity.ok(Map.of("mensaje", "Usuario eliminado correctamente."));
+        String mensaje = historialDesvinculado > 0
+                ? "Usuario eliminado correctamente. Sus " + historialDesvinculado + " reservación(es) histórica(s) se conservaron en el registro contable."
+                : "Usuario eliminado correctamente.";
+        return ResponseEntity.ok(Map.of("mensaje", mensaje));
     }
 }

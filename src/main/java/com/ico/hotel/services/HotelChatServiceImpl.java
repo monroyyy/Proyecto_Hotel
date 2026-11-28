@@ -712,9 +712,12 @@ public class HotelChatServiceImpl implements HotelChatService {
             sb.append("| **Huésped Titular** | ").append(res.get("titular")).append(" |\n");
             sb.append("| **Estancia** | ").append(res.get("fechaEntrada")).append(" → ").append(res.get("fechaSalida")).append(" (").append(res.get("noches")).append(" noches) |\n");
             if (!esAdmin) {
+                // Lectura de llaves reales devueltas por ReservaTool ("anticipo" y "saldo") con respaldo para evitar null
+                Object anticipoVal = res.getOrDefault("anticipo", res.get("anticipoPagado"));
+                Object saldoVal = res.getOrDefault("saldo", res.get("saldoPendiente"));
                 sb.append("| **Total** | **").append(res.get("total")).append("** |\n");
-                sb.append("| **Anticipo Pagado** | ").append(res.get("anticipoPagado")).append(" |\n");
-                sb.append("| **Saldo Pendiente** | ").append(res.get("saldoPendiente")).append(" |\n");
+                sb.append("| **Anticipo Pagado** | ").append(anticipoVal != null ? anticipoVal : "$0.00 MXN").append(" |\n");
+                sb.append("| **Saldo Pendiente** | ").append(saldoVal != null ? saldoVal : "$0.00 MXN").append(" |\n");
             }
             return sb.toString();
         }

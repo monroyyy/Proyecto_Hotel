@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -181,4 +182,12 @@ public interface ReservaRepository extends JpaRepository<Reserva, Integer> {
                                             @Param("fin") LocalDate fin,
                                             @Param("idHotel") Integer idHotel,
                                             Pageable pageable);
+
+    // Cuenta reservaciones activas de un usuario para bloquear la eliminación de su cuenta
+    long countByUsuarioIdUsuarioAndEstadoIn(Integer idUsuario, Collection<String> estados);
+
+    // Desvincula el usuario de reservaciones históricas (Finalizada, Cancelada, No-Show) antes de eliminar la cuenta, conservando el historial contable y el registro de huésped
+    @Modifying
+    @Query("UPDATE Reserva r SET r.usuario = null WHERE r.usuario.idUsuario = :idUsuario")
+    int desvincularUsuarioDeReservas(@Param("idUsuario") Integer idUsuario);
 }
