@@ -1453,9 +1453,9 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 </button>
                             </div>
                         ) : vistaCatalogo === 'LISTA' ? (
-                            /* Vista 1: Lista Horizontal Boutique */
-                            <div className="hp-rooms-list">
-                                {habitacionesDisponibles.map(hab => {
+                            /* Vista 1: Lista Horizontal Boutique con entrada escalonada */
+                            <div className="hp-rooms-list" key="vista-lista">
+                                {habitacionesDisponibles.map((hab, idx) => {
                                     const precioNoche = Number(hab.tipoHabitacion?.precioBase || 0);
                                     const totalEstimado = precioNoche * nochesSeleccionadas;
                                     const amenidades = obtenerAmenidadesHabitacion(hab);
@@ -1466,7 +1466,11 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         && misReservas.some(r => r.idReserva === hab.idReservaActiva);
 
                                     return (
-                                        <article key={hab.idHabitacion} className={`hp-room-row-card ${!evalHab.disponibleEnFechas ? 'has-date-conflict' : ''}`}>
+                                        <article
+                                            key={hab.idHabitacion}
+                                            className={`hp-room-row-card hp-room-anim-list ${!evalHab.disponibleEnFechas ? 'has-date-conflict' : ''}`}
+                                            style={{ '--card-idx': Math.min(idx, 8) }}
+                                        >
                                             <div className="hp-room-row-media">
                                                 <img
                                                     src={obtenerImagenHabitacion(hab)}
@@ -1569,9 +1573,9 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 })}
                             </div>
                         ) : (
-                            /* Vista 2: Cuadrícula Minimalista Editorial */
-                            <div className="hp-rooms-grid">
-                                {habitacionesDisponibles.map(hab => {
+                            /* Vista 2: Cuadrícula Minimalista Editorial con entrada escalonada */
+                            <div className="hp-rooms-grid" key="vista-grid">
+                                {habitacionesDisponibles.map((hab, idx) => {
                                     const precioNoche = Number(hab.tipoHabitacion?.precioBase || 0);
                                     const totalEstimado = precioNoche * nochesSeleccionadas;
                                     const amenidades = obtenerAmenidadesHabitacion(hab);
@@ -1582,7 +1586,11 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         && misReservas.some(r => r.idReserva === hab.idReservaActiva);
 
                                     return (
-                                        <article key={hab.idHabitacion} className={`hp-room-card ${!evalHab.disponibleEnFechas ? 'has-date-conflict' : ''}`}>
+                                        <article
+                                            key={hab.idHabitacion}
+                                            className={`hp-room-card hp-room-anim-grid ${!evalHab.disponibleEnFechas ? 'has-date-conflict' : ''}`}
+                                            style={{ '--card-idx': Math.min(idx, 8) }}
+                                        >
                                             <div>
                                                 <div className="hp-room-media-wrap">
                                                     <img
