@@ -133,8 +133,9 @@ export default function TiposHabitacionPage() {
             mostrarMensaje('error', 'La capacidad debe ser mayor a cero.');
             return;
         }
-        if (formTipo.precioBase < 0) {
-            mostrarMensaje('error', 'La tarifa base no puede ser negativa.');
+        // Impedir tarifa base menor o igual a $0.00 desde el cliente
+        if (!formTipo.precioBase || Number(formTipo.precioBase) <= 0) {
+            mostrarMensaje('error', 'La tarifa base debe ser mayor a $0.00.');
             return;
         }
 
@@ -538,7 +539,7 @@ export default function TiposHabitacionPage() {
                                 <input
                                     type="number"
                                     step="0.01"
-                                    min="0"
+                                    min="1"
                                     required
                                     value={formTipo.precioBase}
                                     onChange={e => setFormTipo({ ...formTipo, precioBase: parseFloat(e.target.value) || 0 })}

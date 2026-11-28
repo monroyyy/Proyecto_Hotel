@@ -26,6 +26,8 @@ export default function HotelesPage() {
     const [notificacion, setNotificacion] = useState(null);
 
     const [modalAbierto, setModalAbierto] = useState(false);
+    // Error mostrado dentro del modal de crear/editar hotel para que no quede oculto detrás del backdrop
+    const [errorModal, setErrorModal] = useState('');
     const [mostrarOpcionales, setMostrarOpcionales] = useState(false);
     const [hotelAEditar, setHotelAEditar] = useState(null);
     const [hotelAEliminar, setHotelAEliminar] = useState(null);
@@ -117,6 +119,7 @@ export default function HotelesPage() {
 
     const handleAbrirNuevo = () => {
         setHotelAEditar(null);
+        setErrorModal('');
         setMostrarOpcionales(false);
         setFormHotel({
             nombre: '',
@@ -136,6 +139,7 @@ export default function HotelesPage() {
 
     const handleAbrirEditar = (hotel) => {
         setHotelAEditar(hotel);
+        setErrorModal('');
         setMostrarOpcionales(false);
         setFormHotel({
             nombre: hotel.nombre || '',
@@ -178,16 +182,17 @@ export default function HotelesPage() {
 
     const handleGuardar = async (e) => {
         e.preventDefault();
+        setErrorModal('');
 
         const telLimpio = formHotel.telefono ? formHotel.telefono.trim() : '';
         if (!/^\d{10}$/.test(telLimpio)) {
-            mostrarMensaje('error', 'El teléfono debe tener exactamente 10 dígitos numéricos.');
+            setErrorModal('El teléfono debe tener exactamente 10 dígitos numéricos.');
             return;
         }
 
         const emailLimpio = formHotel.email ? formHotel.email.trim().toLowerCase() : '';
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLimpio)) {
-            mostrarMensaje('error', 'Ingresa un correo electrónico válido.');
+            setErrorModal('Ingresa un correo electrónico válido.');
             return;
         }
 
@@ -195,7 +200,7 @@ export default function HotelesPage() {
             h.telefono && h.telefono.trim() === telLimpio && (!hotelAEditar || h.idHotel !== hotelAEditar.idHotel)
         );
         if (telRepetido) {
-            mostrarMensaje('error', 'Ese teléfono ya pertenece a otra propiedad registrada.');
+            setErrorModal('Ese teléfono ya pertenece a otra propiedad registrada.');
             return;
         }
 
@@ -203,7 +208,7 @@ export default function HotelesPage() {
             h.email && h.email.trim().toLowerCase() === emailLimpio && (!hotelAEditar || h.idHotel !== hotelAEditar.idHotel)
         );
         if (emailRepetido) {
-            mostrarMensaje('error', 'Ese correo ya pertenece a otra propiedad registrada.');
+            setErrorModal('Ese correo ya pertenece a otra propiedad registrada.');
             return;
         }
 
@@ -230,7 +235,8 @@ export default function HotelesPage() {
             setHotelAEditar(null);
             await cargarHoteles();
         } catch (err) {
-            mostrarMensaje('error', err.message || 'Error al guardar el hotel.');
+            // Mostrar error dentro del modal para que sea visible sobre el backdrop
+            setErrorModal(err.message || 'Error al guardar el hotel.');
         }
     };
 
@@ -769,6 +775,14 @@ export default function HotelesPage() {
                                     />
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Mostrar error dentro del modal justo encima de los botones de acción */}
+                    {errorModal && (
+                        <div className="alert alert-error" style={{ marginBottom: '0.75rem' }}>
+                            <AlertCircle size={16} />
+                            <span>{errorModal}</span>
                         </div>
                     )}
 

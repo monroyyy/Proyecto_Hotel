@@ -276,9 +276,10 @@ public class ReservaTool {
         map.put("noches", r.getNoches());
         map.put("adultos", r.getAdultos());
         map.put("ninos", r.getNinos());
-        map.put("total", "$" + r.getTotal() + " MXN");
-        map.put("anticipo", "$" + r.getAnticipo() + " MXN");
-        map.put("saldo", "$" + r.getSaldo() + " MXN");
+        // Formateo con separador de miles y 2 decimales para folios consultados en chat
+        map.put("total", fmtMoneda(r.getTotal()));
+        map.put("anticipo", fmtMoneda(r.getAnticipo()));
+        map.put("saldo", fmtMoneda(r.getSaldo()));
         map.put("metodoPago", r.getMetodoPago() != null ? r.getMetodoPago() : "N/A");
         map.put("cuna", Boolean.TRUE.equals(r.getCuna()) ? "Sí" : "No");
         map.put("camaExtra", Boolean.TRUE.equals(r.getCamaExtra()) ? "Sí" : "No");
@@ -469,11 +470,20 @@ public class ReservaTool {
             map.put("fechaEntrada", r.getFechaEntrada().toString());
             map.put("fechaSalida", r.getFechaSalida().toString());
             map.put("noches", r.getNoches());
-            map.put("total", "$" + r.getTotal() + " MXN");
-            map.put("anticipoPendiente", "$" + (r.getAnticipo() != null && r.getAnticipo().compareTo(BigDecimal.ZERO) > 0 ? r.getAnticipo() : r.getTotal().divide(BigDecimal.valueOf(2), 2, java.math.RoundingMode.HALF_UP)) + " MXN");
+            map.put("total", fmtMoneda(r.getTotal()));
+            map.put("anticipoPendiente", fmtMoneda(r.getAnticipo() != null && r.getAnticipo().compareTo(BigDecimal.ZERO) > 0 ? r.getAnticipo() : r.getTotal().divide(BigDecimal.valueOf(2), 2, java.math.RoundingMode.HALF_UP)));
             map.put("vigenciaExpiracion", r.getFechaExpiracion() != null ? r.getFechaExpiracion().toString() : "24 a 48 horas");
             map.put("estado", "Pre-reserva");
             return map;
         }).toList();
+    }
+
+    // Formatea montos monetarios con separador de miles y 2 decimales para respuestas del chatbot
+    private String fmtMoneda(BigDecimal val) {
+        double d = val != null ? val.doubleValue() : 0.0;
+        java.text.NumberFormat nf = java.text.NumberFormat.getNumberInstance(java.util.Locale.US);
+        nf.setMinimumFractionDigits(2);
+        nf.setMaximumFractionDigits(2);
+        return "$" + nf.format(d) + " MXN";
     }
 }

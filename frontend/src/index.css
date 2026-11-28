@@ -1196,7 +1196,8 @@ body.modal-open .app-layout {
 
 .toast-notification {
     position: fixed;
-    bottom: 1.5rem;
+    /* Margen inferior amplio para que no se solape con el botón flotante del asistente */
+    bottom: 5.5rem;
     right: 1.5rem;
     padding: 0.7rem 1.15rem;
     border-radius: var(--radius-md);

@@ -811,12 +811,6 @@ export default function UsuariosPage() {
                 maxWidth="520px"
             >
                 <form onSubmit={handleSubmitFormulario} className="modal-form">
-                    {errorModal && (
-                        <div className="alert alert-error" style={{ marginBottom: '0.75rem' }}>
-                            <AlertCircle size={16} />
-                            <span>{errorModal}</span>
-                        </div>
-                    )}
                     <div className="form-group">
                         <label className="form-label">Nombre completo *</label>
                         <input
@@ -908,6 +902,14 @@ export default function UsuariosPage() {
                             <option value="false">Suspendida</option>
                         </select>
                     </div>
+
+                    {/* Mostrar el error justo encima de los botones para que sea visible sin hacer scroll */}
+                    {errorModal && (
+                        <div className="alert alert-error" style={{ marginBottom: '0.75rem' }}>
+                            <AlertCircle size={16} />
+                            <span>{errorModal}</span>
+                        </div>
+                    )}
 
                     <div className="modal-actions">
                         <button type="button" className="btn btn-secondary" onClick={() => setModalAbierto(false)}>
