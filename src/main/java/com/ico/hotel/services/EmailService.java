@@ -12,6 +12,9 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -264,5 +267,75 @@ public class EmailService {
                     </div>
                 </div>
                 """.formatted(nombreSeguro, sb.toString(), enlace, minutos);
+    }
+
+    /**
+     * Envía de forma asíncrona un correo de confirmación de seguridad cuando el usuario actualiza su contraseña.
+     */
+    @Async("mailTaskExecutor")
+    public CompletableFuture<Boolean> enviarCorreoCambioPassword(String destinatario, String nombreUsuario) {
+        if (destinatario == null || destinatario.isBlank()) {
+            return CompletableFuture.completedFuture(false);
+        }
+        String correoDestino = destinatario.trim();
+        String baseUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
+        String enlaceRecuperacion = baseUrl + "/recuperar-password?email=" + correoDestino;
+        String fechaHora = ZonedDateTime.now(ZoneId.of("America/Mexico_City"))
+                .format(DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm 'hrs'"));
+
+        if (mailFrom == null || mailFrom.isBlank() || mailFrom.contains("tu_correo@")
+                || mailPassword == null || mailPassword.isBlank() || mailPassword.contains("xxxx")) {
+            log.info("[SEGURIDAD - MODO LOCAL SIN SMTP] Aviso de cambio de contraseña generado para {} ({}).",
+                    correoDestino, fechaHora);
+            return CompletableFuture.completedFuture(false);
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
+
+            helper.setFrom(mailFrom, "Hotel Paraíso - Seguridad");
+            helper.setTo(correoDestino);
+            helper.setSubject("Confirmación: tu contraseña ha sido actualizada - Hotel Paraíso");
+
+            String html = construirPlantillaCambioPasswordHtml(nombreUsuario, fechaHora, enlaceRecuperacion);
+            helper.setText(html, true);
+
+            mailSender.send(message);
+            log.info("Correo de confirmación de cambio de contraseña enviado vía SMTP a {}", correoDestino);
+            return CompletableFuture.completedFuture(true);
+        } catch (Exception e) {
+            log.error("No se pudo enviar el correo de confirmación de cambio de contraseña a {}: {}", correoDestino, e.getMessage());
+            return CompletableFuture.completedFuture(false);
+        }
+    }
+
+    private String construirPlantillaCambioPasswordHtml(String nombre, String fechaHora, String enlaceRecuperacion) {
+        String nombreSeguro = (nombre != null && !nombre.isBlank())
+                ? nombre.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                : "viajero";
+        return """
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 580px; margin: 0 auto; background: #ffffff; border: 1px solid #e2d9cc; border-radius: 14px; overflow: hidden;">
+                    <div style="background: linear-gradient(135deg, #f5f0e8, #fcfaf7); padding: 24px 28px; border-bottom: 1px solid #e2d9cc; border-top: 3px solid #b85d38;">
+                        <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #16324f;">Hotel Paraíso</h1>
+                        <p style="margin: 4px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #b85d38;">Costa &amp; Hospitalidad · Aviso de Seguridad</p>
+                    </div>
+                    <div style="padding: 28px; color: #16324f; line-height: 1.6;">
+                        <h2 style="margin-top: 0; font-size: 18px; color: #16324f;">Hola, %s</h2>
+                        <p>Te confirmamos que la contraseña de tu cuenta en <strong>Hotel Paraíso</strong> fue actualizada correctamente el <strong>%s</strong>.</p>
+                        <div style="margin: 22px 0; padding: 14px 16px; background: #fcfaf7; border-left: 3px solid #2d5a43; border-radius: 0 10px 10px 0; font-size: 13px; color: #486581;">
+                            Por tu seguridad, todas las sesiones anteriores en otros dispositivos fueron cerradas automáticamente.
+                        </div>
+                        <p style="font-size: 13px; color: #486581;">
+                            Si tú realizaste este cambio, no necesitas hacer nada más. Si <strong>no reconoces</strong> esta actividad, restablece tu contraseña de inmediato:
+                        </p>
+                        <div style="text-align: center; margin: 22px 0;">
+                            <a href="%s" style="background: #b85d38; color: #ffffff; text-decoration: none; padding: 11px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block;">
+                                Restablecer mi contraseña
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                """.formatted(nombreSeguro, fechaHora, enlaceRecuperacion);
     }
 }

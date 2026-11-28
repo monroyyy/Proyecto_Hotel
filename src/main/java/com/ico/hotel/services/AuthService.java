@@ -381,8 +381,13 @@ public class AuthService {
         String nuevoToken = jwtService.generateToken(usuario);
         log.info("Contraseña actualizada y tokens previos revocados para idUsuario={}", usuario.getIdUsuario());
 
+        // Enviar correo de confirmación de cambio de contraseña de forma asíncrona
+        if (emailService != null) {
+            emailService.enviarCorreoCambioPassword(usuario.getEmail(), usuario.getNombre());
+        }
+
         Map<String, Object> respuesta = new LinkedHashMap<>();
-        respuesta.put("mensaje", "Contraseña actualizada exitosamente. Tu cuenta está protegida y las sesiones previas fueron revocadas.");
+        respuesta.put("mensaje", "Contraseña actualizada exitosamente. Enviamos una confirmación a tu correo electrónico y las sesiones previas fueron revocadas.");
         respuesta.put("status", 200);
         if (nuevoToken != null) {
             respuesta.put("token", nuevoToken);
@@ -542,6 +547,11 @@ public class AuthService {
         usuarioRepository.save(usuario);
 
         log.info("Contraseña restablecida y sesiones previas revocadas para idUsuario={}", usuario.getIdUsuario());
+
+        // Notificar por correo electrónico la actualización exitosa de la contraseña
+        if (emailService != null) {
+            emailService.enviarCorreoCambioPassword(usuario.getEmail(), usuario.getNombre());
+        }
 
         return Map.of(
                 "mensaje", "Tu contraseña ha sido restablecida exitosamente. Inicia sesión con tu nueva clave.",
