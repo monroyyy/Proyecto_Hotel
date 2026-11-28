@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-    Compass, CalendarCheck, Sparkles, User, LogOut,
+    Hotel, Compass, CalendarCheck, Sparkles, User, LogOut,
     CheckCircle2, LogIn, UserPlus, ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -135,12 +135,13 @@ export default function GuestLayout({ children, activeTab, setActiveTab }) {
                                 navigate('/portal-huesped');
                             }}
                         >
+                            {/* Emblema unificado con /login: icono Hotel sobre degradado terracota */}
                             <div className="guest-brand-emblem" aria-hidden="true">
-                                HP
+                                <Hotel size={18} />
                             </div>
                             <div>
                                 <div className="guest-brand-title">Hotel Paraíso</div>
-                                <div className="guest-brand-subtitle">Colección México</div>
+                                <div className="guest-brand-subtitle">Costa &amp; Hospitalidad</div>
                             </div>
                         </button>
                     </div>

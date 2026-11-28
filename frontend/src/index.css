@@ -1070,7 +1070,8 @@ body.modal-open .app-layout {
     height: 36px;
     border-radius: var(--radius-md);
     background: var(--bg-subtle);
-    color: var(--admin-accent);
+    /* Usa el acento de la superficie activa: terracota en portal huésped y verde palma en consola */
+    color: var(--accent-surface, var(--admin-accent));
     border: 1px solid var(--border-default);
     display: flex;
     align-items: center;
