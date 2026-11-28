@@ -190,4 +190,16 @@ public interface ReservaRepository extends JpaRepository<Reserva, Integer> {
     @Modifying
     @Query("UPDATE Reserva r SET r.usuario = null WHERE r.usuario.idUsuario = :idUsuario")
     int desvincularUsuarioDeReservas(@Param("idUsuario") Integer idUsuario);
+
+    // Cuenta reservaciones activas de un hotel para impedir su desactivación o eliminación
+    long countByHabitacionHotelIdHotelAndEstadoIn(Integer idHotel, Collection<String> estados);
+
+    // Cuenta reservaciones totales de una habitación para impedir eliminarla si tiene historial
+    long countByHabitacionIdHabitacion(Integer idHabitacion);
+
+    // Obtiene el máximo de ocupantes en reservaciones activas de una categoría para evitar reducir su capacidad por debajo
+    @Query("SELECT COALESCE(MAX(COALESCE(r.adultos, 1) + COALESCE(r.ninos, 0)), 0) "
+            + "FROM Reserva r WHERE r.habitacion.tipoHabitacion.idTipo = :idTipo "
+            + "AND r.estado IN ('Pre-reserva','Confirmada','Ocupada')")
+    int findMaxOcupantesEnReservasActivasPorTipo(@Param("idTipo") Integer idTipo);
 }

@@ -29,6 +29,9 @@ public class HotelController {
     private HabitacionRepository habitacionRepository;
 
     @Autowired
+    private com.ico.hotel.repository.ReservaRepository reservaRepository;
+
+    @Autowired
     private CatalogoMediaValidator catalogoMediaValidator;
 
     @GetMapping
@@ -146,6 +149,17 @@ public class HotelController {
             hotel.setCiudad(datos.getCiudad().trim());
         }
         if (datos.getActivo() != null) {
+            // Bloquear desactivación del hotel si tiene reservaciones activas
+            if (Boolean.FALSE.equals(datos.getActivo())) {
+                long activas = reservaRepository.countByHabitacionHotelIdHotelAndEstadoIn(
+                        id, List.of("Pre-reserva", "Confirmada", "Ocupada"));
+                if (activas > 0) {
+                    return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                            "error", "No se puede desactivar el hotel porque tiene " + activas
+                                    + " reservación(es) activa(s) (Pre-reserva, Confirmada u Ocupada)."
+                    ));
+                }
+            }
             hotel.setActivo(datos.getActivo());
         }
         if (datos.getImagenUrl() != null) {
@@ -173,8 +187,16 @@ public class HotelController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Hotel no encontrado."));
         }
 
-        // Regla de negocio: No poder eliminar un hotel en caso de tener habitaciones
-        // ocupadas
+        // Regla de negocio: No poder eliminar un hotel con reservaciones activas o habitaciones ocupadas
+        long reservasActivas = reservaRepository.countByHabitacionHotelIdHotelAndEstadoIn(
+                id, List.of("Pre-reserva", "Confirmada", "Ocupada"));
+        if (reservasActivas > 0) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error",
+                            "No se puede eliminar el hotel porque tiene " + reservasActivas
+                                    + " reservación(es) activa(s) (Pre-reserva, Confirmada u Ocupada)."));
+        }
+
         boolean tieneHabitacionesOcupadas = habitacionRepository.findAll().stream()
                 .anyMatch(h -> h.getHotel() != null &&
                         h.getHotel().getIdHotel().equals(id) &&

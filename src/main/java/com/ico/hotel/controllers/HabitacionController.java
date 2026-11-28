@@ -33,6 +33,9 @@ public class HabitacionController {
     private TipoHabitacionRepository tipoHabitacionRepository;
 
     @Autowired
+    private com.ico.hotel.repository.ReservaRepository reservaRepository;
+
+    @Autowired
     private com.ico.hotel.services.ReservaService reservaService;
 
     /**
@@ -159,6 +162,18 @@ public class HabitacionController {
         }
         if (dto.getEstado() != null && !dto.getEstado().isBlank()) {
             String nuevoEstado = dto.getEstado().trim();
+            // Impedir pasar a Mantenimiento si la habitación tiene reservaciones Confirmadas u Ocupadas
+            if ("Mantenimiento".equalsIgnoreCase(nuevoEstado)) {
+                long bloqueantes = reservaRepository.findActivasByHabitacion(id).stream()
+                        .filter(r -> "Confirmada".equalsIgnoreCase(r.getEstado()) || "Ocupada".equalsIgnoreCase(r.getEstado()))
+                        .count();
+                if (bloqueantes > 0) {
+                    return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                            "error", "No se puede poner la habitación #" + habitacion.getNumero()
+                                    + " en Mantenimiento porque tiene " + bloqueantes + " reservación(es) Confirmada(s) u Ocupada(s)."
+                    ));
+                }
+            }
             habitacion.setEstado(nuevoEstado);
             if ("Disponible".equalsIgnoreCase(nuevoEstado) || "Mantenimiento".equalsIgnoreCase(nuevoEstado)) {
                 reservaService.cancelarPreReservasDeHabitacion(id, "Liberada por administración al modificar estado de habitación a " + nuevoEstado);
@@ -206,6 +221,18 @@ public class HabitacionController {
 
         Habitacion habitacion = habitacionOpt.get();
         String estadoTrim = nuevoEstado.trim();
+        // Impedir pasar a Mantenimiento si la habitación tiene reservaciones Confirmadas u Ocupadas
+        if ("Mantenimiento".equalsIgnoreCase(estadoTrim)) {
+            long bloqueantes = reservaRepository.findActivasByHabitacion(id).stream()
+                    .filter(r -> "Confirmada".equalsIgnoreCase(r.getEstado()) || "Ocupada".equalsIgnoreCase(r.getEstado()))
+                    .count();
+            if (bloqueantes > 0) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                        "error", "No se puede poner la habitación #" + habitacion.getNumero()
+                                + " en Mantenimiento porque tiene " + bloqueantes + " reservación(es) Confirmada(s) u Ocupada(s)."
+                ));
+            }
+        }
         habitacion.setEstado(estadoTrim);
         Habitacion actualizada = habitacionRepository.save(habitacion);
 
@@ -231,12 +258,30 @@ public class HabitacionController {
 
         Habitacion habitacion = habitacionOpt.get();
         if ("Ocupada".equalsIgnoreCase(habitacion.getEstado())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", "No se puede eliminar la habitación #" + habitacion.getNumero() + " porque actualmente está ocupada."));
         }
 
-        habitacionRepository.deleteById(id);
-        return ResponseEntity.ok(Map.of("mensaje", "Habitación eliminada exitosamente", "id", id));
+        // Bloquear eliminación si tiene reservaciones activas o historial registrado (evita HTTP 500 por FK)
+        var activas = reservaRepository.findActivasByHabitacion(id);
+        if (!activas.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "No se puede eliminar la habitación #" + habitacion.getNumero()
+                            + " porque tiene " + activas.size() + " reservación(es) activa(s)."));
+        }
+        if (reservaRepository.countByHabitacionIdHabitacion(id) > 0) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "No se puede eliminar la habitación #" + habitacion.getNumero()
+                            + " porque cuenta con historial de reservaciones registradas. En su lugar, puede ponerla en Mantenimiento."));
+        }
+
+        try {
+            habitacionRepository.deleteById(id);
+            return ResponseEntity.ok(Map.of("mensaje", "Habitación eliminada exitosamente", "id", id));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "No se pudo eliminar la habitación #" + habitacion.getNumero() + " porque tiene registros vinculados."));
+        }
     }
 
     /**

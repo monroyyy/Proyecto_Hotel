@@ -24,6 +24,9 @@ public class TipoHabitacionController {
     private TipoHabitacionRepository tipoHabitacionRepository;
 
     @Autowired
+    private com.ico.hotel.repository.ReservaRepository reservaRepository;
+
+    @Autowired
     private CatalogoMediaValidator catalogoMediaValidator;
 
     @GetMapping
@@ -39,8 +42,9 @@ public class TipoHabitacionController {
         if (tipo.getCapacidad() == null || tipo.getCapacidad() <= 0) {
             return ResponseEntity.badRequest().body(Map.of("error", "La capacidad debe ser mayor a cero."));
         }
-        if (tipo.getPrecioBase() == null || tipo.getPrecioBase().compareTo(BigDecimal.ZERO) < 0) {
-            return ResponseEntity.badRequest().body(Map.of("error", "El precio base no puede ser negativo."));
+        // Impedir tarifa base <= 0 al crear categoría
+        if (tipo.getPrecioBase() == null || tipo.getPrecioBase().compareTo(BigDecimal.ZERO) <= 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "El precio base debe ser mayor a $0.00."));
         }
         tipo.setImagenUrl(catalogoMediaValidator.validarImagenUrl(tipo.getImagenUrl()));
         tipo.setDescripcion(catalogoMediaValidator.validarTextoPlano(tipo.getDescripcion(), "descripcion", 500));
@@ -58,34 +62,45 @@ public class TipoHabitacionController {
 
     @PutMapping("/{id}")
     public ResponseEntity<?> actualizarTipoHabitacion(@PathVariable Integer id, @RequestBody TipoHabitacion datos) {
-        return tipoHabitacionRepository.findById(id)
-                .<ResponseEntity<?>>map(tipo -> {
-                    if (datos.getNombre() != null && !datos.getNombre().trim().isEmpty()) {
-                        tipo.setNombre(datos.getNombre().trim());
-                    }
-                    if (datos.getCapacidad() != null) {
-                        if (datos.getCapacidad() <= 0) {
-                            throw new IllegalArgumentException("La capacidad debe ser mayor a cero.");
-                        }
-                        tipo.setCapacidad(datos.getCapacidad());
-                    }
-                    if (datos.getDescripcion() != null) {
-                        tipo.setDescripcion(catalogoMediaValidator.validarTextoPlano(datos.getDescripcion(), "descripcion", 500));
-                    }
-                    if (datos.getImagenUrl() != null) {
-                        tipo.setImagenUrl(catalogoMediaValidator.validarImagenUrl(datos.getImagenUrl()));
-                    }
-                    if (datos.getPrecioBase() != null) {
-                        if (datos.getPrecioBase().compareTo(BigDecimal.ZERO) < 0) {
-                            throw new IllegalArgumentException("El precio base no puede ser negativo.");
-                        }
-                        tipo.setPrecioBase(datos.getPrecioBase());
-                    }
-                    TipoHabitacion actualizado = tipoHabitacionRepository.save(tipo);
-                    return ResponseEntity.ok(actualizado);
-                })
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(Map.of("error", "Tipo de habitación no encontrado con ID: " + id)));
+        var tipoOpt = tipoHabitacionRepository.findById(id);
+        if (tipoOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Tipo de habitación no encontrado con ID: " + id));
+        }
+        TipoHabitacion tipo = tipoOpt.get();
+
+        if (datos.getNombre() != null && !datos.getNombre().trim().isEmpty()) {
+            tipo.setNombre(datos.getNombre().trim());
+        }
+        if (datos.getCapacidad() != null) {
+            if (datos.getCapacidad() <= 0) {
+                return ResponseEntity.badRequest().body(Map.of("error", "La capacidad debe ser mayor a cero."));
+            }
+            // Impedir bajar la capacidad por debajo de reservaciones activas existentes
+            int maxOcupantes = reservaRepository.findMaxOcupantesEnReservasActivasPorTipo(id);
+            if (datos.getCapacidad() < maxOcupantes) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                        "error", "No se puede reducir la capacidad a " + datos.getCapacidad()
+                                + " porque existen reservaciones activas con hasta " + maxOcupantes + " ocupantes en esta categoría."
+                ));
+            }
+            tipo.setCapacidad(datos.getCapacidad());
+        }
+        if (datos.getDescripcion() != null) {
+            tipo.setDescripcion(catalogoMediaValidator.validarTextoPlano(datos.getDescripcion(), "descripcion", 500));
+        }
+        if (datos.getImagenUrl() != null) {
+            tipo.setImagenUrl(catalogoMediaValidator.validarImagenUrl(datos.getImagenUrl()));
+        }
+        if (datos.getPrecioBase() != null) {
+            // Impedir tarifa base <= 0 al editar categoría
+            if (datos.getPrecioBase().compareTo(BigDecimal.ZERO) <= 0) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El precio base debe ser mayor a $0.00."));
+            }
+            tipo.setPrecioBase(datos.getPrecioBase());
+        }
+        TipoHabitacion actualizado = tipoHabitacionRepository.save(tipo);
+        return ResponseEntity.ok(actualizado);
     }
 
     @DeleteMapping("/{id}")
