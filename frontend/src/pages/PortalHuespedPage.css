@@ -2864,19 +2864,112 @@
     bottom: -11px;
 }
 
+/* Cabecera y acciones limpias de Mis Reservaciones */
+.hp-reservas-header {
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.hp-reservas-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.hp-icon-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 999px;
+    border: 1px solid var(--border-default, #e2d9cc);
+    background: var(--bg-surface, #ffffff);
+    color: var(--brand-ocean, #16324f);
+    cursor: pointer;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.hp-icon-action-btn svg {
+    transition: transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.hp-icon-action-btn:hover {
+    background: var(--brand-sand-base, #f5f0e8);
+    border-color: var(--brand-terracotta, #b85d38);
+    color: var(--brand-terracotta, #b85d38);
+    transform: translateY(-1.5px);
+    box-shadow: 0 4px 10px -2px rgba(22, 50, 79, 0.10);
+}
+
+.hp-icon-action-btn:hover svg {
+    transform: rotate(180deg);
+}
+
+.hp-icon-action-btn:active {
+    transform: scale(0.93);
+}
+
 .hp-boarding-stub-top {
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.hp-boarding-stub-header-row {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: flex-start;
     gap: 8px;
 }
 
 .hp-boarding-folio-tag {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--text-muted, #627d98);
+    text-transform: uppercase;
+}
+
+.hp-boarding-folio-value {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--brand-ocean, #16324f);
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+}
+
+.hp-boarding-finance-kicker {
+    font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     color: var(--text-muted, #627d98);
     text-transform: uppercase;
+}
+
+.hp-boarding-currency {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted, #627d98);
+}
+
+.hp-boarding-cancel-note {
+    margin-top: 6px;
+    padding: 6px 9px;
+    border-radius: 7px;
+    background: var(--badge-cancelada-bg, #fee2e2);
+    color: var(--badge-cancelada-text, #b91c1c);
+    font-size: 0.74rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.hp-boarding-ended-note {
+    font-size: 0.76rem;
+    color: var(--text-muted, #627d98);
+    font-style: italic;
+    text-align: center;
+    padding: 4px 0;
 }
 
 .hp-boarding-finance-block {

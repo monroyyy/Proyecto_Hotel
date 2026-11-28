@@ -1707,40 +1707,40 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                ================================================================= */}
             {activeSection === 'mis-reservas' && (
                 <section>
-                    <div className="hp-section-header">
+                    <div className="hp-section-header hp-reservas-header">
                         <div>
-                            <div className="hp-section-kicker">Centro de Viajes del Huésped</div>
-                            <h2 className="hp-section-title">Mis Reservaciones e Itinerarios</h2>
+                            <h1 className="hp-hero-title">Mis Reservaciones</h1>
                             <p className="hp-section-desc">
                                 Gestiona tus próximas estancias, descarga tu pase de abordar, confirma pre-reservas o reprograma tus fechas.
                             </p>
                         </div>
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        <div className="hp-reservas-header-actions">
                             {isAuthenticated && (
-                                <>
-                                    <button type="button" className="btn btn-secondary hp-details-btn" onClick={() => cambiarSeccion('mi-perfil')}>
-                                        <User size={15} /> Mi Perfil y Preferencias
-                                    </button>
-                                    <button type="button" className="btn btn-secondary" onClick={cargarDatos}>
-                                        <RefreshCw size={15} /> Actualizar
-                                    </button>
-                                </>
+                                <button
+                                    type="button"
+                                    className="hp-icon-action-btn"
+                                    onClick={cargarDatos}
+                                    aria-label="Actualizar reservaciones"
+                                    title="Actualizar reservaciones"
+                                >
+                                    <RefreshCw size={15} />
+                                </button>
                             )}
                             <button type="button" className="btn btn-primary" onClick={() => cambiarSeccion('explorar')}>
-                                <BedDouble size={16} /> Explorar Suites
+                                <BedDouble size={16} /> Explorar hoteles
                             </button>
                         </div>
                     </div>
 
                     {!isAuthenticated ? (
                         <div className="table-card" style={{ padding: '56px 24px', textAlign: 'center', maxWidth: 560, margin: '0 auto' }}>
-                            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(196, 85, 58, 0.1)', color: 'var(--brand-terracotta)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--brand-terracotta-light)', color: 'var(--brand-terracotta)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
                                 <Lock size={26} />
                             </div>
-                            <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+                            <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--brand-ocean)', marginBottom: 8 }}>
                                 Inicia sesión para consultar tus reservaciones
                             </h3>
-                            <p style={{ color: '#64748b', maxWidth: 440, margin: '0 auto 24px', fontSize: '0.95rem', lineHeight: 1.55 }}>
+                            <p style={{ color: 'var(--text-muted)', maxWidth: 440, margin: '0 auto 24px', fontSize: '0.95rem', lineHeight: 1.55 }}>
                                 Como visitante puedes explorar nuestras propiedades y tarifas. Para gestionar tus itinerarios, pases de abordar y pre-reservas necesitas acceder a tu cuenta.
                             </p>
                             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -1754,48 +1754,55 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                         </div>
                     ) : (
                         <>
-                    {/* Filtros por Estado de Reservación */}
+                    {/* Filtros por Estado unificados con el catálogo de habitaciones */}
                     <div className="hp-category-bar" style={{ marginBottom: '1.5rem' }}>
                         {[
-                            { id: 'TODAS', label: `Todas (${misReservas.length})` },
-                            { id: 'ACTIVAS', label: `Confirmadas / En curso (${misReservas.filter(r => r.estado === 'Confirmada' || r.estado === 'Ocupada').length})` },
-                            { id: 'PRE_RESERVAS', label: `Pre-reservas por confirmar (${misReservas.filter(r => r.estado === 'Pre-reserva').length})` },
-                            { id: 'CANCELADAS', label: `Historial / Canceladas (${misReservas.filter(r => r.estado === 'Cancelada' || r.estado === 'Finalizada' || r.estado === 'No-Show').length})` }
+                            { id: 'TODAS', label: 'Todas', count: misReservas.length },
+                            { id: 'ACTIVAS', label: 'Activas', count: misReservas.filter(r => r.estado === 'Confirmada' || r.estado === 'Ocupada').length },
+                            { id: 'PRE_RESERVAS', label: 'Por confirmar', count: misReservas.filter(r => r.estado === 'Pre-reserva').length },
+                            { id: 'CANCELADAS', label: 'Historial', count: misReservas.filter(r => r.estado === 'Cancelada' || r.estado === 'Finalizada' || r.estado === 'No-Show').length }
                         ].map(tab => (
                             <button
                                 key={tab.id}
                                 type="button"
-                                className={`hp-cat-pill ${filtroEstadoReserva === tab.id ? 'active' : ''}`}
+                                className={`hp-cat-pill ${filtroEstadoReserva === tab.id ? 'active' : ''} ${tab.count === 0 && tab.id !== 'TODAS' ? 'is-empty' : ''}`}
                                 onClick={() => setFiltroEstadoReserva(tab.id)}
                             >
-                                {tab.label}
+                                <span>{tab.label}</span>
+                                <span className="hp-cat-pill-count num">{tab.count}</span>
                             </button>
                         ))}
                     </div>
 
                     {reservasFiltradas.length === 0 ? (
                         <div className="table-card" style={{ padding: '64px 24px', textAlign: 'center' }}>
-                            <Calendar size={48} style={{ color: '#f59e0b', marginBottom: 14 }} />
-                            <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+                            <Calendar size={44} style={{ color: 'var(--brand-terracotta)', marginBottom: 14, opacity: 0.7 }} />
+                            <h3 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--brand-ocean)', marginBottom: 8 }}>
                                 No hay reservaciones en esta categoría
                             </h3>
-                            <p style={{ color: '#64748b', maxWidth: 480, margin: '0 auto 20px', fontSize: '0.95rem' }}>
+                            <p style={{ color: 'var(--text-muted)', maxWidth: 480, margin: '0 auto 20px', fontSize: '0.94rem' }}>
                                 Explora nuestras propiedades en Cancún, Ciudad de México, Guadalajara y más destinos para programar tu próxima estancia.
                             </p>
                             <button type="button" className="btn btn-primary" onClick={() => cambiarSeccion('explorar')}>
-                                Reservar <ArrowRight size={16} />
+                                Explorar hoteles <ArrowRight size={16} />
                             </button>
                         </div>
                     ) : (
-                        <div className="hp-boarding-list">
-                            {reservasFiltradas.map(r => {
+                        <div className="hp-boarding-list" key={filtroEstadoReserva}>
+                            {reservasFiltradas.map((r, idx) => {
                                 const esPreReserva = r.estado === 'Pre-reserva';
-                                const esActiva = r.estado !== 'Cancelada' && r.estado !== 'Finalizada';
+                                const esCancelada = r.estado === 'Cancelada';
+                                const esFinalizada = r.estado === 'Finalizada';
+                                const esActiva = !esCancelada && !esFinalizada && r.estado !== 'No-Show';
                                 const saldoPendiente = Math.max(Number(r.total || 0) - Number(r.anticipo || 0), 0);
                                 const llegada = formatFechaItinerario(r.fechaEntrada);
                                 const salida = formatFechaItinerario(r.fechaSalida);
                                 return (
-                                    <article key={r.idReserva} className="hp-boarding-pass">
+                                    <article
+                                        key={r.idReserva}
+                                        className="hp-boarding-pass hp-room-anim-list"
+                                        style={{ '--card-idx': Math.min(idx, 8) }}
+                                    >
                                         {/* Sección 1: Portada Fotográfica de la Suite */}
                                         <div className="hp-boarding-media">
                                             <img
@@ -1911,46 +1918,39 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         {/* Sección 3: Talón / Cupón Perforado (Stub) con Folio y Acciones Contextuales */}
                                         <div className="hp-boarding-stub">
                                             <div className="hp-boarding-stub-top">
-                                                <div>
-                                                    <div className="hp-boarding-folio-tag">FOLIO DE ESTANCIA</div>
-                                                    <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--brand-ocean)' }}>
-                                                        <span className="num">{r.folio || `#${r.idReserva}`}</span>
-                                                    </div>
+                                                <div className="hp-boarding-stub-header-row">
+                                                    <span className="hp-boarding-folio-tag">FOLIO</span>
+                                                    <EstadoBadge estado={r.estado} />
                                                 </div>
-                                                <EstadoBadge estado={r.estado} />
+                                                <div className="hp-boarding-folio-value num">
+                                                    {r.folio || `#${r.idReserva}`}
+                                                </div>
                                             </div>
 
-                                            {/* Desglose Financiero */}
+                                            {/* Desglose Financiero con tokens cálidos de marca */}
                                             <div className="hp-boarding-finance-block">
-                                                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                                                    Inversión de Estancia
+                                                <div className="hp-boarding-finance-kicker">
+                                                    Total de estancia
                                                 </div>
                                                 <div className="hp-boarding-finance-total">
-                                                    $<span className="num">{Number(r.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span> <span style={{ fontSize: '0.72rem', color: '#64748b' }}>MXN</span>
+                                                    $<span className="num">{Number(r.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span> <span className="hp-boarding-currency">MXN</span>
                                                 </div>
                                                 <div className="hp-boarding-finance-detail">
                                                     <span>Anticipo:</span>
-                                                    <strong style={{ color: Number(r.anticipo || 0) > 0 ? '#059669' : '#64748b' }} className="num">
+                                                    <strong style={{ color: Number(r.anticipo || 0) > 0 ? 'var(--brand-palm, #2d5a43)' : 'var(--text-muted)' }} className="num">
                                                         ${Number(r.anticipo || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </strong>
                                                 </div>
-                                                {r.estado === 'Cancelada' ? (
-                                                    <div style={{
-                                                        marginTop: 6,
-                                                        padding: '4px 8px',
-                                                        borderRadius: 6,
-                                                        background: 'var(--color-error-bg, #fee2e2)',
-                                                        color: 'var(--color-error, #b91c1c)',
-                                                        fontSize: '0.74rem',
-                                                        fontWeight: 600,
-                                                        lineHeight: 1.3
-                                                    }}>
-                                                        {r.observaciones ? r.observaciones : 'Reservación cancelada'}
-                                                    </div>
+                                                {esCancelada ? (
+                                                    r.observaciones ? (
+                                                        <div className="hp-boarding-cancel-note">
+                                                            {r.observaciones}
+                                                        </div>
+                                                    ) : null
                                                 ) : (
                                                     <div className="hp-boarding-finance-detail">
                                                         <span>Restante al Check-in:</span>
-                                                        <strong style={{ color: saldoPendiente > 0 ? 'var(--brand-terracotta)' : '#059669' }} className="num">
+                                                        <strong style={{ color: saldoPendiente > 0 ? 'var(--brand-terracotta)' : 'var(--brand-palm, #2d5a43)' }} className="num">
                                                             ${saldoPendiente.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </strong>
                                                     </div>
@@ -1959,13 +1959,13 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
 
                                             {/* Acciones Contextuales */}
                                             <div className="hp-boarding-actions">
-                                                {/* Botón de Pase de Abordar / Voucher siempre visible */}
+                                                {/* En reservas canceladas el comprobante es discreto; en activas/pre-reservas es primario */}
                                                 <button
                                                     type="button"
-                                                    className="hp-boarding-btn hp-boarding-btn-primary"
+                                                    className={`hp-boarding-btn ${esCancelada || esFinalizada ? 'hp-boarding-btn-secondary' : 'hp-boarding-btn-primary'}`}
                                                     onClick={() => setVoucherReserva(r)}
                                                 >
-                                                    <FileText size={14} /> Pase de abordar / Voucher
+                                                    <FileText size={14} /> {esCancelada ? 'Ver comprobante' : 'Pase de abordar / Voucher'}
                                                 </button>
 
                                                 {esPreReserva ? (
@@ -2017,11 +2017,11 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                             <XCircle size={14} /> Cancelar estancia
                                                         </button>
                                                     </>
-                                                ) : (
-                                                    <div style={{ fontSize: '0.78rem', color: '#64748b', fontStyle: 'italic', textAlign: 'center', padding: '6px 0' }}>
+                                                ) : esFinalizada ? (
+                                                    <div className="hp-boarding-ended-note">
                                                         Estancia finalizada
                                                     </div>
-                                                )}
+                                                ) : null}
                                             </div>
                                         </div>
                                     </article>
