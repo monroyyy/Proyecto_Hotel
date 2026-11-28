@@ -60,6 +60,12 @@ public class UsuarioController {
                     "error", "Nombre, correo válido, teléfono de 10 dígitos y contraseña de al menos 8 caracteres son obligatorios."
             ));
         }
+        // Bloquear etiquetas HTML o caracteres de inyección en el nombre del usuario
+        if (nombre.contains("<") || nombre.contains(">")) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "El nombre no puede contener etiquetas HTML ni los caracteres '<' o '>'."
+            ));
+        }
 
         if (usuarioRepository.existsByEmailIgnoreCase(email)) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
@@ -105,6 +111,9 @@ public class UsuarioController {
             String nuevoNombre = String.valueOf(body.get("nombre")).trim();
             if (nuevoNombre.isBlank()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "El nombre del usuario no puede estar vacío."));
+            }
+            if (nuevoNombre.contains("<") || nuevoNombre.contains(">")) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El nombre no puede contener etiquetas HTML ni los caracteres '<' o '>'."));
             }
             u.setNombre(nuevoNombre);
         }

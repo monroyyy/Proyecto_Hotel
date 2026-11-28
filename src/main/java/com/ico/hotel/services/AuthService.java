@@ -79,6 +79,11 @@ public class AuthService {
     public Map<String, Object> registrar(RegistroRequest req) {
         String email = req.getEmail().trim().toLowerCase();
         String nombre = req.getNombre().trim();
+        // Bloquear etiquetas HTML o caracteres de inyección en el nombre del titular
+        if (nombre.contains("<") || nombre.contains(">")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El nombre no puede contener etiquetas HTML ni los caracteres '<' o '>'.");
+        }
         // Normalizar teléfono a 10 dígitos numéricos
         String telefono = req.getTelefono() != null ? req.getTelefono().replaceAll("\\D", "") : "";
         if (telefono.length() != 10) {
@@ -408,6 +413,10 @@ public class AuthService {
 
         if (nombreLimpio.isEmpty() || nombreLimpio.length() > 120) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre completo es obligatorio y no puede exceder 120 caracteres.");
+        }
+        // Bloquear etiquetas HTML o caracteres de inyección al editar el perfil
+        if (nombreLimpio.contains("<") || nombreLimpio.contains(">")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El nombre no puede contener etiquetas HTML ni los caracteres '<' o '>'.");
         }
         if (!telefonoLimpio.matches("^\\d{10}$")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El teléfono debe contener exactamente 10 dígitos numéricos.");

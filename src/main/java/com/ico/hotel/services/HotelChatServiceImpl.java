@@ -748,7 +748,10 @@ public class HotelChatServiceImpl implements HotelChatService {
             boolean quiereAbortarFlujo = norm.contains("ya no quiero") || norm.contains("cancelalo")
                     || norm.contains("mejor no quiero") || norm.contains("no gracias")
                     || norm.contains("dejalo asi") || norm.equals("no") || norm.equals("cancelar");
-            if (enFlujoPreReserva && quiereAbortarFlujo && !norm.contains("folio") && !norm.contains("politica")) {
+            // Si menciona otro hotel, otra habitación o nuevas fechas, está cambiando su elección, no cancelando el flujo
+            boolean cambiaDestinoOFecha = detectarHotelEnTexto(norm) != null || norm.contains("quiero la ")
+                    || norm.contains("entro") || extraerFechasConDetalle(norm) != null;
+            if (enFlujoPreReserva && quiereAbortarFlujo && !cambiaDestinoOFecha && !norm.contains("folio") && !norm.contains("politica")) {
                 return "Entendido, he cancelado el proceso de **Pre-reserva**. No se registró ninguna reservación. ¿En qué más puedo ayudarle?";
             }
         } catch (Exception ignored) {}
