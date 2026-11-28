@@ -464,7 +464,7 @@ public class HotelChatServiceImpl implements HotelChatService {
                 LocalDate ini = LocalDate.of(ano, mes, d1);
                 if (mRango.group(4) == null && ini.isBefore(LocalDate.now())) ini = ini.plusYears(1);
                 LocalDate fin = LocalDate.of(ini.getYear(), mes, d2);
-                if (!fin.isAfter(ini)) fin = ini.plusMonths(1);
+                // No sumar un mes automáticamente si la salida es menor que la entrada; devolver tal cual para rechazar fechas invertidas
                 return new RangoFechasExtraido(ini, fin, true);
             } catch (Exception ignored) {}
         }
@@ -729,6 +729,96 @@ public class HotelChatServiceImpl implements HotelChatService {
         if (pidePagar) {
             return "Por seguridad, este asistente virtual **no procesa pagos ni solicita datos de tarjeta o cuentas bancarias**.\n\n" +
                    "A través del chat únicamente se registra la **Pre-reserva** (apartado temporal con vigencia de 24 a 48 horas). Para confirmar su estancia con el **50% de anticipo**, realice el pago directamente en **Recepción** o consulte las instrucciones de depósito desde **Mis Reservaciones** usando su folio oficial.";
+        }
+
+        // 0A-BIS. Abortar limpiamente un flujo de Pre-reserva en curso si el usuario desiste ("cancelalo ya no quiero", "no gracias")
+        try {
+            List<Message> histAbort = chatMemory.get(scopedConvId);
+            String ultAsistAbort = "";
+            for (int i = histAbort.size() - 1; i >= 0; i--) {
+                if (histAbort.get(i).getMessageType() == MessageType.ASSISTANT) {
+                    ultAsistAbort = normalizarTexto(histAbort.get(i).getText());
+                    break;
+                }
+            }
+            boolean enFlujoPreReserva = ultAsistAbort.contains("resumen de pre reserva")
+                    || ultAsistAbort.contains("cual sera su fecha de salida")
+                    || ultAsistAbort.contains("fecha de entrada y fecha de salida")
+                    || ultAsistAbort.contains("fechas de entrada y salida");
+            boolean quiereAbortarFlujo = norm.contains("ya no quiero") || norm.contains("cancelalo")
+                    || norm.contains("mejor no quiero") || norm.contains("no gracias")
+                    || norm.contains("dejalo asi") || norm.equals("no") || norm.equals("cancelar");
+            if (enFlujoPreReserva && quiereAbortarFlujo && !norm.contains("folio") && !norm.contains("politica")) {
+                return "Entendido, he cancelado el proceso de **Pre-reserva**. No se registró ninguna reservación. ¿En qué más puedo ayudarle?";
+            }
+        } catch (Exception ignored) {}
+
+        // 0A-TER. Consultas frecuentes determinísticas para usuarios novatos (evitan alucinaciones del LLM y timeouts)
+        // 1) Métodos de pago aceptados en Recepción (sin afectar gráficas de Gerencia)
+        if ((norm.contains("efectivo") || norm.contains("tarjeta") || norm.contains("transferencia"))
+                && (norm.contains("aceptan") || norm.contains("reciben") || norm.contains("recepcion") || norm.contains("metodos"))
+                && !norm.contains("grafica") && !norm.contains("recaudacion") && !norm.contains("metodo de pago")) {
+            return "En **Recepción** aceptamos **Efectivo**, **Tarjeta de crédito o débito** y **Transferencia bancaria** para liquidar su anticipo (50%) o el saldo de su estancia.\n\n"
+                    + "*(Recuerde que este asistente virtual no procesa cobros ni solicita datos bancarios; por aquí únicamente registramos su **Pre-reserva**).*";
+        }
+
+        // 2) Auto-servicio de cancelación o cambio de fechas para huéspedes
+        if (norm.contains("quiero cancelar") || norm.contains("como cancelo") || norm.contains("cancelar mi reserva") || norm.contains("cancelar mi pre")) {
+            return "Puede cancelar su reservación directamente desde la sección **Mis Reservaciones** en el portal usando el botón **Cancelar**, sin necesidad de hacerlo por el chat.\n\n"
+                    + "**Resumen de la Política de Cancelación:**\n"
+                    + "- Si es **Pre-reserva** (sin anticipo pagado), se cancela sin costo.\n"
+                    + "- Con **más de 72 horas** antes del Check-in (15:00 h): **100% de reembolso** del anticipo.\n"
+                    + "- Entre **48 y 72 horas** antes del Check-in: **50% de reembolso**.\n"
+                    + "- Con **menos de 48 horas** antes del Check-in: sin reembolso.";
+        }
+        if (norm.contains("me equivoque de fecha") || norm.contains("cambiar fecha") || norm.contains("cambiar la fecha")
+                || norm.contains("cambiarla") || norm.contains("reprogramar")) {
+            return "Si su reservación está en estado **Pre-reserva**, puede modificar la entrada o salida directamente desde **Mis Reservaciones → Reprogramar fechas**.\n\n"
+                    + "Si su reservación ya está **Confirmada** (con anticipo cubierto), por favor comuníquese con **Recepción** para gestionar el cambio según disponibilidad.";
+        }
+
+        // 3) Horarios de Check-in / Check-out, Facturación (CFDI) y Amenidades / Servicios
+        if ((norm.contains("check in") || norm.contains("check out") || norm.contains("hora de entrada") || norm.contains("hora de salida"))
+                && !norm.contains("saldo") && !norm.contains("folio") && !norm.contains("reembolso")) {
+            return "Nuestro horario estándar en todas las propiedades de **Hotel Paraíso** es:\n\n"
+                    + "- **Check-in (Entrada):** a partir de las **15:00 horas**.\n"
+                    + "- **Check-out (Salida):** máximo a las **12:00 horas**.\n\n"
+                    + "*(Si requiere extensión de salida o día extra, puede consultarlo en Recepción sujeto a disponibilidad).*";
+        }
+        if (norm.contains("factura") || norm.contains("cfdi")) {
+            return "La **facturación fiscal (CFDI)** se tramita directamente en **Recepción** al momento de realizar su pago o durante el Check-out, presentando sus datos fiscales (RFC, razón social, régimen fiscal, código postal y uso de CFDI).";
+        }
+        if (norm.contains("alberca") || norm.contains("estacionamiento") || norm.contains("wifi") || norm.contains("wi fi") || norm.contains("desayuno")) {
+            return "Nuestras propiedades cuentan con **Wi-Fi de cortesía** para huéspedes y facilidades de **estacionamiento**; además, nuestras sedes vacacionales (como Cancún y Acapulco) disponen de áreas de alberca y terraza. Los horarios específicos de amenidades o desayuno se confirman directamente en **Recepción** al realizar su Check-in.";
+        }
+
+        // 4) Habitación más barata / económica (consulta real a BD/inventario, nunca alucinar categoría)
+        if ((norm.contains("mas barata") || norm.contains("mas barato") || norm.contains("economica") || norm.contains("economico")
+                || norm.contains("cuarto barato") || norm.contains("habitacion barata") || norm.contains("menor precio"))
+                && !esAdmin) {
+            String hotelBarata = resolverHotelEnContexto(prompt, scopedConvId);
+            habitacionSearchTool.resetCallTracker();
+            List<Map<String, Object>> todasBaratas = habitacionSearchTool.findHabitacionesPorHotel(null);
+            habitacionSearchTool.resetCallTracker();
+            List<Map<String, Object>> candidatas = todasBaratas.stream()
+                    .filter(r -> r.get("numero") != null && r.get("precioBase") instanceof Number)
+                    .filter(r -> !"Mantenimiento".equalsIgnoreCase(String.valueOf(r.get("estado"))))
+                    .filter(r -> hotelBarata == null || normalizarTexto(String.valueOf(r.get("hotel"))).equals(normalizarTexto(hotelBarata)))
+                    .sorted(Comparator.comparingDouble(r -> ((Number) r.get("precioBase")).doubleValue()))
+                    .toList();
+            if (!candidatas.isEmpty()) {
+                Map<String, Object> top = candidatas.get(0);
+                String hNom = String.valueOf(top.get("hotel"));
+                String numB = String.valueOf(top.get("numero"));
+                String tipoB = String.valueOf(top.get("tipo"));
+                String estB = String.valueOf(top.get("estado"));
+                String precioB = fmtMoneda(top.get("precioBase"));
+                return "La habitación más económica disponible en **" + (hotelBarata != null ? hotelBarata : "la cadena") + "** es:\n\n"
+                        + "- **Propiedad:** " + hNom + " (" + top.get("ciudad") + ")\n"
+                        + "- **Habitación:** #" + numB + " — **" + tipoB + "** (Piso " + top.get("piso") + ", Estado: **" + estB + "**)\n"
+                        + "- **Tarifa base por noche:** **" + precioB + "** *(+25% en temporada alta)*\n\n"
+                        + "¿Desea iniciar una **Pre-reserva** para esta habitación o consultar sus fechas disponibles?";
+            }
         }
 
         // 0B. Consulta de Usuarios Registrados / Cuentas del Sistema / Roles
@@ -1291,8 +1381,12 @@ public class HotelChatServiceImpl implements HotelChatService {
                     && (!esperandoFechasReserva || prompt.trim().endsWith("?"))
                     && !esperandoConfirmacionResumen;
 
+            // Si pregunta si hay hotel en una ciudad sin pedir una habitación/categoría específica, mostrar la tabla del hotel
+            boolean preguntaPorHotel = (norm.contains("tienen hotel") || norm.contains("hay hotel") || norm.contains("hotel en "))
+                    && habMencionadaAhora == null && habitacionPorCategoria(prompt, roomsCtx) == null;
+
             // Caso 0: Pregunta puntual de disponibilidad sobre la habitación activa en contexto (sin asumir que quiere reservar)
-            if (esPreguntaDisponibilidad && habActiva != null) {
+            if (esPreguntaDisponibilidad && !preguntaPorHotel && habActiva != null) {
                 String num = String.valueOf(habActiva.get("numero"));
                 List<Habitacion> habsDb = habitacionRepository.findByNumeroAndHotelNombreActivos(num, ctxHotelRes);
                 Habitacion habDb = habsDb.isEmpty() ? null : habsDb.get(0);
@@ -1390,10 +1484,18 @@ public class HotelChatServiceImpl implements HotelChatService {
                     }
                     if (entrada != null) {
                         Integer nochesResp = extraerSoloDuracionNoches(norm);
+                        // Si el usuario cambió de opinión sobre su fecha de entrada ("mejor no, entro el 18"), actualizar entrada y pedir salida de nuevo
+                        boolean cambiaEntrada = norm.contains("entro") || norm.contains("llegada")
+                                || norm.contains("mejor no") || norm.contains("mejor el")
+                                || norm.contains("cambiar") || norm.contains("me equivoque");
                         if (fechasExtAhora != null && fechasExtAhora.salidaExplicita()) {
                             entrada = fechasExtAhora.entrada();
                             salida = fechasExtAhora.salida();
                             salidaExplicita = true;
+                        } else if (fechasExtAhora != null && cambiaEntrada) {
+                            entrada = fechasExtAhora.entrada();
+                            salida = fechasExtAhora.salida();
+                            salidaExplicita = false;
                         } else if (fechasExtAhora != null) {
                             salida = fechasExtAhora.entrada();
                             salidaExplicita = true;
@@ -1542,7 +1644,8 @@ public class HotelChatServiceImpl implements HotelChatService {
                     res.append("| Campo | Detalle |\n| :--- | :--- |\n");
                     res.append("| **Propiedad** | ").append(ctxHotelRes).append(" |\n");
                     res.append("| **Habitación** | #").append(num).append(" — ").append(tipo)
-                       .append(" (Piso ").append(pisoHab).append(", máx. ").append(capHab).append(" personas) |\n");
+                       .append(" (Piso ").append(pisoHab).append(", máx. ").append(capHab)
+                       .append(capHab == 1 ? " persona" : " personas").append(") |\n");
                     if (!descHab.isBlank()) {
                         res.append("| **Descripción** | ").append(descHab).append(" |\n");
                     }
