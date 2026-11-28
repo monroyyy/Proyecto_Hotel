@@ -6,7 +6,7 @@ import {
     ArrowRight, Info, SlidersHorizontal, User, Award, Phone,
     Mail, Check, HelpCircle, FileText, Sun, LogOut, Hotel,
     Lock, KeyRound, Eye, EyeOff, Moon, AlertCircle, CalendarPlus, Bell,
-    UserPlus, LogIn, Printer, RotateCcw
+    UserPlus, LogIn, Printer, RotateCcw, List, LayoutGrid
 } from 'lucide-react';
 import {
     getHoteles,
@@ -369,6 +369,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
     const [filtroCategoria, setFiltroCategoria] = useState('TODAS');
     const [filtroCapacidad, setFiltroCapacidad] = useState(1);
     const [ordenCatalogo, setOrdenCatalogo] = useState('DESTACADOS');
+    const [vistaCatalogo, setVistaCatalogo] = useState('LISTA');
     const [fechaEntrada, setFechaEntrada] = useState(todayStr);
     const [fechaSalida, setFechaSalida] = useState(defaultCheckoutStr);
     const [busquedaTexto, setBusquedaTexto] = useState('');
@@ -1396,6 +1397,30 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                             <option value="CAPACIDAD">Mayor capacidad</option>
                                         </select>
                                     </div>
+
+                                    {/* Selector de vista solo con íconos (Lista horizontal / Cuadrícula minimalista) */}
+                                    <div className="hp-view-switcher" role="group" aria-label="Cambiar vista de habitaciones">
+                                        <button
+                                            type="button"
+                                            className={`hp-view-btn ${vistaCatalogo === 'LISTA' ? 'is-active' : ''}`}
+                                            onClick={() => setVistaCatalogo('LISTA')}
+                                            aria-label="Vista en lista"
+                                            aria-pressed={vistaCatalogo === 'LISTA'}
+                                            title="Vista en lista"
+                                        >
+                                            <List size={15} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`hp-view-btn ${vistaCatalogo === 'GRID' ? 'is-active' : ''}`}
+                                            onClick={() => setVistaCatalogo('GRID')}
+                                            aria-label="Vista en cuadrícula"
+                                            aria-pressed={vistaCatalogo === 'GRID'}
+                                            title="Vista en cuadrícula"
+                                        >
+                                            <LayoutGrid size={15} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1426,236 +1451,216 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                     Restablecer filtros
                                 </button>
                             </div>
-                        ) : (
-                            <>
-                                {/* Suite destacada grande (Featured Suite) */}
-                                {suiteDestacada && (() => {
-                                    const evalSuite = evaluarDisponibilidadHabitacion(suiteDestacada, fechaEntrada, fechaSalida);
-                                    return (
-                                    <article className="hp-suite-featured-card">
-                                        <div className="hp-suite-featured-media">
-                                            <img
-                                                src={obtenerImagenHabitacion(suiteDestacada)}
-                                                alt={obtenerAltHabitacion(suiteDestacada)}
-                                                className="hp-suite-featured-img"
-                                                loading="lazy"
-                                                referrerPolicy="no-referrer"
-                                                onError={(e) => aplicarFallbackImagen(e, obtenerPresetHabitacion(suiteDestacada))}
-                                            />
-                                            <span className="hp-suite-featured-badge">
-                                                Suite Signature · {suiteDestacada.hotel?.ciudad || 'Costa del Pacífico'}
-                                            </span>
-                                        </div>
+                        ) : vistaCatalogo === 'LISTA' ? (
+                            /* Vista 1: Lista Horizontal Boutique */
+                            <div className="hp-rooms-list">
+                                {habitacionesDisponibles.map(hab => {
+                                    const precioNoche = Number(hab.tipoHabitacion?.precioBase || 0);
+                                    const totalEstimado = precioNoche * nochesSeleccionadas;
+                                    const amenidades = obtenerAmenidadesHabitacion(hab);
+                                    const capacidad = hab.tipoHabitacion?.capacidad || 2;
+                                    const evalHab = evaluarDisponibilidadHabitacion(hab, fechaEntrada, fechaSalida);
+                                    const puedeExtender = !evalHab.disponibleEnFechas
+                                        && hab.diaExtraDisponible
+                                        && misReservas.some(r => r.idReserva === hab.idReservaActiva);
 
-                                        <div className="hp-suite-featured-info">
-                                            <div className="hp-suite-featured-meta">
-                                                <span>{suiteDestacada.hotel?.nombre} &bull; {suiteDestacada.hotel?.ciudad}</span>
-                                                <span>&bull;</span>
-                                                <span>Hasta {suiteDestacada.tipoHabitacion?.capacidad || 2} personas</span>
-                                                {isAuthenticated && (
-                                                    <>
+                                    return (
+                                        <article key={hab.idHabitacion} className={`hp-room-row-card ${!evalHab.disponibleEnFechas ? 'has-date-conflict' : ''}`}>
+                                            <div className="hp-room-row-media">
+                                                <img
+                                                    src={obtenerImagenHabitacion(hab)}
+                                                    alt={obtenerAltHabitacion(hab)}
+                                                    className="hp-room-img"
+                                                    loading="lazy"
+                                                    referrerPolicy="no-referrer"
+                                                    onError={(e) => aplicarFallbackImagen(e, obtenerPresetHabitacion(hab))}
+                                                />
+                                                <div className="hp-room-location-tag">
+                                                    <MapPin size={12} /> {hab.hotel?.ciudad || 'México'}{isAuthenticated ? ` · Hab. ${hab.numero}` : ''}
+                                                </div>
+                                                <span className={`hp-room-status-pill ${evalHab.disponibleEnFechas ? 'is-free' : 'is-busy'}`}>
+                                                    <span className="hp-room-status-dot" />
+                                                    {evalHab.disponibleEnFechas
+                                                        ? 'Disponible'
+                                                        : `Libre desde ${formatearFechaOcupacion(evalHab.fechaLiberacion)}`}
+                                                </span>
+                                            </div>
+
+                                            <div className="hp-room-row-info">
+                                                <div>
+                                                    <div className="hp-room-row-meta">
+                                                        <span className="hp-room-hotel-name">{hab.hotel?.nombre}</span>
                                                         <span>&bull;</span>
-                                                        <span>{obtenerSuperficieHabitacion(suiteDestacada)}</span>
-                                                    </>
+                                                        <span>Hasta {capacidad} {capacidad === 1 ? 'persona' : 'personas'}</span>
+                                                        {isAuthenticated && (
+                                                            <>
+                                                                <span>&bull;</span>
+                                                                <span>{obtenerSuperficieHabitacion(hab)}</span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    <h3 className="hp-room-row-title">{hab.tipoHabitacion?.nombre}</h3>
+                                                </div>
+
+                                                <div className="hp-room-amenity-pills">
+                                                    {amenidades.slice(0, 4).map((a, i) => (
+                                                        <span key={i} className="hp-room-amenity-chip">{a.label}</span>
+                                                    ))}
+                                                </div>
+
+                                                {puedeExtender && (
+                                                    <div>
+                                                        <button
+                                                            type="button"
+                                                            className="hp-occupancy-jump-btn"
+                                                            disabled={extendiendoReservaId === hab.idHabitacion}
+                                                            onClick={() => handleAgregarDiaExtraHabitacion(hab)}
+                                                        >
+                                                            {extendiendoReservaId === hab.idHabitacion
+                                                                ? 'Extendiendo...'
+                                                                : `+1 Día extra (+$${Number(hab.costoDiaExtra || precioNoche).toLocaleString('es-MX')})`}
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </div>
 
-                                            <h3 className="hp-suite-featured-title">
-                                                {suiteDestacada.tipoHabitacion?.nombre}
-                                            </h3>
+                                            <div className="hp-room-row-aside">
+                                                <div className="hp-room-row-price">
+                                                    <div className="hp-room-price-night num">
+                                                        ${precioNoche.toLocaleString('es-MX', { minimumFractionDigits: 0 })} <span className="hp-unit">MXN / noche</span>
+                                                    </div>
+                                                    <div className="hp-room-price-total num">
+                                                        Total ${totalEstimado.toLocaleString('es-MX', { minimumFractionDigits: 0 })} MXN ({nochesSeleccionadas} {nochesSeleccionadas === 1 ? 'noche' : 'noches'})
+                                                    </div>
+                                                </div>
 
-                                            <p className="hp-suite-featured-desc">
-                                                {suiteDestacada.tipoHabitacion?.descripcion || 'Espacio amplio con terraza privada frente al océano, acabados en madera de roble, lino fresco y servicio exclusivo de hospitalidad.'}
-                                            </p>
-
-                                            <div className="hp-suite-amenities-text">
-                                                {obtenerAmenidadesHabitacion(suiteDestacada).slice(0, 3).map(a => a.label).join(' · ')}
-                                            </div>
-
-                                            {/* Disponibilidad con confidencialidad para huéspedes */}
-                                            {!evalSuite.disponibleEnFechas ? (
-                                                <div className="hp-room-occupancy-banner is-occupied">
-                                                    <div className="hp-occupancy-row-main">
-                                                        <Clock size={14} />
+                                                <div className="hp-room-row-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-primary"
+                                                        onClick={() => abrirModalReserva(hab, !evalHab.disponibleEnFechas ? evalHab.fechaLiberacion : null)}
+                                                    >
                                                         <span>
-                                                            <strong>Disponible a partir del:</strong> <span className="num">{formatearFechaOcupacion(evalSuite.fechaLiberacion, true)}</span>
+                                                            {!evalHab.disponibleEnFechas && evalHab.fechaLiberacion
+                                                                ? `Desde ${formatearFechaOcupacion(evalHab.fechaLiberacion)}`
+                                                                : 'Reservar ahora'}
+                                                        </span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-ghost"
+                                                        onClick={() => abrirDetalleHabitacion(hab)}
+                                                    >
+                                                        Ver detalles
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </article>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            /* Vista 2: Cuadrícula Minimalista Editorial */
+                            <div className="hp-rooms-grid">
+                                {habitacionesDisponibles.map(hab => {
+                                    const precioNoche = Number(hab.tipoHabitacion?.precioBase || 0);
+                                    const totalEstimado = precioNoche * nochesSeleccionadas;
+                                    const amenidades = obtenerAmenidadesHabitacion(hab);
+                                    const capacidad = hab.tipoHabitacion?.capacidad || 2;
+                                    const evalHab = evaluarDisponibilidadHabitacion(hab, fechaEntrada, fechaSalida);
+                                    const puedeExtender = !evalHab.disponibleEnFechas
+                                        && hab.diaExtraDisponible
+                                        && misReservas.some(r => r.idReserva === hab.idReservaActiva);
+
+                                    return (
+                                        <article key={hab.idHabitacion} className={`hp-room-card ${!evalHab.disponibleEnFechas ? 'has-date-conflict' : ''}`}>
+                                            <div>
+                                                <div className="hp-room-media-wrap">
+                                                    <img
+                                                        src={obtenerImagenHabitacion(hab)}
+                                                        alt={obtenerAltHabitacion(hab)}
+                                                        className="hp-room-img"
+                                                        loading="lazy"
+                                                        referrerPolicy="no-referrer"
+                                                        onError={(e) => aplicarFallbackImagen(e, obtenerPresetHabitacion(hab))}
+                                                    />
+                                                    <div className="hp-room-location-tag">
+                                                        <MapPin size={12} /> {hab.hotel?.ciudad || 'México'}{isAuthenticated ? ` · Hab. ${hab.numero}` : ''}
+                                                    </div>
+                                                    <span className={`hp-room-status-pill ${evalHab.disponibleEnFechas ? 'is-free' : 'is-busy'}`}>
+                                                        <span className="hp-room-status-dot" />
+                                                        {evalHab.disponibleEnFechas
+                                                            ? 'Disponible'
+                                                            : `Libre ${formatearFechaOcupacion(evalHab.fechaLiberacion)}`}
+                                                    </span>
+                                                </div>
+
+                                                <div className="hp-room-body-minimal">
+                                                    <div className="hp-room-header-meta">
+                                                        <span className="hp-room-hotel-name">{hab.hotel?.nombre}</span>
+                                                        <span className="hp-room-capacity">
+                                                            {capacidad} {capacidad === 1 ? 'huésped' : 'huéspedes'}{isAuthenticated ? ` · ${obtenerSuperficieHabitacion(hab)}` : ''}
                                                         </span>
                                                     </div>
-                                                    {suiteDestacada.diaExtraDisponible && misReservas.some(r => r.idReserva === suiteDestacada.idReservaActiva) && (
-                                                        <div style={{ marginTop: 4 }}>
+
+                                                    <h3 className="hp-room-title">{hab.tipoHabitacion?.nombre}</h3>
+
+                                                    <div className="hp-room-amenities-inline">
+                                                        {amenidades.slice(0, 3).map(a => a.label).join(' · ')}
+                                                    </div>
+
+                                                    {puedeExtender && (
+                                                        <div style={{ marginTop: 8 }}>
                                                             <button
                                                                 type="button"
                                                                 className="hp-occupancy-jump-btn"
-                                                                disabled={extendiendoReservaId === suiteDestacada.idHabitacion}
-                                                                onClick={() => handleAgregarDiaExtraHabitacion(suiteDestacada)}
+                                                                disabled={extendiendoReservaId === hab.idHabitacion}
+                                                                onClick={() => handleAgregarDiaExtraHabitacion(hab)}
                                                             >
-                                                                {extendiendoReservaId === suiteDestacada.idHabitacion
+                                                                {extendiendoReservaId === hab.idHabitacion
                                                                     ? 'Extendiendo...'
-                                                                    : `+1 Día extra (+$${Number(suiteDestacada.costoDiaExtra || suiteDestacada.tipoHabitacion?.precioBase || 0).toLocaleString('es-MX')})`}
+                                                                    : `+1 Día extra (+$${Number(hab.costoDiaExtra || precioNoche).toLocaleString('es-MX')})`}
                                                             </button>
                                                         </div>
                                                     )}
                                                 </div>
-                                            ) : (
-                                                <div className="hp-room-occupancy-banner is-free">
-                                                    <div className="hp-occupancy-row-main">
-                                                        <CheckCircle2 size={14} />
-                                                        <span><strong>Disponible</strong> · Lista para tus fechas de estancia</span>
-                                                    </div>
-                                                </div>
-                                            )}
+                                            </div>
 
-                                            <div className="hp-suite-featured-footer">
-                                                <div>
-                                                    <div className="hp-price-night-label num">
-                                                        ${Number(suiteDestacada.tipoHabitacion?.precioBase || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN <span className="hp-unit">/ noche</span>
-                                                    </div>
-                                                    <div className="hp-price-total-label num">
-                                                        ${(Number(suiteDestacada.tipoHabitacion?.precioBase || 0) * nochesSeleccionadas).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
-                                                    </div>
-                                                    <div className="hp-price-subtext">
-                                                        Total por {nochesSeleccionadas} {nochesSeleccionadas === 1 ? 'noche' : 'noches'} · Impuestos incluidos
-                                                    </div>
+                                            <div className="hp-room-footer-minimal">
+                                                <div className="hp-room-price-col">
+                                                    <span className="hp-room-price-night num">
+                                                        ${precioNoche.toLocaleString('es-MX', { minimumFractionDigits: 0 })} <span className="hp-unit">/ noche</span>
+                                                    </span>
+                                                    <span className="hp-room-price-total num">
+                                                        ${totalEstimado.toLocaleString('es-MX', { minimumFractionDigits: 0 })} total ({nochesSeleccionadas} n.)
+                                                    </span>
                                                 </div>
 
-                                                <div className="hp-card-actions">
+                                                <div className="hp-card-actions-minimal">
                                                     <button
                                                         type="button"
-                                                        className="btn btn-ghost"
-                                                        onClick={() => abrirDetalleHabitacion(suiteDestacada)}
+                                                        className="btn btn-ghost hp-btn-compact"
+                                                        onClick={() => abrirDetalleHabitacion(hab)}
                                                     >
-                                                        Ver detalles
+                                                        Detalles
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        className="btn btn-primary"
-                                                        onClick={() => abrirModalReserva(suiteDestacada, !evalSuite.disponibleEnFechas ? evalSuite.fechaLiberacion : null)}
+                                                        className="btn btn-primary hp-btn-compact"
+                                                        onClick={() => abrirModalReserva(hab, !evalHab.disponibleEnFechas ? evalHab.fechaLiberacion : null)}
                                                     >
                                                         <span>
-                                                            {!evalSuite.disponibleEnFechas && evalSuite.fechaLiberacion
-                                                                ? `Disponible desde ${formatearFechaOcupacion(evalSuite.fechaLiberacion)}`
+                                                            {!evalHab.disponibleEnFechas && evalHab.fechaLiberacion
+                                                                ? formatearFechaOcupacion(evalHab.fechaLiberacion)
                                                                 : 'Reservar'}
                                                         </span>
-                                                        <ArrowRight size={16} />
                                                     </button>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </article>
+                                        </article>
                                     );
-                                })()}
-
-                                {/* Cuadrícula con proporción 16:10 para las demás habitaciones */}
-                                {habitacionesRestantes.length > 0 && (
-                                    <div className="hp-rooms-grid">
-                                        {habitacionesRestantes.map(hab => {
-                                            const precioNoche = Number(hab.tipoHabitacion?.precioBase || 0);
-                                            const totalEstimado = precioNoche * nochesSeleccionadas;
-                                            const amenidades = obtenerAmenidadesHabitacion(hab);
-                                            const capacidad = hab.tipoHabitacion?.capacidad || 2;
-                                            const evalHab = evaluarDisponibilidadHabitacion(hab, fechaEntrada, fechaSalida);
-
-                                            return (
-                                                <article key={hab.idHabitacion} className={`hp-room-card ${!evalHab.disponibleEnFechas ? 'has-date-conflict' : ''}`}>
-                                                    <div className="hp-room-media-wrap">
-                                                        <img
-                                                            src={obtenerImagenHabitacion(hab)}
-                                                            alt={obtenerAltHabitacion(hab)}
-                                                            className="hp-room-img"
-                                                            loading="lazy"
-                                                            referrerPolicy="no-referrer"
-                                                            onError={(e) => aplicarFallbackImagen(e, obtenerPresetHabitacion(hab))}
-                                                        />
-                                                        <div className="hp-room-location-tag">
-                                                            <MapPin size={12} /> {hab.hotel?.ciudad || 'México'} {isAuthenticated ? `· Hab. ${hab.numero}` : ''}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="hp-room-body">
-                                                        <div className="hp-room-header-meta">
-                                                            <span className="hp-room-hotel-name">{hab.hotel?.nombre}</span>
-                                                            <span className="hp-room-capacity">Hasta {capacidad} personas</span>
-                                                        </div>
-
-                                                        <h3 className="hp-room-title">
-                                                            {hab.tipoHabitacion?.nombre}
-                                                        </h3>
-
-                                                        <div className="hp-room-amenities-text">
-                                                            {amenidades.slice(0, 3).map(a => a.label).join(' · ')}
-                                                        </div>
-
-                                                        {/* Disponibilidad con confidencialidad para huéspedes */}
-                                                        {!evalHab.disponibleEnFechas ? (
-                                                            <div className="hp-room-occupancy-banner is-occupied compact">
-                                                                <div className="hp-occupancy-row-main">
-                                                                    <Clock size={13} />
-                                                                    <span>
-                                                                        <strong>Disponible a partir del:</strong> <span className="num">{formatearFechaOcupacion(evalHab.fechaLiberacion, true)}</span>
-                                                                    </span>
-                                                                </div>
-                                                                {hab.diaExtraDisponible && misReservas.some(r => r.idReserva === hab.idReservaActiva) && (
-                                                                    <div style={{ marginTop: 4 }}>
-                                                                        <button
-                                                                            type="button"
-                                                                            className="hp-occupancy-jump-btn"
-                                                                            disabled={extendiendoReservaId === hab.idHabitacion}
-                                                                            onClick={() => handleAgregarDiaExtraHabitacion(hab)}
-                                                                        >
-                                                                            {extendiendoReservaId === hab.idHabitacion
-                                                                                ? 'Extendiendo...'
-                                                                                : `+1 Día extra (+$${Number(hab.costoDiaExtra || precioNoche).toLocaleString('es-MX')})`}
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            <div className="hp-room-occupancy-banner is-free compact">
-                                                                <div className="hp-occupancy-row-main">
-                                                                    <CheckCircle2 size={13} />
-                                                                    <span><strong>Disponible</strong> · Lista para reservar</span>
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        <div className="hp-room-footer-row">
-                                                            <div className="hp-room-price-col">
-                                                                <span className="hp-room-price-night num">
-                                                                    ${precioNoche.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN <span className="hp-unit">/ noche</span>
-                                                                </span>
-                                                                <span className="hp-room-price-total num">
-                                                                    Total: ${totalEstimado.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN ({nochesSeleccionadas} n.)
-                                                                </span>
-                                                            </div>
-
-                                                            <div className="hp-card-actions">
-                                                                <button
-                                                                    type="button"
-                                                                    className="btn btn-ghost"
-                                                                    onClick={() => abrirDetalleHabitacion(hab)}
-                                                                >
-                                                                    Ver detalles
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    className="btn btn-primary"
-                                                                    onClick={() => abrirModalReserva(hab, !evalHab.disponibleEnFechas ? evalHab.fechaLiberacion : null)}
-                                                                >
-                                                                    <span>
-                                                                        {!evalHab.disponibleEnFechas && evalHab.fechaLiberacion
-                                                                            ? `Desde ${formatearFechaOcupacion(evalHab.fechaLiberacion)}`
-                                                                            : 'Reservar'}
-                                                                    </span>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </article>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </>
+                                })}
+                            </div>
                         )}
                     </section>
                 </>

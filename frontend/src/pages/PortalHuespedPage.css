@@ -936,6 +936,42 @@
     outline-offset: 1px;
 }
 
+/* Selector segmentado solo con íconos (Lista / Cuadrícula) */
+.hp-view-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 34px;
+    padding: 3px;
+    border-radius: var(--radius-sm, 8px);
+    background: var(--brand-sand-base, #f5f0e8);
+    border: 1px solid var(--border-default, #e2d9cc);
+}
+
+.hp-view-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted, #627d98);
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.hp-view-btn:hover {
+    color: var(--brand-ocean, #16324f);
+}
+
+.hp-view-btn.is-active {
+    background: var(--bg-surface, #ffffff);
+    color: var(--brand-terracotta, #b85d38);
+    box-shadow: 0 1px 4px rgba(22, 50, 79, 0.12);
+}
+
 /* ==========================================================================
    SUITE DESTACADA GRANDE (SIGNATURE SUITE)
    ========================================================================== */
@@ -1078,20 +1114,181 @@
 }
 
 /* ==========================================================================
-   CUADRÍCULA DE HABITACIONES (16:10)
+   VISTA 1: LISTA HORIZONTAL BOUTIQUE + VISTA 2: CUADRÍCULA MINIMALISTA
    ========================================================================== */
+.hp-rooms-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.hp-room-row-card {
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--border-default, #e2d9cc);
+    border-radius: var(--radius-lg, 16px);
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 280px 1fr 225px;
+    box-shadow: 0 4px 14px -4px rgba(22, 50, 79, 0.06);
+    transition: transform 180ms ease-out, box-shadow 180ms ease-out, border-color 180ms ease-out;
+}
+
+.hp-room-row-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 26px -8px rgba(22, 50, 79, 0.13);
+    border-color: var(--border-strong, #c8bcab);
+}
+
+.hp-room-row-media {
+    position: relative;
+    min-height: 185px;
+    background: var(--brand-sand-base, #f5f0e8);
+    overflow: hidden;
+}
+
+.hp-room-row-card:hover .hp-room-img {
+    transform: scale(1.04);
+}
+
+.hp-room-row-info {
+    padding: 1.15rem 1.35rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.hp-room-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.76rem;
+    font-weight: 500;
+    color: var(--text-muted, #627d98);
+}
+
+.hp-room-row-title {
+    font-family: var(--font-serif);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--brand-ocean, #16324f);
+    margin: 4px 0 0 0;
+    line-height: 1.2;
+    font-variation-settings: "opsz" auto;
+}
+
+.hp-room-amenity-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.hp-room-amenity-chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--brand-sand-base, #f5f0e8);
+    color: var(--text-secondary, #486581);
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.hp-room-row-aside {
+    padding: 1.15rem 1.25rem;
+    background: var(--brand-sand-light, #fcfaf7);
+    border-left: 1px solid var(--border-subtle, #ede4d5);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    text-align: right;
+    gap: 0.9rem;
+}
+
+.hp-room-row-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+.hp-room-row-actions .btn {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+}
+
+/* Badge sutil de estado sobre la esquina superior derecha de la foto */
+.hp-room-status-pill {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.71rem;
+    font-weight: 700;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(15, 35, 56, 0.16);
+}
+
+.hp-room-status-pill.is-free {
+    background: rgba(252, 250, 247, 0.93);
+    color: var(--brand-palm, #2d5a43);
+}
+
+.hp-room-status-pill.is-busy {
+    background: rgba(184, 93, 56, 0.94);
+    color: #fffbeb;
+}
+
+.hp-room-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+@media (max-width: 860px) {
+    .hp-room-row-card {
+        grid-template-columns: 1fr;
+    }
+    .hp-room-row-media {
+        aspect-ratio: 16 / 10;
+        min-height: 0;
+    }
+    .hp-room-row-aside {
+        border-left: none;
+        border-top: 1px solid var(--border-subtle, #ede4d5);
+        flex-direction: row;
+        align-items: center;
+        text-align: left;
+    }
+    .hp-room-row-actions {
+        width: auto;
+        flex-direction: row;
+    }
+    .hp-room-row-actions .btn {
+        width: auto;
+    }
+}
+
+/* Cuadrícula Minimalista (3 columnas) */
 .hp-rooms-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+    gap: 1.25rem;
 }
 
 .hp-room-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--border-default, #e2d9cc);
     border-radius: var(--radius-lg, 16px);
     overflow: hidden;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 4px 14px -4px rgba(22, 50, 79, 0.06);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -1100,8 +1297,42 @@
 
 .hp-room-card:hover {
     transform: translateY(-3px);
-    box-shadow: var(--shadow-md);
-    border-color: var(--border-strong);
+    box-shadow: 0 12px 26px -8px rgba(22, 50, 79, 0.14);
+    border-color: var(--border-strong, #c8bcab);
+}
+
+.hp-room-body-minimal {
+    padding: 1rem 1.1rem 0.85rem;
+}
+
+.hp-room-amenities-inline {
+    font-size: 0.78rem;
+    color: var(--text-muted, #627d98);
+    margin-top: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hp-room-footer-minimal {
+    padding: 0.85rem 1.1rem 1rem;
+    border-top: 1px solid var(--border-subtle, #ede4d5);
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.hp-card-actions-minimal {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.hp-btn-compact {
+    padding: 6px 11px !important;
+    font-size: 0.78rem !important;
 }
 
 .hp-room-media-wrap {
