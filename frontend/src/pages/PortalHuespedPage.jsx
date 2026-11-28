@@ -2974,115 +2974,115 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             </Modal>
 
             {/* =================================================================
-                MODAL 3: PASE DE ABORDAR / COMPROBANTE DIGITAL DE RESERVACIÓN
+                MODAL 3: COMPROBANTE DIGITAL / PASE DE ABORDAR EDITORIAL
                ================================================================= */}
             <Modal
                 isOpen={Boolean(voucherReserva)}
                 onClose={() => setVoucherReserva(null)}
-                title={voucherReserva ? `Pase de Abordar · ${voucherReserva.folio || `#${voucherReserva.idReserva}`}` : ''}
+                title={voucherReserva ? (voucherReserva.estado === 'Cancelada' ? `Comprobante · ${voucherReserva.folio || `#${voucherReserva.idReserva}`}` : `Pase de Abordar · ${voucherReserva.folio || `#${voucherReserva.idReserva}`}`) : ''}
                 subtitle={voucherReserva ? `${voucherReserva.habitacion?.hotel?.nombre || 'Hotel Paraíso'} · ${voucherReserva.habitacion?.hotel?.ciudad || 'México'}` : ''}
                 icon={FileText}
-                maxWidth="480px"
+                maxWidth="490px"
             >
-                {voucherReserva && (
-                    <div style={{ animation: 'hpPageEnter 200ms ease-out' }}>
-                        {/* Cabecera del Pase de Abordar */}
-                        <div style={{
-                            background: 'linear-gradient(135deg, var(--brand-ocean-dark) 0%, var(--brand-ocean) 100%)',
-                            color: '#fff', padding: '18px 20px', borderRadius: 14, marginBottom: 16,
-                            border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 8px 20px rgba(15, 35, 56, 0.25)'
-                        }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                <div style={{ fontSize: '0.72rem', color: '#fde68a', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                                    {voucherReserva.habitacion?.hotel?.nombre} · {voucherReserva.habitacion?.hotel?.ciudad}
+                {voucherReserva && (() => {
+                    const estadoV = voucherReserva.estado || '';
+                    const esCancV = estadoV === 'Cancelada' || estadoV === 'No-Show';
+                    const esPreV = estadoV === 'Pre-reserva';
+                    const esOcupV = estadoV === 'Ocupada';
+                    const esFinV = estadoV === 'Finalizada';
+                    const estadoClaseV = esCancV ? 'cancelada' : esPreV ? 'prereserva' : esOcupV ? 'ocupada' : esFinV ? 'finalizada' : 'confirmada';
+                    const fIn = formatFechaItinerario(voucherReserva.fechaEntrada);
+                    const fOut = formatFechaItinerario(voucherReserva.fechaSalida);
+                    const partesObsV = String(voucherReserva.observaciones || '').split('|').map(s => s.trim()).filter(Boolean);
+                    const motivoV = partesObsV.length > 1 ? partesObsV[partesObsV.length - 1] : partesObsV[0];
+
+                    return (
+                        <div className="hp-voucher-body">
+                            {/* Cabecera cálida arena alineada con el portal */}
+                            <div className={`hp-voucher-hero is-status-${estadoClaseV}`}>
+                                <div className="hp-voucher-hero-top">
+                                    <span className="hp-voucher-hotel-kicker">
+                                        {voucherReserva.habitacion?.hotel?.nombre} · {voucherReserva.habitacion?.hotel?.ciudad}
+                                    </span>
+                                    <span className={`hp-boarding-status-inline is-${estadoClaseV}`}>
+                                        <span className="hp-boarding-status-dot" aria-hidden="true" />
+                                        <span>{estadoV}</span>
+                                    </span>
                                 </div>
-                                <EstadoBadge estado={voucherReserva.estado} />
+
+                                <div className="hp-voucher-room-row">
+                                    <h3 className="hp-voucher-room-title">
+                                        {voucherReserva.habitacion?.tipoHabitacion?.nombre || 'Suite'}
+                                    </h3>
+                                    {voucherReserva.habitacion?.numero && (
+                                        <span className="hp-voucher-room-num num">Hab. {voucherReserva.habitacion.numero}</span>
+                                    )}
+                                </div>
+
+                                <div className="hp-voucher-guest-line">
+                                    <span>Titular: <strong>{user?.nombre}</strong></span>
+                                    {user?.email && <span className="hp-voucher-guest-email">{user.email}</span>}
+                                </div>
                             </div>
-                            <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.35rem', fontWeight: 600, marginTop: 2 }}>
-                                {voucherReserva.habitacion?.tipoHabitacion?.nombre} — Habitación <span className="num">{voucherReserva.habitacion?.numero}</span>
+
+                            {/* Itinerario y resumen financiero con fechas legibles */}
+                            <div className="hp-voucher-grid">
+                                <div className="hp-voucher-cell">
+                                    <span className="hp-voucher-cell-label">Check-in · 15:00 hrs</span>
+                                    <strong className="hp-voucher-cell-val num">{fIn.dia} {fIn.mes} {fIn.anio}</strong>
+                                </div>
+                                <div className="hp-voucher-cell">
+                                    <span className="hp-voucher-cell-label">Check-out · 12:00 hrs</span>
+                                    <strong className="hp-voucher-cell-val num">{fOut.dia} {fOut.mes} {fOut.anio}</strong>
+                                </div>
+                                <div className="hp-voucher-cell">
+                                    <span className="hp-voucher-cell-label">Total de estancia</span>
+                                    <strong className="hp-voucher-cell-val num">
+                                        ${Number(voucherReserva.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN
+                                    </strong>
+                                </div>
+                                <div className="hp-voucher-cell">
+                                    <span className="hp-voucher-cell-label">Anticipo registrado</span>
+                                    <strong
+                                        className="hp-voucher-cell-val num"
+                                        style={{ color: Number(voucherReserva.anticipo || 0) > 0 ? 'var(--brand-palm, #2d5a43)' : 'var(--text-muted)' }}
+                                    >
+                                        ${Number(voucherReserva.anticipo || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN
+                                    </strong>
+                                </div>
                             </div>
-                            <div style={{ fontSize: '0.82rem', color: '#cbd5e1', marginTop: 4 }}>
-                                Huésped titular: <strong style={{ color: '#fff' }}>{user?.nombre}</strong> ({user?.email})
+
+                            {esCancV && motivoV && (
+                                <div className="hp-boarding-cancel-note" style={{ marginBottom: 14 }}>
+                                    <span className="hp-boarding-cancel-label">Motivo</span>
+                                    <span>{motivoV}</span>
+                                </div>
+                            )}
+
+                            {/* Pie limpio con clave digital */}
+                            <div className="hp-voucher-folio-footer">
+                                <span className="hp-voucher-folio-label">Clave digital</span>
+                                <span className="hp-voucher-folio-code num">
+                                    {voucherReserva.folio || `#${voucherReserva.idReserva}`} · Hotel Paraíso
+                                </span>
+                            </div>
+
+                            <div className="modal-actions">
+                                <button type="button" className="btn btn-secondary" onClick={() => setVoucherReserva(null)}>
+                                    Cerrar
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={() => imprimirComprobanteReserva(voucherReserva)}
+                                >
+                                    <Printer size={15} />
+                                    <span>Imprimir comprobante PDF</span>
+                                </button>
                             </div>
                         </div>
-
-                        {/* Itinerario Tabular */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: '0.85rem', marginBottom: 16 }}>
-                            <div style={{ background: 'var(--brand-sand-light)', padding: 12, borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', fontWeight: 700, letterSpacing: '0.06em' }}>CHECK-IN (15:00 H)</span>
-                                <strong className="num" style={{ fontSize: '1rem', color: 'var(--brand-ocean)' }}>{voucherReserva.fechaEntrada}</strong>
-                            </div>
-                            <div style={{ background: 'var(--brand-sand-light)', padding: 12, borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', fontWeight: 700, letterSpacing: '0.06em' }}>CHECK-OUT (12:00 H)</span>
-                                <strong className="num" style={{ fontSize: '1rem', color: 'var(--brand-ocean)' }}>{voucherReserva.fechaSalida}</strong>
-                            </div>
-                            <div style={{ background: 'var(--brand-sand-light)', padding: 12, borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', fontWeight: 700, letterSpacing: '0.06em' }}>TOTAL DE ESTANCIA</span>
-                                <strong className="num" style={{ fontSize: '1.1rem', color: 'var(--brand-ocean)' }}>${Number(voucherReserva.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN</strong>
-                            </div>
-                            <div style={{ background: 'var(--brand-sand-light)', padding: 12, borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
-                                <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', display: 'block', fontWeight: 700, letterSpacing: '0.06em' }}>ANTICIPO REGISTRADO</span>
-                                <strong className="num" style={{ fontSize: '1.1rem', color: Number(voucherReserva.anticipo || 0) > 0 ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                                    ${Number(voucherReserva.anticipo || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN
-                                </strong>
-                            </div>
-                        </div>
-
-                        {voucherReserva.estado === 'Cancelada' && (
-                            <div style={{
-                                padding: '10px 14px',
-                                borderRadius: 10,
-                                background: 'var(--color-error-bg, #fee2e2)',
-                                border: '1px solid var(--color-error-border, #fecaca)',
-                                color: 'var(--color-error, #b91c1c)',
-                                fontSize: '0.84rem',
-                                fontWeight: 600,
-                                marginBottom: 14,
-                                textAlign: 'center'
-                            }}>
-                                {voucherReserva.observaciones ? voucherReserva.observaciones : 'Esta reservación ha sido cancelada.'}
-                            </div>
-                        )}
-
-                        {/* Código de barras decorativo de embarque */}
-                        <div style={{
-                            background: 'var(--bg-surface)',
-                            border: '1px dashed var(--border-default)',
-                            borderRadius: 10,
-                            padding: '12px 16px',
-                            textAlign: 'center',
-                            marginBottom: 16
-                        }}>
-                            <div style={{
-                                letterSpacing: '0.35em',
-                                fontSize: '1.1rem',
-                                color: 'var(--text-secondary)',
-                                fontFamily: 'monospace',
-                                fontWeight: 700,
-                                marginBottom: 4
-                            }}>
-                                ║▌║▌║█│▌▌│█║▌║▌║
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
-                                CLAVE DIGITAL: <span className="num">{voucherReserva.folio || `#${voucherReserva.idReserva}`}</span> · HOTEL PARAÍSO
-                            </div>
-                        </div>
-
-                        <div className="modal-actions">
-                            <button type="button" className="btn btn-secondary" onClick={() => setVoucherReserva(null)}>
-                                Cerrar
-                            </button>
-                            <button
-                                type="button"
-                                className="btn btn-primary"
-                                onClick={() => imprimirComprobanteReserva(voucherReserva)}
-                            >
-                                <Printer size={15} />
-                                <span>Imprimir comprobante PDF</span>
-                            </button>
-                        </div>
-                    </div>
-                )}
+                    );
+                })()}
             </Modal>
 
             {/* =================================================================
