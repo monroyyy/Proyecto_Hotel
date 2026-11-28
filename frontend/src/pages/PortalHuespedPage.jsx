@@ -590,30 +590,41 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
         );
     }, [hoteles, disponiblesPorHotelId]);
 
-    // Filtrado y ordenamiento de habitaciones (incluye habitaciones ocupadas en otras fechas o con calendario de desocupación)
-    const habitacionesDisponibles = useMemo(() => {
-        const filtradas = habitaciones.filter(hab => {
+    // Coincidencia de categoría flexible con todos los tipos de habitación del catálogo
+    const coincideCategoriaHabitacion = (hab, categoria) => {
+        if (!categoria || categoria === 'TODAS') return true;
+        const nombreTipo = (hab.tipoHabitacion?.nombre || '').toLowerCase();
+        if (categoria === 'SUITE') {
+            return nombreTipo.includes('suite') || nombreTipo.includes('villa') || nombreTipo.includes('master') || nombreTipo.includes('penthouse') || nombreTipo.includes('presidencial');
+        }
+        if (categoria === 'FAMILIAR') {
+            return nombreTipo.includes('familiar') || nombreTipo.includes('cuádruple') || nombreTipo.includes('cuadruple');
+        }
+        if (categoria === 'DOBLE') {
+            return nombreTipo.includes('doble') || nombreTipo.includes('matrimonial') || nombreTipo.includes('king') || nombreTipo.includes('estándar') || nombreTipo.includes('estandar');
+        }
+        if (categoria === 'INDIVIDUAL') {
+            return nombreTipo.includes('individual') || nombreTipo.includes('ejecutiv') || nombreTipo.includes('sencilla');
+        }
+        if (categoria === 'PLANTA_BAJA') return Number(hab.piso) === 1;
+        return true;
+    };
+
+    // Base filtrada por hotel, capacidad y búsqueda (sin categoría) para calcular conteos por categoría
+    const habitacionesBaseFiltro = useMemo(() => {
+        return habitaciones.filter(hab => {
             const evalHab = evaluarDisponibilidadHabitacion(hab, fechaEntrada, fechaSalida);
             if (!evalHab.esVendible) return false;
-
             if (filtroHotel !== 'TODOS' && String(hab.hotel?.idHotel) !== String(filtroHotel)) {
                 return false;
             }
-
             const cap = hab.tipoHabitacion?.capacidad || 1;
             if (cap < Number(filtroCapacidad)) {
                 return false;
             }
-
-            const nombreTipo = (hab.tipoHabitacion?.nombre || '').toLowerCase();
-            if (filtroCategoria === 'SUITE' && !nombreTipo.includes('suite')) return false;
-            if (filtroCategoria === 'FAMILIAR' && !nombreTipo.includes('familiar')) return false;
-            if (filtroCategoria === 'DOBLE' && !nombreTipo.includes('doble') && !nombreTipo.includes('matrimonial')) return false;
-            if (filtroCategoria === 'INDIVIDUAL' && !nombreTipo.includes('individual')) return false;
-            if (filtroCategoria === 'PLANTA_BAJA' && Number(hab.piso) !== 1) return false;
-
             if (busquedaTexto.trim()) {
                 const q = busquedaTexto.toLowerCase();
+                const nombreTipo = (hab.tipoHabitacion?.nombre || '').toLowerCase();
                 const matchHotel = (hab.hotel?.nombre || '').toLowerCase().includes(q);
                 const matchCiudad = (hab.hotel?.ciudad || '').toLowerCase().includes(q);
                 const matchTipo = nombreTipo.includes(q);
@@ -622,11 +633,27 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             }
             return true;
         });
+    }, [habitaciones, filtroHotel, filtroCapacidad, busquedaTexto, fechaEntrada, fechaSalida]);
+
+    // Conteo en vivo de habitaciones por categoría para las píldoras del catálogo
+    const conteoPorCategoria = useMemo(() => {
+        const ids = ['TODAS', 'SUITE', 'FAMILIAR', 'DOBLE', 'INDIVIDUAL'];
+        const counts = {};
+        ids.forEach(id => {
+            counts[id] = habitacionesBaseFiltro.filter(h => coincideCategoriaHabitacion(h, id)).length;
+        });
+        return counts;
+    }, [habitacionesBaseFiltro]);
+
+    // Filtrado y ordenamiento de habitaciones respetando el criterio elegido
+    const habitacionesDisponibles = useMemo(() => {
+        const filtradas = habitacionesBaseFiltro.filter(hab => coincideCategoriaHabitacion(hab, filtroCategoria));
 
         return [...filtradas].sort((a, b) => {
             const dispA = evaluarDisponibilidadHabitacion(a, fechaEntrada, fechaSalida).disponibleEnFechas ? 1 : 0;
             const dispB = evaluarDisponibilidadHabitacion(b, fechaEntrada, fechaSalida).disponibleEnFechas ? 1 : 0;
-            if (dispA !== dispB) return dispB - dispA;
+            // En orden por precio o capacidad, respetar primero disponibilidad solo en Destacados
+            if (ordenCatalogo === 'DESTACADOS' && dispA !== dispB) return dispB - dispA;
 
             const pa = Number(a.tipoHabitacion?.precioBase || 0);
             const pb = Number(b.tipoHabitacion?.precioBase || 0);
@@ -637,10 +664,18 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             if (ordenCatalogo === 'CAPACIDAD') return cb - ca;
             return 0;
         });
-    }, [habitaciones, filtroHotel, filtroCategoria, filtroCapacidad, busquedaTexto, ordenCatalogo, fechaEntrada, fechaSalida]);
+    }, [habitacionesBaseFiltro, filtroCategoria, ordenCatalogo, fechaEntrada, fechaSalida]);
 
+    // Cantidad real de habitaciones libres en el rango de fechas seleccionado
+    const habitacionesLibresEnFechasCount = useMemo(() => {
+        return habitacionesDisponibles.filter(hab =>
+            evaluarDisponibilidadHabitacion(hab, fechaEntrada, fechaSalida).disponibleEnFechas
+        ).length;
+    }, [habitacionesDisponibles, fechaEntrada, fechaSalida]);
 
+    // Solo mostrar la tarjeta destacada grande en modo Destacados; al ordenar por precio/capacidad mostrar todas en cuadrícula ordenada
     const suiteDestacada = useMemo(() => {
+        if (ordenCatalogo !== 'DESTACADOS') return null;
         return habitacionesDisponibles.find(hab =>
             evaluarDisponibilidadHabitacion(hab, fechaEntrada, fechaSalida).disponibleEnFechas &&
             (hab.tipoHabitacion?.nombre || '').toLowerCase().includes('suite')
@@ -648,10 +683,10 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             || habitacionesDisponibles.find(hab => evaluarDisponibilidadHabitacion(hab, fechaEntrada, fechaSalida).disponibleEnFechas)
             || habitacionesDisponibles[0]
             || null;
-    }, [habitacionesDisponibles, fechaEntrada, fechaSalida]);
+    }, [habitacionesDisponibles, fechaEntrada, fechaSalida, ordenCatalogo]);
 
     const habitacionesRestantes = useMemo(() => {
-        if (!suiteDestacada) return [];
+        if (!suiteDestacada) return habitacionesDisponibles;
         return habitacionesDisponibles.filter(hab => hab.idHabitacion !== suiteDestacada.idHabitacion);
     }, [habitacionesDisponibles, suiteDestacada]);
 
@@ -991,15 +1026,6 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         Selecciona una propiedad para explorar sus suites disponibles y amenidades exclusivas.
                                     </p>
                                 </div>
-                                {filtroHotel !== 'TODOS' && (
-                                    <button
-                                        type="button"
-                                        className="btn btn-ghost"
-                                        onClick={() => setFiltroHotel('TODOS')}
-                                    >
-                                        Ver todas las propiedades &times;
-                                    </button>
-                                )}
                             </div>
 
                             {/* Acordeón Arquitectónico Híbrido con Micro-Radar Cartográfico */}
@@ -1178,20 +1204,9 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         : 'Suites y espacios de descanso'}
                                 </h2>
                                 <p className="hp-section-desc">
-                                    {filtroHotel !== 'TODOS' ? (
-                                        <span>
-                                            Mostrando opciones disponibles en {hotelesUnicos.find(h => String(h.idHotel) === String(filtroHotel))?.nombre}.{' '}
-                                            <button
-                                                type="button"
-                                                className="hp-clear-filter-inline"
-                                                onClick={() => setFiltroHotel('TODOS')}
-                                            >
-                                                Ver todas las propiedades &times;
-                                            </button>
-                                        </span>
-                                    ) : (
-                                        'Tarifas por noche con impuestos incluidos, cancelaciones claras y servicios de autor.'
-                                    )}
+                                    {filtroHotel !== 'TODOS'
+                                        ? `Mostrando opciones disponibles en ${hotelesUnicos.find(h => String(h.idHotel) === String(filtroHotel))?.nombre}.`
+                                        : 'Tarifas por noche con impuestos incluidos, cancelaciones claras y servicios de autor.'}
                                 </p>
                             </div>
                         </div>
@@ -1253,7 +1268,14 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         className="hp-search-input"
                                         value={fechaSalida}
                                         min={sumarDiasFecha(fechaEntrada || todayStr, 1)}
-                                        onChange={(e) => setFechaSalida(e.target.value)}
+                                        onChange={(e) => {
+                                            const nuevaSalida = e.target.value;
+                                            if (!nuevaSalida || nuevaSalida <= fechaEntrada) {
+                                                setFechaSalida(sumarDiasFecha(fechaEntrada || todayStr, 1));
+                                            } else {
+                                                setFechaSalida(nuevaSalida);
+                                            }
+                                        }}
                                     />
                                 </div>
 
@@ -1293,7 +1315,7 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 </div>
                             </div>
 
-                            {/* Fila unificada de categorías, resumen de estancia y ordenamiento */}
+                            {/* Fila unificada de categorías con conteo real, disponibilidad en fechas y ordenamiento */}
                             <div className="hp-search-toolbar-row">
                                 <div className="hp-category-bar">
                                     {[
@@ -1302,22 +1324,31 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                         { id: 'FAMILIAR', label: 'Familiares' },
                                         { id: 'DOBLE', label: 'Dobles & King' },
                                         { id: 'INDIVIDUAL', label: 'Ejecutivas' }
-                                    ].map(cat => (
-                                        <button
-                                            key={cat.id}
-                                            type="button"
-                                            className={`hp-cat-pill ${filtroCategoria === cat.id ? 'active' : ''}`}
-                                            onClick={() => setFiltroCategoria(cat.id)}
-                                        >
-                                            {cat.label}
-                                        </button>
-                                    ))}
+                                    ].map(cat => {
+                                        const count = conteoPorCategoria[cat.id] ?? 0;
+                                        return (
+                                            <button
+                                                key={cat.id}
+                                                type="button"
+                                                className={`hp-cat-pill ${filtroCategoria === cat.id ? 'active' : ''} ${count === 0 && cat.id !== 'TODAS' ? 'is-empty' : ''}`}
+                                                onClick={() => setFiltroCategoria(cat.id)}
+                                            >
+                                                <span>{cat.label}</span>
+                                                <span className="hp-cat-pill-count num">{count}</span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
 
                                 <div className="hp-search-toolbar-right">
                                     <span className="hp-search-inline-summary num">
                                         <Clock size={13} />
-                                        {nochesSeleccionadas} {nochesSeleccionadas === 1 ? 'noche' : 'noches'} · <strong>{habitacionesDisponibles.length}</strong> {habitacionesDisponibles.length === 1 ? 'disponible' : 'disponibles'}
+                                        {nochesSeleccionadas} {nochesSeleccionadas === 1 ? 'noche' : 'noches'} ·{' '}
+                                        {habitacionesLibresEnFechasCount === habitacionesDisponibles.length ? (
+                                            <><strong>{habitacionesLibresEnFechasCount}</strong> {habitacionesLibresEnFechasCount === 1 ? 'libre' : 'libres'}</>
+                                        ) : (
+                                            <><strong>{habitacionesLibresEnFechasCount}</strong> libres de {habitacionesDisponibles.length}</>
+                                        )}
                                     </span>
 
                                     <div className="hp-catalog-order-wrap">

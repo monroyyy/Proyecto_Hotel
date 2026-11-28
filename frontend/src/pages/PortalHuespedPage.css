@@ -838,7 +838,7 @@
     border: 1px solid var(--border-default, #e2d9cc);
     background: var(--brand-sand-light, #fcfaf7);
     color: var(--text-secondary);
-    padding: 0 13px;
+    padding: 0 12px;
     border-radius: 999px;
     font-size: 0.8rem;
     font-weight: 600;
@@ -846,7 +846,26 @@
     white-space: nowrap;
     display: inline-flex;
     align-items: center;
-    transition: background-color 160ms ease-out, border-color 160ms ease-out, color 160ms ease-out, transform 160ms ease-out;
+    gap: 6px;
+    transition: background-color 160ms ease-out, border-color 160ms ease-out, color 160ms ease-out, transform 160ms ease-out, opacity 160ms ease-out;
+}
+
+.hp-cat-pill.is-empty {
+    opacity: 0.52;
+}
+
+.hp-cat-pill-count {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(22, 50, 79, 0.08);
+    color: var(--brand-ocean, #16324f);
+}
+
+.hp-cat-pill.active .hp-cat-pill-count {
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
 }
 
 .hp-cat-pill:hover {
@@ -873,14 +892,15 @@
 }
 
 .hp-catalog-order-select {
-    min-height: 34px;
+    height: 34px;
     border: 1px solid var(--border-default, #e2d9cc);
     background: var(--brand-sand-light, #fcfaf7);
     color: var(--text-primary);
-    padding: 0 10px;
+    padding: 4px 10px;
     border-radius: var(--radius-sm, 8px);
     font-size: 0.8rem;
     font-weight: 600;
+    line-height: 1.2;
     transition: border-color 160ms ease-out;
 }
 
@@ -1128,13 +1148,26 @@
     line-height: 1.4;
 }
 
+/* Pie de tarjeta de habitación apilado limpiamente para evitar cortes de precio en 3 columnas */
 .hp-room-footer-row {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    gap: 8px;
+    flex-direction: column;
+    gap: 0.75rem;
     padding-top: 0.9rem;
     border-top: 1px solid var(--border-subtle);
+}
+
+.hp-room-footer-row .hp-card-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+}
+
+.hp-room-footer-row .hp-card-actions .btn {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 0.84rem;
 }
 
 .hp-room-price-col {
@@ -1143,17 +1176,19 @@
 }
 
 .hp-room-price-night {
-    font-size: 1.15rem;
+    font-size: 1.12rem;
     font-weight: 700;
     color: var(--text-primary);
-    line-height: 1.1;
+    line-height: 1.15;
+    white-space: nowrap;
 }
 
 .hp-room-price-total {
-    font-size: 0.75rem;
+    font-size: 0.76rem;
     color: var(--brand-terracotta);
     font-weight: 600;
     margin-top: 2px;
+    white-space: nowrap;
 }
 
 /* ==========================================================================
