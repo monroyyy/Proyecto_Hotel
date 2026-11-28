@@ -354,6 +354,8 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
     const [heroIndex, setHeroIndex] = useState(0);
     const [modalRequiereSesion, setModalRequiereSesion] = useState(null);
     const [hoverHotelId, setHoverHotelId] = useState(null);
+    const [autoHotelIdx, setAutoHotelIdx] = useState(0);
+    const [acordeonPausado, setAcordeonPausado] = useState(false);
 
     const [hoteles, setHoteles] = useState([]);
     const [habitaciones, setHabitaciones] = useState([]);
@@ -610,6 +612,17 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
             (a, b) => (disponiblesPorHotelId[b.idHotel] || 0) - (disponiblesPorHotelId[a.idHotel] || 0)
         );
     }, [hoteles, disponiblesPorHotelId]);
+
+    // Rotación automática visual del acordeón de 5 hoteles (sin alterar filtroHotel hasta que el usuario elija uno)
+    useEffect(() => {
+        if (activeSection !== 'explorar' || hotelesUnicos.length <= 1 || filtroHotel !== 'TODOS' || acordeonPausado) {
+            return undefined;
+        }
+        const timer = setInterval(() => {
+            setAutoHotelIdx(prev => (prev + 1) % hotelesUnicos.length);
+        }, 5500);
+        return () => clearInterval(timer);
+    }, [activeSection, hotelesUnicos.length, filtroHotel, acordeonPausado]);
 
     // Coincidencia de categoría flexible con todos los tipos de habitación del catálogo
     const coincideCategoriaHabitacion = (hab, categoria) => {
@@ -1057,14 +1070,20 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                 return (
                                     <div
                                         className="hp-accordion-container"
-                                        onMouseLeave={() => setHoverHotelId(null)}
+                                        onMouseEnter={() => setAcordeonPausado(true)}
+                                        onMouseLeave={() => {
+                                            setAcordeonPausado(false);
+                                            setHoverHotelId(null);
+                                        }}
                                     >
                                         {hotelesUnicos.map((h, idx) => {
                                             const isSel = String(filtroHotel) === String(h.idHotel);
+                                            const hotelAutoId = hotelesUnicos[autoHotelIdx % hotelesUnicos.length]?.idHotel ?? hotelesUnicos[0]?.idHotel;
                                             const hotelActivoId = hoverHotelId !== null
                                                 ? hoverHotelId
-                                                : (filtroHotel !== 'TODOS' ? filtroHotel : (hotelesUnicos[0]?.idHotel));
+                                                : (filtroHotel !== 'TODOS' ? filtroHotel : hotelAutoId);
                                             const isExpanded = String(hotelActivoId) === String(h.idHotel);
+                                            const mostrarProgresoAuto = isExpanded && filtroHotel === 'TODOS' && !acordeonPausado && hotelesUnicos.length > 1;
                                             const c = disponiblesPorHotelId[h.idHotel] || 0;
                                             const v = vendiblesPorHotelId[h.idHotel] || 0;
                                             const perfil = obtenerPerfilHotel(h);
@@ -1185,6 +1204,15 @@ export default function PortalHuespedPage({ initialSection = 'explorar' }) {
                                                                 </div>
                                                             </div>
                                                         </div>
+                                                    )}
+
+                                                    {/* Barra de progreso sutil durante la rotación automática visual */}
+                                                    {mostrarProgresoAuto && (
+                                                        <span
+                                                            key={`prog-${h.idHotel}-${autoHotelIdx}`}
+                                                            className="hp-accordion-progress-bar"
+                                                            aria-hidden="true"
+                                                        />
                                                     )}
                                                 </article>
                                             );
