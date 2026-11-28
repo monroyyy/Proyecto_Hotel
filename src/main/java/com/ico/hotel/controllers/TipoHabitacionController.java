@@ -39,8 +39,9 @@ public class TipoHabitacionController {
         if (tipo.getNombre() == null || tipo.getNombre().trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "El nombre del tipo de habitación es obligatorio."));
         }
-        if (tipo.getCapacidad() == null || tipo.getCapacidad() <= 0) {
-            return ResponseEntity.badRequest().body(Map.of("error", "La capacidad debe ser mayor a cero."));
+        // Validar rango razonable de capacidad por habitación (1 a 20 huéspedes)
+        if (tipo.getCapacidad() == null || tipo.getCapacidad() < 1 || tipo.getCapacidad() > 20) {
+            return ResponseEntity.badRequest().body(Map.of("error", "La capacidad debe estar entre 1 y 20 huéspedes."));
         }
         // Impedir tarifa base <= 0 al crear categoría
         if (tipo.getPrecioBase() == null || tipo.getPrecioBase().compareTo(BigDecimal.ZERO) <= 0) {
@@ -73,8 +74,8 @@ public class TipoHabitacionController {
             tipo.setNombre(datos.getNombre().trim());
         }
         if (datos.getCapacidad() != null) {
-            if (datos.getCapacidad() <= 0) {
-                return ResponseEntity.badRequest().body(Map.of("error", "La capacidad debe ser mayor a cero."));
+            if (datos.getCapacidad() < 1 || datos.getCapacidad() > 20) {
+                return ResponseEntity.badRequest().body(Map.of("error", "La capacidad debe estar entre 1 y 20 huéspedes."));
             }
             // Impedir bajar la capacidad por debajo de reservaciones activas existentes
             int maxOcupantes = reservaRepository.findMaxOcupantesEnReservasActivasPorTipo(id);

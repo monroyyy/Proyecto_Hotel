@@ -797,6 +797,15 @@ function ListaReservas({ onNueva }) {
     }, [busqueda]);
 
     const cargar = useCallback(async ({ silencioso = false } = {}) => {
+        // Validar rango de fechas en cliente para evitar petición inválida y filas desactualizadas
+        if (!soloHoy && entradaDesde && entradaHasta && entradaDesde > entradaHasta) {
+            setError("La fecha 'Desde' no puede ser posterior a la fecha 'Hasta'.");
+            setReservas([]);
+            setTotalElements(0);
+            setTotalPages(0);
+            setCargando(false);
+            return;
+        }
         if (!silencioso) {
             setCargando(true);
         }
@@ -1494,9 +1503,19 @@ function ModalPago({ reserva: r, onClose, onDone }) {
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
 
+    const montoNum = parseFloat(anticipo);
+    const totalNum = Number(r.total || 0);
+    // Validación inline del rango permitido de anticipo (50% a 100%)
+    const montoValido = Number.isFinite(montoNum) && montoNum >= minimo && montoNum <= totalNum;
+
     const enviar = async (e) => {
-        e.preventDefault(); setBusy(true); setError('');
-        try { await confirmarReserva(r.idReserva, parseFloat(anticipo), metodo); onDone(); }
+        e.preventDefault();
+        if (!montoValido) {
+            setError(`El anticipo debe estar entre ${money(minimo)} (50%) y ${money(totalNum)}.`);
+            return;
+        }
+        setBusy(true); setError('');
+        try { await confirmarReserva(r.idReserva, montoNum, metodo); onDone(); }
         catch (err) { setError(err.message); setBusy(false); }
     };
     return (
@@ -1509,6 +1528,11 @@ function ModalPago({ reserva: r, onClose, onDone }) {
                 <div className="form-group">
                     <label className="form-label">Monto del anticipo ($ MXN) *</label>
                     <input className="form-input" type="number" step="0.01" min={minimo} max={r.total} value={anticipo} onChange={(e) => setAnticipo(e.target.value)} required />
+                    {!montoValido && (
+                        <div style={{ color: 'var(--color-error, #b91c1c)', fontSize: '0.78rem', marginTop: 4, fontWeight: 600 }}>
+                            El monto debe estar entre {money(minimo)} y {money(totalNum)}.
+                        </div>
+                    )}
                 </div>
                 <div className="form-group">
                     <label className="form-label">Método de pago</label>
@@ -1521,7 +1545,7 @@ function ModalPago({ reserva: r, onClose, onDone }) {
                 </div>
                 <div className="modal-actions">
                     <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
-                    <button type="submit" className="btn btn-primary" disabled={busy}>Confirmar reservación</button>
+                    <button type="submit" className="btn btn-primary" disabled={busy || !montoValido}>Confirmar reservación</button>
                 </div>
             </form>
         </Modal>

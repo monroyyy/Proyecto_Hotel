@@ -58,7 +58,40 @@ public class HabitacionController {
                 .filter(h -> piso == null || (h.getPiso() != null && h.getPiso().equals(piso)))
                 .toList();
         reservaService.enriquecerHabitaciones(filtradas);
+        ocultarDatosSensibles(filtradas);
         return filtradas;
+    }
+
+    /**
+     * Oculta datos de reservaciones ajenas a quien no es personal del hotel:
+     * - Visitantes anónimos y huéspedes: se omiten los folios (folioActivo y folio en periodosOcupados).
+     * - Visitantes anónimos: además se omiten los identificadores internos de reservación.
+     * Las fechas ocupadas se conservan porque el portal las necesita para mostrar disponibilidad.
+     */
+    private void ocultarDatosSensibles(List<Habitacion> habitaciones) {
+        com.ico.hotel.security.CustomUserDetails actual = reservaService.obtenerUsuarioActual();
+        if (actual != null && actual.isStaff()) {
+            return;
+        }
+        boolean anonimo = actual == null;
+        for (Habitacion h : habitaciones) {
+            h.setFolioActivo(null);
+            if (anonimo) {
+                h.setIdReservaActiva(null);
+            }
+            if (h.getPeriodosOcupados() != null) {
+                List<Map<String, Object>> limpios = new ArrayList<>();
+                for (Map<String, Object> periodo : h.getPeriodosOcupados()) {
+                    Map<String, Object> copia = new LinkedHashMap<>(periodo);
+                    copia.remove("folio");
+                    if (anonimo) {
+                        copia.remove("idReserva");
+                    }
+                    limpios.add(copia);
+                }
+                h.setPeriodosOcupados(limpios);
+            }
+        }
     }
 
     /**
@@ -73,6 +106,7 @@ public class HabitacionController {
         }
         Habitacion h = habitacionOpt.get();
         reservaService.enriquecerHabitacion(h);
+        ocultarDatosSensibles(List.of(h));
         return ResponseEntity.ok(h);
     }
 
@@ -84,6 +118,11 @@ public class HabitacionController {
     public ResponseEntity<?> crearHabitacion(@RequestBody HabitacionDTO dto) {
         if (dto.getNumero() == null || dto.getNumero().trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "El número de habitación es obligatorio."));
+        }
+        // Limitar longitud y bloquear etiquetas HTML en el número de habitación
+        String numTrimCrear = dto.getNumero().trim();
+        if (numTrimCrear.length() > 20 || numTrimCrear.contains("<") || numTrimCrear.contains(">")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "El número de habitación debe tener máximo 20 caracteres y sin etiquetas HTML."));
         }
         if (dto.getIdHotel() == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Debe seleccionar un hotel válido."));
@@ -152,7 +191,11 @@ public class HabitacionController {
         }
 
         if (dto.getNumero() != null && !dto.getNumero().trim().isEmpty()) {
-            habitacion.setNumero(dto.getNumero().trim());
+            String numTrimEdit = dto.getNumero().trim();
+            if (numTrimEdit.length() > 20 || numTrimEdit.contains("<") || numTrimEdit.contains(">")) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El número de habitación debe tener máximo 20 caracteres y sin etiquetas HTML."));
+            }
+            habitacion.setNumero(numTrimEdit);
         }
         if (dto.getPiso() != null) {
             if (dto.getPiso() <= 0) {

@@ -133,6 +133,12 @@ export default function TiposHabitacionPage() {
             mostrarMensaje('error', 'La capacidad debe ser mayor a cero.');
             return;
         }
+        // Validar rango razonable de capacidad (1 a 20 huéspedes)
+        const capNum = Number(formTipo.capacidad);
+        if (!Number.isInteger(capNum) || capNum < 1 || capNum > 20) {
+            mostrarMensaje('error', 'La capacidad debe estar entre 1 y 20 huéspedes.');
+            return;
+        }
         // Impedir tarifa base menor o igual a $0.00 desde el cliente
         if (!formTipo.precioBase || Number(formTipo.precioBase) <= 0) {
             mostrarMensaje('error', 'La tarifa base debe ser mayor a $0.00.');
@@ -527,9 +533,10 @@ export default function TiposHabitacionPage() {
                             <input
                                 type="number"
                                 min="1"
+                                max="20"
                                 required
                                 value={formTipo.capacidad}
-                                onChange={e => setFormTipo({ ...formTipo, capacidad: parseInt(e.target.value, 10) || 1 })}
+                                onChange={e => setFormTipo({ ...formTipo, capacidad: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
                                 className="form-input num"
                             />
                         </div>

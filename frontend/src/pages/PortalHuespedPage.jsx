@@ -288,6 +288,31 @@ function evaluarDisponibilidadHabitacion(hab, entradaStr, salidaStr) {
         };
     }
 
+    // Rechazar fechas en el pasado o invertidas (salida <= entrada) para no mostrar "Fechas disponibles" ni habilitar el envío
+    const hoyIso = obtenerFechaLocalIso();
+    if (entradaStr && entradaStr < hoyIso) {
+        return {
+            esVendible: true,
+            disponibleEnFechas: false,
+            conflicto: null,
+            proximaOcupacion: null,
+            fechaLiberacion: hoyIso,
+            errorFechas: 'La fecha de entrada no puede estar en el pasado.',
+            periodos: Array.isArray(hab?.periodosOcupados) ? hab.periodosOcupados : []
+        };
+    }
+    if (entradaStr && salidaStr && salidaStr <= entradaStr) {
+        return {
+            esVendible: true,
+            disponibleEnFechas: false,
+            conflicto: null,
+            proximaOcupacion: null,
+            fechaLiberacion: null,
+            errorFechas: 'La fecha de salida debe ser posterior a la fecha de entrada.',
+            periodos: Array.isArray(hab?.periodosOcupados) ? hab.periodosOcupados : []
+        };
+    }
+
     const periodos = Array.isArray(hab?.periodosOcupados) ? hab.periodosOcupados : [];
     const conflicto = (entradaStr && salidaStr)
         ? periodos.find(p => p.fechaEntrada && p.fechaSalida && p.fechaEntrada < salidaStr && p.fechaSalida > entradaStr) || null

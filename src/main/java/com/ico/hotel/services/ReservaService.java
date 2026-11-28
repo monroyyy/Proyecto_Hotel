@@ -382,10 +382,10 @@ public class ReservaService {
             throw new IllegalArgumentException("El tamaño de página (size) debe estar entre 1 y 100.");
         }
         if (entradaDesde != null && entradaHasta != null && entradaDesde.isAfter(entradaHasta)) {
-            throw new IllegalArgumentException("entradaDesde no puede ser posterior a entradaHasta.");
+            throw new IllegalArgumentException("La fecha 'Desde' no puede ser posterior a la fecha 'Hasta'.");
         }
         if (salidaDesde != null && salidaHasta != null && salidaDesde.isAfter(salidaHasta)) {
-            throw new IllegalArgumentException("salidaDesde no puede ser posterior a salidaHasta.");
+            throw new IllegalArgumentException("La fecha 'Desde' de salida no puede ser posterior a la fecha 'Hasta'.");
         }
         if (principal == null) {
             return PaginaResponse.<Reserva>builder()
@@ -822,9 +822,8 @@ public class ReservaService {
 
         validarFechas(req.getFechaEntrada(), req.getFechaSalida());
 
-        if (req.getNombre() == null || req.getNombre().trim().length() < 3) {
-            throw new IllegalArgumentException("El nombre completo del huésped es obligatorio.");
-        }
+        // Validar nombre del titular: longitud permitida y sin etiquetas HTML
+        validarNombreHuesped(req.getNombre());
         String tel = req.getTelefono() == null ? "" : req.getTelefono().replaceAll("\\D", "");
         if (tel.length() != 10) {
             throw new IllegalArgumentException("El teléfono debe tener exactamente 10 dígitos.");
@@ -950,6 +949,20 @@ public class ReservaService {
             return (nombre != null && !nombre.isBlank()) ? nombre.trim() : actual.getEmail();
         }
         return "Portal Web";
+    }
+
+    // Valida el nombre del titular de la reservación: obligatorio, entre 3 y 120 caracteres y sin etiquetas HTML
+    private void validarNombreHuesped(String nombre) {
+        String limpio = nombre == null ? "" : nombre.trim();
+        if (limpio.length() < 3) {
+            throw new IllegalArgumentException("El nombre completo del huésped es obligatorio.");
+        }
+        if (limpio.length() > 120) {
+            throw new IllegalArgumentException("El nombre del huésped no puede exceder 120 caracteres.");
+        }
+        if (limpio.contains("<") || limpio.contains(">")) {
+            throw new IllegalArgumentException("El nombre no puede contener etiquetas HTML ni los caracteres '<' o '>'.");
+        }
     }
 
     private Huesped obtenerHuesped(ReservaRequest req, String tel) {
@@ -1293,9 +1306,8 @@ public class ReservaService {
             }
         }
 
-        if (req.getNombre() == null || req.getNombre().trim().length() < 3) {
-            throw new IllegalArgumentException("El nombre completo del huésped es obligatorio.");
-        }
+        // Validar nombre del titular: longitud permitida y sin etiquetas HTML
+        validarNombreHuesped(req.getNombre());
         String tel = req.getTelefono() == null ? "" : req.getTelefono().replaceAll("\\D", "");
         if (tel.length() != 10) {
             throw new IllegalArgumentException("El teléfono debe tener exactamente 10 dígitos.");

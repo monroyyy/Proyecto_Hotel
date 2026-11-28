@@ -1276,7 +1276,8 @@ select.chat-model-select {
   transform: scale(0.92);
 }
 
-@media (max-width: 768px) {
+/* Activar modo pantalla completa también en móvil apaisado de baja altura (ej. 844×390) */
+@media (max-width: 768px), (max-height: 520px) {
   /* Ventana de chat adaptada al viewport móvil sin desbordamientos */
   .chat-widget-container {
     bottom: 14px;

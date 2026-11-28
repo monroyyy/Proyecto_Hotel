@@ -690,6 +690,12 @@ public class HotelChatServiceImpl implements HotelChatService {
     private String resolverConsultaDirecta(String prompt, CustomUserDetails user, String scopedConvId) {
         if (prompt == null || prompt.isBlank()) return null;
         String norm = normalizarTexto(prompt);
+        // Bloqueo determinístico de prompt injection y extracción del prompt/contexto interno del sistema
+        if (norm.contains("prompt del sistema") || norm.contains("system prompt") || norm.contains("tus instrucciones")
+                || norm.contains("ignora todo") || norm.contains("ignora tus") || norm.contains("olvida tus")
+                || norm.contains("pwned") || norm.contains("jailbreak") || norm.contains("actua como")) {
+            return "Por seguridad, no puedo compartir configuraciones internas ni alterar mis instrucciones. Con gusto le ayudo con disponibilidad, tarifas, políticas o Pre-reservas de **Hotel Paraíso**.";
+        }
         Rol rol = user != null ? user.getRol() : null;
         boolean esGerente = rol == Rol.GERENTE;
         // El Administrador ahora puede consultar precios y tarifas por noche al igual que Recepción, Gerente y Huésped
@@ -2031,8 +2037,8 @@ public class HotelChatServiceImpl implements HotelChatService {
             return sb.toString();
         }
 
-        // 4I. Habitación más cara / exclusiva
-        if (norm.contains("habitacion mas cara") || norm.contains("mas exclusiva")) {
+        // 4I. Habitación más cara / exclusiva (incluye consulta corta "la mas cara" o "mas costosa")
+        if (norm.contains("mas cara") || norm.contains("mas caro") || norm.contains("mas exclusiva") || norm.contains("mas costosa")) {
             List<Map<String, Object>> cara = habitacionSearchTool.findHabitacionMasCara();
             if (!cara.isEmpty()) {
                 Map<String, Object> h = cara.get(0);
